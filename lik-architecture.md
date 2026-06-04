@@ -205,6 +205,26 @@ At a high level, the architecture has four main flows.
   * It is not needed for read-only access or for users writing directly to DSs.
 
 
+```mermaid
+flowchart LR
+  User[User] --->|additions, corrections,<br/>human-verified summaries| DS_UI
+
+  subgraph Application
+    DS["Application storage <br/>('Data Source')"]
+    DS_UI["Application's UI"] ---> DS
+    DS_MCP["Application's MCP"] === DS
+  end
+
+  subgraph Precompute
+    PW_MCP[PW's MCP] === PW
+  end
+
+  AI_App[AI Agent /<br/>AI-enabled App /<br/>AI Search Tool]
+  AI_App <-.-> DS_MCP & PW_MCP
+
+  User -.->|User confirmation of data usefulness or accuracy| AI_App
+```
+
 ---
 
 ## **5\. PW Update Mechanisms**
