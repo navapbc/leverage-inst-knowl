@@ -1,14 +1,38 @@
-# Institutional Knowledge for AI Enablement — Progressive Implementation
+# Institutional Knowledge for AI Enablement — Implementation Strategy
 
-A level-by-level reading of [lik-architecture-concise.md](lik-architecture-concise.md). Each level is independently useful, adds one capability, and is justified by a limitation in the level before it. Build them in order: ship a level, learn from it, then decide whether the next level's cost is warranted.
+An implementation **strategy** for [lik-architecture-concise.md](lik-architecture-concise.md). It starts by *buying* (Layer 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level is independently useful, adds one capability, and is justified by a limitation in the level before it.
 
-Every level ends with a **limitation** — the reason the next level exists.
+The strategy is deliberately falsifiable: ship a layer, learn from it, and only spend on the next if the prior one proved the need. Every layer ends with a **limitation** — the reason the next one exists.
+
+---
+
+## Layer 0 — Buy a commercial tool and learn
+
+**Goal:** get immediate value and a measurable baseline by adopting an existing tool *before* building anything — and use the experience to decide what, if anything, is worth building.
+
+Commercial enterprise-search / AI-retrieval products already ingest these DSs, enforce permissions, and provide AI retrieval out of the box. Buy one and run it for a few months:
+
+- **Commercial apps** — Glean, GoSearch, SearchUnify.
+- *Lower-cost variant:* self-hosted open-source platforms — Onyx CE, PipesHub, SWIRL — adopt (don't build) if data residency or budget rules out SaaS.
+
+**What we get beyond the tool itself:**
+- A **working capability today**, with no build cost.
+- A **baseline / yardstick** to measure any future build against — the honest comparison is "our build vs. this tool," not "our build vs. nothing."
+- Most importantly, a **catalogued backlog of gaps**: specific **use cases**, each a `(data source, user question)` pair, where the bought tool does poorly — cross-source aggregations it can't compute, stale or untrusted answers, secured-but-discoverable content it can't reach, rankings it gets wrong. These gaps become the build backlog for the levels below.
+
+**How to run it:** pick a pilot user group, connect a few high-value DSs, and have users log real questions and rate the answers. Track precisely *where* it fails — which data sources it can't reach, which questions come back wrong/stale/incomplete, which permissions it can't honor.
+
+> **Limitation.** A turnkey tool is a black box -- possible limitations may be: you can't change its ranking, you can't add cross-source aggregations or trust signals it doesn't natively support, and — for index-based tools — it maintains its own index of your content, effectively a copy and a bulk re-export surface (confirm each tool's data-handling model; some federate queries at read time instead of copying — apply the third-party trust-boundary controls in 1.3 where a copy exists). The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Layer 0.
+
+- Index-based enterprise search (Glean, and GoSearch) ingests/crawls connected sources into its own search index — that is a derived copy, with source ACLs mirrored into it.
+- Federated / connector modes (SearchUnify supports this, and others offer it) query sources at read time and don't persist a full copy.
+- Many are hybrid, and the data-handling model is a procurement/config detail you'd confirm per tool.
 
 ---
 
 ## Level 1 — Direct DS access via MCP
 
-**Goal:** an AI agent can read and write institutional knowledge in the systems where it already lives, with access governed by Google SSO.
+**Goal:** address Layer 0's gaps by building our own agent that reads and writes institutional knowledge in the systems where it already lives, with access governed by Google SSO.
 
 The **Data Sources (DSs)** — Google Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday — stay the source of truth. Nothing is copied or pre-computed yet. Each DS is exposed through an **MCP service**, and the agent reads/writes through it.
 
@@ -16,8 +40,8 @@ The **Data Sources (DSs)** — Google Drive, Confluence, Jira, GitHub, Slack, Gm
 
 A local Claude Cowork-style agent connects to a few approved DSs via MCP and reads on the user's behalf.
 
-- **Access control via Google SSO.** Each MCP service requires a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes the call. Identity is carried across every `agent → MCP → DS` hop (token passthrough / on-behalf-of), so the agent can only ever see what the signed-in person can see. An email is an identifier, never a self-asserted authenticator.
-- **Where the DS can't express Google Groups** (Slack channels, Atlassian roles, Salesforce profiles, Workday models), an **admin mapping process** with a named owner normalizes native ACLs to Groups — **default-deny** for unmatched records, **most-restrictive-wins** on conflict. This same SSO + Groups model carries through every later level, so it is worth getting right here.
+- **Access control via Google SSO.** Each MCP service / AI connector requires a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes the call. Identity is carried across every `agent → MCP → DS` hop (token passthrough / on-behalf-of), so the agent can only ever see what the signed-in person can see. An email is an identifier, never a self-asserted authenticator.
+- **The DS enforces its own native permissions.** The connector authenticates to each DS as the signed-in user, and that DS applies its native ACLs directly — no separate enforcement layer to keep in sync, and no need to normalize permissions into Google Groups at this level. (Normalizing native ACLs into Groups via an **admin mapping process** only becomes necessary once DL *materializes* a copy of the data and has to enforce on it itself — see §2.2 and the Parallel Track.)
 
 ### 1.2 Read-write to DSs
 
@@ -31,10 +55,7 @@ Because access is enforced per-DS on every read and write, **new data inherits t
 
 ### 1.3 Broaden the consumers
 
-The MCP-to-DS path is not agent-specific. The same services can back:
-
-- **Commercial apps** — Glean, GoSearch, SearchUnify.
-- **Self-hosted platforms** — Onyx CE, PipesHub, SWIRL.
+The MCP-to-DS path is not specific to one agent. The same services can back other clients — including the **commercial or self-hosted tools from Layer 0**, repointed at our MCP services so they proxy the end-user's identity instead of relying solely on their own connectors (and, for index-based tools, their own copy of the data).
 
 **Third-party trust boundary (inline hardening):** external tools are a distinct trust zone. For each one, define **credential scope** (least-privilege slice), **data minimization** (which DSs, not all), **retention/training constraints**, and **breach containment**. A tool querying under its own service credentials must faithfully proxy the end-user's identity so per-DS enforcement isn't bypassed.
 
@@ -65,6 +86,7 @@ Summaries, digests, curated indexes → written into any DS where people already
 Indexes, prioritized pointers, retrieval hints, freshness/obsolescence signals, and **propagated ACL metadata** → a store chosen for scale (a Google Sheet at small scale; Postgres or BigQuery later). This is a storage-engine choice, not an architectural one.
 
 *Hardening (inline):*
+- **Now DL holds a copy, so it must enforce on it.** Unlike Level 1 (where each DS enforced itself), a materialized store needs propagated ACL metadata. For DSs that can't express Google Groups (Slack channels, Atlassian roles, Salesforce profiles, Workday models), an **admin mapping process** with a named owner normalizes native ACLs to Groups — **default-deny** for unmatched records, **most-restrictive-wins** on conflict. Here the mapping is the **primary** mechanism.
 - **ACL metadata is a *hint*, not a gate.** It's used for routing/pre-filtering only; real enforcement stays at the target store (the DS's native permissions, or query-time predicates where DL serves from its own store). A tampered hint can't widen access.
 - **Access-control freshness.** Propagated ACL is a cache, and a stale cache leaks access after a revocation. Refresh permissions on a schedule **decoupled** from content-staleness refresh; for sensitive categories, re-validate against the live DS/Group at query time or enforce a **maximum propagation lag with a fail-closed default**.
 - **Mosaic effect.** A cross-DS aggregation has no single source ACL and can be more sensitive than any input. It inherits the **most-restrictive intersection** of its sources' groups and is **restricted by default**. If its sensitivity exceeds what the target store can enforce, **don't materialize it** — store a pointer/instruction telling permitted users to recompute it under their own identity at query time.
@@ -125,14 +147,17 @@ DSs → Deterministic Pipeline → Warehouse → BI Dashboards
 
 ## Coverage check
 
-Every element of [lik-architecture-concise.md](lik-architecture-concise.md) lands in a level:
+Every element of [lik-architecture-concise.md](lik-architecture-concise.md) lands in a layer:
 
-| Concept | Level |
+| Concept | Layer |
 |---|---|
+| Build-vs-buy, commercial apps, falsification baseline, gap backlog | 0 |
+| Self-hosted platforms | 0 (adopt) / 1.3 (consume our MCP) |
+| Third-party trust boundary | 0 / 1.3 |
 | DSs as source of truth, MCP exposure | 1 |
-| Google SSO + Groups, admin mapping process, identity rules | 1.1 |
+| Google SSO + Groups, identity rules, native per-DS enforcement | 1.1 |
+| Admin mapping process (normalize native ACLs → Groups for materialized stores) | 2.2 / Parallel Track |
 | Write model (new / corrections / verified summaries) | 1.2 |
-| Commercial apps, self-hosted platforms, third-party trust boundary | 1.3 |
 | DL computed outputs, tags, recomputable-vs-durable | 2 |
 | AI skill (privileged reader, source-ACL capture, provenance marking) | 2 |
 | Human-readable artifacts | 2.1 |
@@ -142,8 +167,14 @@ Every element of [lik-architecture-concise.md](lik-architecture-concise.md) land
 | Sheet→Postgres promotion, governed-writer controls | 2.2 / 3 / Parallel Track (inline) |
 | Deterministic pipeline, warehouse, BI dashboards | Parallel Track |
 
-## Why build it this way
+## Why this strategy
 
-Each level is a **falsifiable bet**. Level 1 proves SSO-gated MCP access is enough for real work. Level 2 proves precomputed outputs beat fan-out search. Level 3 proves a single transparent catalog beats per-store lookups. The deterministic pipeline runs as a **parallel track**, adding reporting whenever BI demands it. Ship one, learn, then spend on the next — rather than committing to the full system up front.
+Each layer is a **falsifiable bet**, and the order is chosen so each one's spend is justified by evidence from the layer before it:
 
-See the **Open Questions** in [lik-architecture-concise.md §11](lik-architecture-concise.md) before committing to scope — especially build-vs-buy and front-loading a falsification experiment (A/B an agent with vs. without DL) before any full build.
+- **Layer 0** establishes whether a bought tool is already good enough, and — win or lose — yields the gap backlog that justifies any build at all. This operationalizes the build-vs-buy open question and the front-loaded falsification experiment from [lik-architecture-concise.md §11](lik-architecture-concise.md): buy first, A/B against the bought baseline, build only the gaps.
+- **Level 1** proves SSO-gated MCP access is enough for real work.
+- **Level 2** proves precomputed outputs beat fan-out search.
+- **Level 3** proves a single transparent catalog beats per-store lookups.
+- The **deterministic pipeline** runs as a parallel track, adding reporting whenever BI demands it.
+
+Ship one, learn, then spend on the next — rather than committing to the full system up front.
