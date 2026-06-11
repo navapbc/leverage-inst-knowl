@@ -222,6 +222,66 @@ Because it's a parallel track, it can be deferred entirely, or pulled forward ah
 
 ---
 
+## Artifacts at a glance
+
+Every artifact the strategy creates, where it lives, who writes it, and how it's used.
+
+- **DS records** — new knowledge, corrections, human-verified summaries (§1.2)
+  - *Resides in:* the relevant Data Source (Confluence, Drive, Jira, GitHub, Slack, etc.)
+  - *Written by:* the user's agent, under the **user's own SSO**
+  - *Read/used by:* anyone with DS permission, via MCP
+  - *Durability:* the **source of truth** — durable; everything else derives from it
+  - *Access control:* the DS's own native ACLs; new data inherits its location's protections automatically
+
+- **Organization skill** (§1.3) — shareable "where to look and how to ask" guidance
+  - *Resides in:* a shared skill library, available to any employee
+  - *Written by:* a **named human owner**; versioned
+  - *Read/used by:* every employee's agent, at query time
+  - *Durability:* durable, hand-authored
+  - *Access control:* none needed — it's guidance, not enforcement, and can never widen access
+
+- **DL skill** (§2) — the automated *producer* of Discovery Layer outputs
+  - *Resides in:* runs under its **own non-user service identity** (per-DS service principals)
+  - *Written by:* developers / skill authors
+  - *Read/used by:* n/a — it's the engine that writes the DL outputs below
+  - *Durability:* code; durable
+  - *Access control:* keyless rotated credentials, least-privilege per DS, audit-logged writes
+
+- **Human-readable artifacts** *(Discovery Layer output)* (§2.1) — summaries, digests, curated indexes
+  - *Resides in:* a DS people already use (a Doc, a Confluence page)
+  - *Written by:* the DL skill's **service identity** (tagged `AI-generated`); promoted to `human-verified` under a reviewer's identity
+  - *Read/used by:* people in the sharing group
+  - *Durability:* **recomputable** until human-verified; human-verified / `human-created` are durable
+  - *Access control:* group-share, fail-closed; native store grant (Drive sharing, Confluence restriction)
+
+- **Machine retrieval signals** *(Discovery Layer output)* (§2.2) — indexes, pointers, retrieval/freshness/obsolescence hints
+  - *Resides in:* a Google Sheet (small scale) → BigQuery / Postgres (at scale)
+  - *Written by:* the DL skill's **service identity** (governed-writer controls in non-versioned stores)
+  - *Read/used by:* tools/agents (via organization skills) at query time
+  - *Durability:* **recomputable** from the DSs
+  - *Access control:* group-share, fail-closed; store-native group/role grant
+
+- **Confirmation signals** *(Discovery Layer output)* (§2.3) — user trust and correction feedback
+  - *Resides in:* a Google Sheet → a service-fronted store (Postgres) at scale
+  - *Written by:* a **service account** (the confirming user captured as `confirmed_by`); rate-limited / de-duped at write
+  - *Read/used by:* organization skills at query time, to shape ranking (§2.4)
+  - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
+  - *Access control:* group-share for reads; users never get direct write access
+
+- **Catalog** *(Discovery Layer output — the index over the others)* (Level 3) — the "yellow pages" mapping `type + subject → location`
+  - *Resides in:* a single **Google Sheet at a well-known address** → Postgres / indexed DB at scale
+  - *Written by:* the DL skill's **service account** (e.g., `summarizer@navapbc.com`) + a small set of **named catalog owners**
+  - *Read/used by:* **every consumer** — the first stop to find where any DL output lives
+  - *Durability:* skill-owned rows re-derived each run; hand-authored rows rely on revert
+  - *Access control:* reads open for transparency; writes limited to the skill account + named owners
+
+- **Warehouse tables / BI outputs** (Parallel Track) — deterministic reporting, no AI in the loop
+  - *Resides in:* a warehouse (e.g., BigQuery)
+  - *Written by:* **deterministic pipelines** (governed-writer controls)
+  - *Read/used by:* BI dashboards; agents/apps via MCP; also a promotion target for §2.2 signals
+  - *Durability:* **recomputable** (deterministic)
+  - *Access control:* the same fail-closed group model; BigQuery IAM honors Google Groups directly
+
 ## Coverage check
 
 Every element of [lik-architecture-concise.md](lik-architecture-concise.md) lands in a layer:
