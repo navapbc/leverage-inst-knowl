@@ -1,6 +1,6 @@
 # Institutional Knowledge for AI Enablement — Implementation Strategy
 
-**The problem.** Institutional knowledge is scattered across many systems. To answer a question, every AI agent, app, and person has to search all of them — repeatedly and redundantly. That is slow, token-expensive, inconsistent across tools, and prone to missing the trusted or current answer. We treat this as the strategy's **working hypothesis** — grounded so far in one concrete signal, the hand-built [Project Indexes](https://navasage.atlassian.net/wiki/x/A4BGoQ) workaround for walled-off project information ([use case](lik-architecture-concise.md)), not a measured baseline — and **Layer 0 is its first test**: if the pain is smaller than assumed, the gap backlog comes back thin and the strategy stops at buy. We want that knowledge reliably discoverable and retrievable for AI agents and people alike — *without* creating a second source of truth or copying everything into one place.
+**The problem.** Institutional knowledge is scattered across many systems. To answer a question, every AI agent, app, and person has to search all of them — repeatedly and redundantly. That is slow, token-expensive, inconsistent across tools, and prone to missing the trusted or current answer. We treat this as the strategy's **working hypothesis** — grounded so far in one concrete signal, the hand-built [Project Indexes](https://navasage.atlassian.net/wiki/x/A4BGoQ) workaround for walled-off project information ([use case](lik-architecture-concise.md)), not a measured baseline — and **Level 0 is its first test**: if the pain is smaller than assumed, the gap backlog comes back thin and the strategy stops at buy. We want that knowledge reliably discoverable and retrievable for AI agents and people alike — *without* creating a second source of truth or copying everything into one place.
 
 **Key terms.**
 - **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed: Google Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday, etc. They remain the **source of truth**; all durable writes happen here.
@@ -14,13 +14,13 @@ Other acronyms used below:
 - **OIDC / OAuth** — the standard identity/authorization protocols that produce the verified token carrying the user's identity.
 - **BI** (business intelligence) — operational dashboards and reporting (the Parallel Track).
 
-**The strategy.** This is an implementation strategy for Leveraging Institutional Knowledge (LIK). It starts by *buying* (Layer 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level adds one standalone capability and is justified by a limitation in the level before it. But standalone capability isn't standalone ROI: Levels 2–3 pay off only once Level 1 adoption shows the same questions recurring across many users — reuse is the value, so treat that recurrence as a precondition to check, not an assumption.
+**The strategy.** This is an implementation strategy for Leveraging Institutional Knowledge (LIK). It starts by *buying* (Level 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level adds one standalone capability and is justified by a limitation in the level before it. But standalone capability isn't standalone ROI: Levels 2–3 pay off only once Level 1 adoption shows the same questions recurring across many users — reuse is the value, so treat that recurrence as a precondition to check, not an assumption.
 
 The strategy is deliberately evidence-driven: ship a layer, learn from it, and only spend on the next if the prior one proved the need. Every layer ends with a **limitation** — the reason the next one exists.
 
 ---
 
-## Layer 0 — Buy a commercial tool and learn
+## Level 0 — Buy a commercial tool and learn
 
 **Goal:** get immediate value and a measurable baseline by adopting an existing tool *before* building anything — and use the experience to decide what, if anything, is worth building.
 
@@ -44,13 +44,13 @@ A turnkey tool is a black box — possible limitations include: you can't change
 - *Federated / connector* (e.g., SearchUnify) queries sources at read time and doesn't persist a full copy.
 - Many are *hybrid*.
 
-The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Layer 0.
+The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Level 0.
 
 ---
 
 ## Level 1 — Direct DS access via MCP
 
-**Goal:** address Layer 0's gaps by building our own agent that reads and writes institutional knowledge in the systems where it already lives, with access governed by Google SSO.
+**Goal:** address Level 0's gaps by building our own agent that reads and writes institutional knowledge in the systems where it already lives, with access governed by Google SSO.
 
 The **Data Sources (DSs)** — Google Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday — stay the source of truth. Nothing is copied or pre-computed yet. Each DS is exposed through an **MCP service**, and the agent reads/writes through it.
 
@@ -85,13 +85,13 @@ A skill can direct the agent to, for example:
 - **Shape the answer** — always cite source links, surface each source's last-updated date, and flag when the best match looks stale.
 - **Route by entity** — map a team/client/project name to the systems and people that own it.
 
-This is the cheapest, human-authored analog of what the Discovery Layer later automates: it encodes "where to look and how to ask" as shareable instructions instead of computed pointers. A skill is **maintained by a named owner**, **versioned**, and improved as the gap backlog from Layer 0 reveals where agents go wrong.
+This is the cheapest, human-authored analog of what the Discovery Layer later automates: it encodes "where to look and how to ask" as shareable instructions instead of computed pointers. A skill is **maintained by a named owner**, **versioned**, and improved as the gap backlog from Level 0 reveals where agents go wrong.
 
 Crucially, a skill is **guidance, not enforcement** — which is exactly why it's safe to share with everyone: it can only help an agent *find* answers faster, never widen access. Every query still runs under the user's own SSO identity (§1.1), so the DS's permissions — not the skill — decide what comes back. This means organization skills need no approval regime or governed-writer controls; a bad or stale skill can misdirect (send someone to the wrong place), but it can never leak data the user wasn't already entitled to. The corollary: never rely on a skill to *restrict* access — gating is always the DS's job.
 
 ### Broadening the data consumers
 
-The MCP-to-DS path is not specific to one agent. The same services can back other clients — including the **commercial or self-hosted tools from Layer 0**, repointed at our MCP services so they proxy the end-user's identity instead of relying solely on their own connectors (and, for index-based tools, their own copy of the data).
+The MCP-to-DS path is not specific to one agent. The same services can back other clients — including the **commercial or self-hosted tools from Level 0**, repointed at our MCP services so they proxy the end-user's identity instead of relying solely on their own connectors (and, for index-based tools, their own copy of the data).
 
 **Third-party trust boundary (inline hardening):** external tools are a distinct trust zone. For each one, define **credential scope** (least-privilege slice), **data minimization** (which DSs, not all), **retention/training constraints**, and **breach containment**. A tool querying under its own service credentials must faithfully proxy the end-user's identity so per-DS enforcement isn't bypassed — and this is **enforced, not assumed**: require a verifiable end-user assertion (a signed user token / OBO) alongside the tool's service credential, and **reject any request carrying only a service credential with no user identity**.
 
@@ -170,7 +170,7 @@ The §2.3 table is just another §2.2 machine-retrieval signal: an **organizatio
 - **C. Ranking** (changes which data the answer uses) — **tie-breaker** (prefer the more-confirmed of similarly-relevant or conflicting candidates; least distorting), **rank boost** (relevance retrieves, trust reorders), or **threshold/filter** (aggressive — prefer soft demotion, since a hard filter can hide correct-but-unconfirmed data).
 - **D. Audience weighting** (exploits `confirmed_by`) — weight confirmations from the asker's group or a topic's owners (§1.3) above a stranger's; adds query-time group-resolution cost.
 
-**Choosing a strategy.** Start with **A + staleness gating (B)** — read-only, transparent, exploiting columns we already capture. Add the **tie-breaker (C)** once confirmation volume is trustworthy. Defer hard filters and audience weighting until the Layer 0 gap backlog shows a question type that needs them. Whatever the choice, **trust advises, never gates**: a record the user is entitled to is never hidden by low trust, only ranked or annotated — gating stays the DS's job (§1.3).
+**Choosing a strategy.** Start with **A + staleness gating (B)** — read-only, transparent, exploiting columns we already capture. Add the **tie-breaker (C)** once confirmation volume is trustworthy. Defer hard filters and audience weighting until the Level 0 gap backlog shows a question type that needs them. Whatever the choice, **trust advises, never gates**: a record the user is entitled to is never hidden by low trust, only ranked or annotated — gating stays the DS's job (§1.3).
 
 ### Expected limitations of this level
 
@@ -310,7 +310,7 @@ Every element of [lik-architecture-concise.md](lik-architecture-concise.md) land
 
 Each layer is an **evidence-driven bet**, and the order is chosen so each one's spend is justified by evidence from the layer before it:
 
-- **Layer 0** establishes whether a bought tool is already good enough, and — win or lose — yields the gap backlog that justifies any build at all. This operationalizes the build-vs-buy open question and the front-loaded build-vs-buy experiment from [lik-architecture-concise.md §11](lik-architecture-concise.md): buy first, A/B against the bought baseline, build only the gaps.
+- **Level 0** establishes whether a bought tool is already good enough, and — win or lose — yields the gap backlog that justifies any build at all. This operationalizes the build-vs-buy open question and the front-loaded build-vs-buy experiment from [lik-architecture-concise.md §11](lik-architecture-concise.md): buy first, A/B against the bought baseline, build only the gaps.
 - **Level 1** proves SSO-gated MCP access is enough for real work.
 - **Level 2** proves precomputed outputs beat fan-out search.
 - **Level 3** proves a single transparent catalog beats per-store lookups.
