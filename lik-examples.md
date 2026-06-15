@@ -1,7 +1,7 @@
 Following are examples of how LIK concepts map to current solutions.
 
 - *DL-creation skill* takes *DS records* and creates *DL data*
-- *Organization skill* queries *DL data* and *DS records* to answer user questions/requests
+- *Query skill* queries *DL data* and *DS records* to answer user questions/requests
 
 | LIK concept | Project Indexes | OPIS PR assistant |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Following are examples of how LIK concepts map to current solutions.
 | (DL data) Machine retrieval signals | Confluence page labels, tags, metadata | Semantic embeddings and metadata in vector DB |
 | DL Confirmation signals | manual validation? | (TODO) engineers like, dislike, and comment on GitHub PRs |
 | DL Catalog | Project Index Directory | Query vector DB |
-| Organization skill | Knowledge Graph Bot (via Slack) or Confluence Rovo | (TODO) chatbot UI and MCP service |
+| Query skill | Knowledge Graph Bot (via Slack) or Confluence Rovo | (TODO) chatbot UI and MCP service |
 
 ---
 
@@ -23,7 +23,7 @@ Following are examples of how LIK concepts map to current solutions.
     * Machine retrieval signals: Confluence page labels, tags, metadata (e.g., each Confluence space's [Update History's ](https://navasage.atlassian.net/wiki/spaces/PIVAAIS/pages/3078684730/Update+History))
 * DL Confirmation signals: manual validation?
 * DL Catalog: [Project Index Directory](https://navasage.atlassian.net/wiki/spaces/KGWS/pages/2705752067/Project+Index+Directory)
-* Organization skill: Knowledge Graph Bot (via Slack) or Confluence Rovo
+* Query skill: Knowledge Graph Bot (via Slack) or Confluence Rovo
 
 #### (Yoom's preliminary testing on top of Project Indexes)
 * DS records: (provided by Project Indexes)
@@ -31,7 +31,7 @@ Following are examples of how LIK concepts map to current solutions.
 * DL data: (provided by Project Indexes)
 * DL Confirmation signals: TODO
 * DL Catalog: adds (Confluence) Catalog entries via `discovery-catalog-sync`
-* Organization skill: `dl-project-index-query`
+* Query skill: `dl-project-index-query`
 
 
 ---
@@ -44,7 +44,7 @@ Following are examples of how LIK concepts map to current solutions.
     * Machine retrieval signals: semantic embeddings and metadata in vector DB
 * DL Confirmation signals: (TODO) engineers to like, dislike, and comment on GitHub PRs
 * DL Catalog: query vector DB
-* Organization skill: (TODO) chatbot UI and MCP service
+* Query skill: (TODO) chatbot UI and MCP service
 
 ### [In-progress] OPIS (RAG-based) Generalized
 * DS records: GitHub, Confluence, Jira, and Slack
@@ -54,7 +54,7 @@ Following are examples of how LIK concepts map to current solutions.
     * Machine retrieval signals: semantic embeddings and metadata in vector DB
 * DL Confirmation signals: ?
 * DL Catalog: via querying vector DB
-* Organization skill: (TODO) chatbot UI and MCP service
+* Query skill: (TODO) chatbot UI and MCP service
 
 ### (Using RAG-based solution as a DS)
 * DS records: solution's vector DB
@@ -64,7 +64,7 @@ Following are examples of how LIK concepts map to current solutions.
     * Machine retrieval signals: semantic embeddings and metadata in vector DB
 * DL Confirmation signals: add entry
 * DL Catalog: add Catalog entries of summarized DL data
-* Organization skill: via MCP
+* Query skill: via MCP
 
 
 
@@ -78,5 +78,5 @@ Template -- Solution X
     * Machine retrieval signals: 
 * DL Confirmation signals:
 * DL Catalog: 
-* Organization skill:
+* Query skill:
 

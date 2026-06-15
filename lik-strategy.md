@@ -71,9 +71,9 @@ The agent writes back under the **user's own SSO identity**, through each DS's n
 
 Because access is enforced per-DS on every read and write, **new data inherits the right protections automatically** — a doc written into a restricted Drive folder is restricted; a ticket created in a private project stays private. No separate permission system to keep in sync.
 
-### 1.3 Organization skills — encode *how* to answer
+### 1.3 Query skills — encode *how* to answer
 
-Even with read/write MCP access, a raw agent doesn't know the organization's retrieval conventions: which DS is authoritative for which question, what internal jargon to search for, which space holds the real answer. Capture that know-how once as a **skill** — a reusable set of instructions that guides the agent's behavior for certain question types — and share it as an **"organization skill" available to any employee**, so everyone's agent benefits from the same institutional know-how without each person rediscovering it.
+Even with read/write MCP access, a raw agent doesn't know the organization's retrieval conventions: which DS is authoritative for which question, what internal jargon to search for, which space holds the real answer. Capture that know-how once as a **skill** — a reusable set of instructions that guides the agent's behavior for certain question types — and share it as an **"Query skill" available to any employee**, so everyone's agent benefits from the same institutional know-how without each person rediscovering it.
 
 A skill can direct the agent to, for example:
 
@@ -87,7 +87,7 @@ A skill can direct the agent to, for example:
 
 This is the cheapest, human-authored analog of what the Discovery Layer later automates: it encodes "where to look and how to ask" as shareable instructions instead of computed pointers. A skill is **maintained by a named owner**, **versioned**, and improved as the gap backlog from Level 0 reveals where agents go wrong.
 
-Crucially, a skill is **guidance, not enforcement** — which is exactly why it's safe to share with everyone: it can only help an agent *find* answers faster, never widen access. Every query still runs under the user's own SSO identity (§1.1), so the DS's permissions — not the skill — decide what comes back. This means organization skills need no approval regime or governed-writer controls; a bad or stale skill can misdirect (send someone to the wrong place), but it can never leak data the user wasn't already entitled to. The corollary: never rely on a skill to *restrict* access — gating is always the DS's job.
+Crucially, a skill is **guidance, not enforcement** — which is exactly why it's safe to share with everyone: it can only help an agent *find* answers faster, never widen access. Every query still runs under the user's own SSO identity (§1.1), so the DS's permissions — not the skill — decide what comes back. This means Query skills need no approval regime or governed-writer controls; a bad or stale skill can misdirect (send someone to the wrong place), but it can never leak data the user wasn't already entitled to. The corollary: never rely on a skill to *restrict* access — gating is always the DS's job.
 
 ### Broadening the data consumers
 
@@ -99,7 +99,7 @@ The MCP-to-DS path is not specific to one agent. The same services can back othe
 
 Where no skill covers a question, a tool must **query each DS and fan out across all of them** on every request — slow, token-expensive, inconsistent across tools, and prone to dead ends.
 
-Organization skills (§1.3) cut that blind fan-out for the questions they cover, but they don't remove the underlying problem — they only point the agent at the right place. The **residual limitations** that survive even a good skill are what motivate Level 2:
+Query skills (§1.3) cut that blind fan-out for the questions they cover, but they don't remove the underlying problem — they only point the agent at the right place. The **residual limitations** that survive even a good skill are what motivate Level 2:
 
 - **No reuse of computed results.** A skill says *where* to look, but the agent still performs the full retrieval and synthesis **live on every query** — the same work repeated, never cached as a reusable output.
 - **Hand-authored guidance doesn't scale or compute.** A skill can route by question type, but it can't carry per-subject pointers for thousands of projects/clients, and it can't **precompute** aggregations, freshness, or trust signals — it can only direct, not derive.
@@ -109,9 +109,9 @@ Organization skills (§1.3) cut that blind fan-out for the questions they cover,
 
 ## Level 2 — Discovery Layer computed outputs (no catalog yet)
 
-**Goal:** stop re-searching the DSs from scratch by precomputing reusable **Discovery Layer (DL)** outputs derived from them — automating and scaling what the §1.3 organization skill did by hand (hand-authored "where to look" → *computed* pointers and *precomputed* outputs any tool can reuse).
+**Goal:** stop re-searching the DSs from scratch by precomputing reusable **Discovery Layer (DL)** outputs derived from them — automating and scaling what the §1.3 Query skill did by hand (hand-authored "where to look" → *computed* pointers and *precomputed* outputs any tool can reuse).
 
-**The identity shift from Level 1.** Where Level 1 ran under the **user's** SSO (the agent saw only that user's slice, enforced per-DS automatically), DL outputs are produced by a **DL-creation skill** on a schedule or on demand under its **own non-user service identity** — never the triggering user's SSO. It reads exactly what that identity is granted (data shared with the account, or DSs where it's in the right Google Group), scoped **least-privilege per DS**; admitted across many sources, it reads inputs no single user could see and computes one shared output for everyone. That power is also its hardening burden — it assigns each output a sharing group (below), **default-deny** so a miss over-restricts rather than leaks. *(That single logical identity is realized as a per-DS service principal — a Slack bot, a Jira/Salesforce service account, a Workday ISU, a GCP service account — each granted least-privilege read. From this level on the skill authenticates with **keyless, rotated credentials** and audit-logged writes, scoped per-output-type where practical to bound a compromise; the store-level **governed-writer discipline** (§2.2) additionally attaches wherever a writer lands in a non-versioned store.)* *(Distinct from the §1.3 **organization skill**, shareable guidance that steers a user's agent at query time; the DL-creation skill is the automated **producer**.)*
+**The identity shift from Level 1.** Where Level 1 ran under the **user's** SSO (the agent saw only that user's slice, enforced per-DS automatically), DL outputs are produced by a **DL-creation skill** on a schedule or on demand under its **own non-user service identity** — never the triggering user's SSO. It reads exactly what that identity is granted (data shared with the account, or DSs where it's in the right Google Group), scoped **least-privilege per DS**; admitted across many sources, it reads inputs no single user could see and computes one shared output for everyone. That power is also its hardening burden — it assigns each output a sharing group (below), **default-deny** so a miss over-restricts rather than leaks. *(That single logical identity is realized as a per-DS service principal — a Slack bot, a Jira/Salesforce service account, a Workday ISU, a GCP service account — each granted least-privilege read. From this level on the skill authenticates with **keyless, rotated credentials** and audit-logged writes, scoped per-output-type where practical to bound a compromise; the store-level **governed-writer discipline** (§2.2) additionally attaches wherever a writer lands in a non-versioned store.)* *(Distinct from the §1.3 **Query skill**, shareable guidance that steers a user's agent at query time; the DL-creation skill is the automated **producer**.)*
 
 DL is **computed, never a second source of truth** — **AI-generated by default** (hand-authored artifacts are tagged `human-created`), mostly **recomputable** from the DSs, and tagged with whatever the store supports (provenance, freshness, classification, sharing group — no bespoke system). The scheduled re-derivation that recomputes an output also bounds how long it can outlive its source: a run that finds the source deleted or its access revoked drops or re-restricts the derived output, so "recomputable" never means "persists stale indefinitely." *(Hardening: DL inputs are untrusted — the skill treats DS content as data, not instructions, and an output's sharing group always comes from the skill's instructions, never inferred from input content, so injected text can't widen an audience.)* Each output is written to a **backing store** named in the skill's instructions: a Confluence page for things people read, or a dedicated store (a service-fronted database, a BigQuery warehouse) for machine signals. The choice turns on *who consumes it* (people → human-readable artifact; tools → machine signals) and *how much write integrity it needs* — and on one hard constraint: **any artifact the skill maintains over time must live in a store whose write connector can edit it in place.** The available connector for Google Drive can only create new files, never update them, so anything re-derived, upserted, or appended — the catalog, recomputed summaries, signal tables — goes to an update-capable store (a **Confluence page** or a **service-fronted database**), not a Google Doc or Sheet. Access control is **uniform** across stores, described once next.
 
@@ -173,9 +173,9 @@ Like all DL writes, a **service account writes the confirmation to the store** �
 
 ### 3.2 Using confirmation signals at query time
 
-The §3.1 table is just another §2.2 machine-retrieval signal: an **organization skill** (§1.3) triggered by a user's question can read it — joining on the DS-record or DL-output pointer the answer cites — and let accumulated trust shape the response. The skill runs under the **user's** SSO, so it only ever sees confirmations the group-share model already permits. How aggressively a skill leans on trust is the **skill author's choice**; the options below run from lightest-touch to most invasive.
+The §3.1 table is just another §2.2 machine-retrieval signal: a **Query skill** (§1.3) triggered by a user's question can read it — joining on the DS-record or DL-output pointer the answer cites — and let accumulated trust shape the response. The skill runs under the **user's** SSO, so it only ever sees confirmations the group-share model already permits. How aggressively a skill leans on trust is the **skill author's choice**; the options below run from lightest-touch to most invasive.
 
-**Trust can also live in the DS itself.** Some data sources carry their own native trust signals — a Confluence page marked "verified," a resolved or accepted Jira ticket, reactions or endorsements, an owner's explicit sign-off. These are separate from DL confirmation signals, and it is up to the organization skill to **weigh the two together**: a DS-native endorsement and a DL confirmation are both evidence of trust, and the skill (under the user's SSO) reads whichever it can and combines them as the author sees fit.
+**Trust can also live in the DS itself.** Some data sources carry their own native trust signals — a Confluence page marked "verified," a resolved or accepted Jira ticket, reactions or endorsements, an owner's explicit sign-off. These are separate from DL confirmation signals, and it is up to the Query skill to **weigh the two together**: a DS-native endorsement and a DL confirmation are both evidence of trust, and the skill (under the user's SSO) reads whichever it can and combines them as the author sees fit.
 
 - **A. Presentation only** (never changes what's retrieved) — annotate "confirmed accurate by N people" (or by a named expert, from `confirmed_by`), or flag "reported inaccurate on <date>" for a previously-corrected record. Safest; never hides data.
 - **B. Version-aware** (exploits the confirmed-version column) — **staleness gating** (if the record changed since it was confirmed, downgrade/flag — "confirmed, but edited since") and **recency decay** (weight recent confirmations higher).
@@ -207,7 +207,7 @@ The catalog is DL's "yellow pages": a directory you consult to find *where* an o
 
 It is the one artifact nothing points *to*, so it lives at a **well-known address** agents know a priori; everything else is discovered through it.
 
-**Implemented as a Confluence page — chosen for transparency and in-place editing.** A Confluence page can be **updated in place**, so each sync revises the same page at a stable address rather than spawning a new file; it gives native version history and SSO-attributed edits, syncs its restrictions from a Google Group, and lets anyone open it and read exactly what the catalog claims — and it sits alongside the source pages the catalog already indexes. It is treated as **just another DS artifact**, with one tightening: because it's the single entry point every consumer hits first, **write access is limited to the DL-creation skill's service account and a small set of named catalog owners** — reads stay open for transparency, edits are attributed via SSO and logged by version history, and a bad edit is reverted. Consumers treat a **missing or malformed row as a cache miss** — fall back to the organization skill's routing (or a bounded fan-out) rather than erroring. Suits low-cardinality pointers (dozens to low-hundreds of subjects). The schema is in [lik-architecture-concise.md §2](lik-architecture-concise.md).
+**Implemented as a Confluence page — chosen for transparency and in-place editing.** A Confluence page can be **updated in place**, so each sync revises the same page at a stable address rather than spawning a new file; it gives native version history and SSO-attributed edits, syncs its restrictions from a Google Group, and lets anyone open it and read exactly what the catalog claims — and it sits alongside the source pages the catalog already indexes. It is treated as **just another DS artifact**, with one tightening: because it's the single entry point every consumer hits first, **write access is limited to the DL-creation skill's service account and a small set of named catalog owners** — reads stay open for transparency, edits are attributed via SSO and logged by version history, and a bad edit is reverted. Consumers treat a **missing or malformed row as a cache miss** — fall back to the Query skill's routing (or a bounded fan-out) rather than erroring. Suits low-cardinality pointers (dozens to low-hundreds of subjects). The schema is in [lik-architecture-concise.md §2](lik-architecture-concise.md).
 
 **How it's created and kept honest.** The **DL-creation skill**, writing under its non-human service account (e.g., `summarizer@navapbc.com`), registers each computed output's location as it runs, appearing in version history like any editor. Because version history is *corrective, not preventive*, each run also **validates entries / dangling pointers and re-derives the rows it owns** (`row_provenance = 'skill'`), bounding any misdirection window; hand-authored rows it can't re-derive rely on revert.
 
@@ -217,7 +217,7 @@ It is the one artifact nothing points *to*, so it lives at a **well-known addres
 
 **Result.** Tools have one known starting point instead of fanning out per query. This is the core of "data democracy": authorized users reach knowledge without knowing where any artifact physically lives.
 
-**The organization skill now evolves.** What §1.3 did by hand — a maintained routing table of "for this question, look here" — the catalog now provides as computed, scalable data. So the skill stops hard-coding DS routing and instead simply directs the agent to **consult the catalog first**, then follow the pointer. The two become complementary: the skill routes the agent *to* the catalog and still shapes *how* it answers (citations, freshness, fallback), while the catalog authoritatively answers *where* each output lives.
+**The Query skill now evolves.** What §1.3 did by hand — a maintained routing table of "for this question, look here" — the catalog now provides as computed, scalable data. So the skill stops hard-coding DS routing and instead simply directs the agent to **consult the catalog first**, then follow the pointer. The two become complementary: the skill routes the agent *to* the catalog and still shapes *how* it answers (citations, freshness, fallback), while the catalog authoritatively answers *where* each output lives.
 
 ---
 
@@ -254,7 +254,7 @@ Every artifact the strategy creates, where it lives, who writes it, and how it's
   - *Durability:* the **source of truth** — durable; everything else derives from it
   - *Access control:* the DS's own native ACLs; new data inherits its location's protections automatically
 
-- **Organization skill** (§1.3) — shareable "where to look and how to ask" guidance
+- **Query skill** (§1.3) — shareable "where to look and how to ask" guidance
   - *Resides in:* a shared skill library, available to any employee
   - *Written by:* a **named human owner**; versioned
   - *Read/used by:* every employee's agent, at query time
@@ -278,14 +278,14 @@ Every artifact the strategy creates, where it lives, who writes it, and how it's
 - **Machine retrieval signals** *(Discovery Layer output)* (§2.2) — indexes, pointers, retrieval/freshness/obsolescence hints
   - *Resides in:* a small service-fronted table → BigQuery / Postgres (at scale) — updated in place, so never a Drive-connector Sheet
   - *Written by:* the DL-creation skill's **service identity** (governed-writer controls in non-versioned stores)
-  - *Read/used by:* tools/agents (via organization skills) at query time
+  - *Read/used by:* tools/agents (via Query skills) at query time
   - *Durability:* **recomputable** from the DSs
   - *Access control:* group-share, fail-closed; store-native group/role grant
 
 - **Confirmation signals** *(Discovery Layer output)* (§3.1) — user trust and correction feedback
   - *Resides in:* a Confluence-page table (updatable in place, free version-history revert) → a service-fronted store (Postgres + app) at scale
   - *Written by:* a **service account** (the confirming user captured as `confirmed_by`); rate-limited / de-duped at write
-  - *Read/used by:* organization skills at query time, to shape ranking (§3.2)
+  - *Read/used by:* Query skills at query time, to shape ranking (§3.2)
   - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
   - *Access control:* group-share for reads; users never get direct write access
 
