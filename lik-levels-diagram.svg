@@ -1,0 +1,119 @@
+<svg width="880" height="586" viewBox="0 0 880 586" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>LIK Strategy Levels 1–3 Diagram</title>
+  <desc>Progressive build strategy: Level 1 MCP access, Level 2 computed Discovery Layer, then two independent Level 3 extensions — Confirmations and Catalog.</desc>
+
+  <defs>
+    <marker id="a" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="586" fill="#F5F7FA"/>
+
+  <!-- Title -->
+  <text x="440" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#1A2A3A">LIK Implementation Strategy — Levels 1–3</text>
+  <text x="440" y="52" text-anchor="middle" font-size="10" fill="#6B7785">Each level addresses a limitation of the one before it. Ship one, learn, then spend on the next.</text>
+
+  <!-- ============================== -->
+  <!-- LEVEL 1 -->
+  <!-- ============================== -->
+  <rect x="30" y="68" width="820" height="116" rx="7" fill="#E8F3FA" stroke="#2A7EAA" stroke-width="1.5"/>
+  <rect x="30" y="68" width="100" height="116" rx="7" fill="#A9CCE3"/>
+  <text x="80" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#1B4A6B">Level 1</text>
+  <text x="80" y="136" text-anchor="middle" font-size="9" fill="#1B4A6B">Direct DS</text>
+  <text x="80" y="148" text-anchor="middle" font-size="9" fill="#1B4A6B">Access</text>
+
+  <rect x="148" y="80" width="192" height="60" rx="5" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="1.2"/>
+  <text x="244" y="102" text-anchor="middle" font-size="10" font-weight="700" fill="#1B4A6B">1.1  Read via MCP</text>
+  <text x="244" y="118" text-anchor="middle" font-size="9" fill="#2A7EAA">Google SSO identity</text>
+  <text x="244" y="131" text-anchor="middle" font-size="9" fill="#2A7EAA">DS enforces its own ACLs</text>
+
+  <rect x="356" y="80" width="192" height="60" rx="5" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="1.2"/>
+  <text x="452" y="102" text-anchor="middle" font-size="10" font-weight="700" fill="#1B4A6B">1.2  Write via MCP</text>
+  <text x="452" y="118" text-anchor="middle" font-size="9" fill="#2A7EAA">user's own SSO identity</text>
+  <text x="452" y="131" text-anchor="middle" font-size="9" fill="#2A7EAA">new knowledge → DS</text>
+
+  <rect x="564" y="80" width="272" height="60" rx="5" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="1.2"/>
+  <text x="700" y="102" text-anchor="middle" font-size="10" font-weight="700" fill="#1B4A6B">1.3  Query skills</text>
+  <text x="700" y="118" text-anchor="middle" font-size="9" fill="#2A7EAA">hand-authored "where to look" guidance</text>
+  <text x="700" y="131" text-anchor="middle" font-size="9" fill="#2A7EAA">shared, versioned, no approval needed</text>
+
+  <rect x="148" y="154" width="684" height="18" rx="4" fill="#D6EAF8" stroke="#2A7EAA" stroke-width="1"/>
+  <text x="490" y="166" text-anchor="middle" font-size="8.5" fill="#1B4A6B">⚠ Limitation: no reuse of results — every query re-searches from scratch; hand-authored skills drift and can't precompute aggregations</text>
+
+  <line x1="440" y1="184" x2="440" y2="202" stroke="#444" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- ============================== -->
+  <!-- LEVEL 2 -->
+  <!-- ============================== -->
+  <rect x="30" y="204" width="820" height="118" rx="7" fill="#E9F7EF" stroke="#2D8B57" stroke-width="1.5"/>
+  <rect x="30" y="204" width="100" height="118" rx="7" fill="#A9DFBF"/>
+  <text x="80" y="252" text-anchor="middle" font-size="13" font-weight="700" fill="#1A5E34">Level 2</text>
+  <text x="80" y="270" text-anchor="middle" font-size="9" fill="#1A5E34">Discovery</text>
+  <text x="80" y="283" text-anchor="middle" font-size="9" fill="#1A5E34">Layer outputs</text>
+
+  <rect x="148" y="216" width="290" height="74" rx="5" fill="#FFFFFF" stroke="#2D8B57" stroke-width="1.2"/>
+  <text x="293" y="238" text-anchor="middle" font-size="10" font-weight="700" fill="#1A5E34">2.4  Human-readable artifacts</text>
+  <text x="293" y="254" text-anchor="middle" font-size="9" fill="#2D8B57">precomputed summaries · digests · indexes</text>
+  <text x="293" y="269" text-anchor="middle" font-size="9" fill="#2D8B57">Confluence pages</text>
+  <text x="293" y="283" text-anchor="middle" font-size="8.5" fill="#5D8A5E">AI-gen · human-verified · human-created</text>
+
+  <rect x="454" y="216" width="382" height="74" rx="5" fill="#FFFFFF" stroke="#2D8B57" stroke-width="1.2"/>
+  <text x="645" y="238" text-anchor="middle" font-size="10" font-weight="700" fill="#1A5E34">2.5  Machine retrieval signals</text>
+  <text x="645" y="254" text-anchor="middle" font-size="9" fill="#2D8B57">indexes · pointers · freshness · obsolescence hints</text>
+  <text x="645" y="269" text-anchor="middle" font-size="9" fill="#2D8B57">service-fronted table → BigQuery at scale</text>
+  <text x="645" y="283" text-anchor="middle" font-size="8.5" fill="#5D8A5E">AI-generated · always recomputable</text>
+
+  <rect x="148" y="304" width="684" height="18" rx="4" fill="#D5F5E3" stroke="#2D8B57" stroke-width="1"/>
+  <text x="490" y="316" text-anchor="middle" font-size="8.5" fill="#1A5E34">⚠ Two limitations, each solved independently below: no human trust signal · no single entry point (outputs scattered across many stores)</text>
+
+  <!-- Branch into two independent Level 3 extensions -->
+  <line x1="440" y1="322" x2="440" y2="332" stroke="#444" stroke-width="1.5"/>
+  <line x1="230" y1="332" x2="650" y2="332" stroke="#444" stroke-width="1.5"/>
+  <line x1="230" y1="332" x2="230" y2="358" stroke="#444" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="650" y1="332" x2="650" y2="358" stroke="#444" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="440" y="349" text-anchor="middle" font-size="8.5" font-style="italic" fill="#6B7785">Two independent extensions of Level 2 — neither depends on the other; build in either order</text>
+
+  <!-- ============================== -->
+  <!-- LEVEL 3 — CONFIRMATIONS (left) -->
+  <!-- ============================== -->
+  <rect x="30" y="360" width="400" height="210" rx="7" fill="#F4ECF7" stroke="#7D3C98" stroke-width="1.5"/>
+  <rect x="30" y="360" width="78" height="210" rx="7" fill="#D2B4DE"/>
+  <text x="69" y="455" text-anchor="middle" font-size="12" font-weight="700" fill="#5B2282">Level 3</text>
+  <text x="69" y="471" text-anchor="middle" font-size="8" fill="#5B2282">Confirmations</text>
+
+  <text x="118" y="382" font-size="9" font-weight="700" fill="#5B2282">Solves: no human trust signal</text>
+
+  <rect x="116" y="392" width="304" height="80" rx="5" fill="#FFFFFF" stroke="#7D3C98" stroke-width="1.2"/>
+  <text x="268" y="414" text-anchor="middle" font-size="10" font-weight="700" fill="#5B2282">3.1  Confirmation signals</text>
+  <text x="268" y="432" text-anchor="middle" font-size="9" fill="#7D3C98">users confirm an answer was correct / incorrect</text>
+  <text x="268" y="448" text-anchor="middle" font-size="9" fill="#7D3C98">durable · not recomputable · revert is only recovery</text>
+  <text x="268" y="463" text-anchor="middle" font-size="8.5" fill="#8E6BA8">feeds the ranking signals of §2.5</text>
+
+  <rect x="116" y="480" width="304" height="80" rx="5" fill="#FFFFFF" stroke="#7D3C98" stroke-width="1.2"/>
+  <text x="268" y="502" text-anchor="middle" font-size="10" font-weight="700" fill="#5B2282">3.2  Used at query time</text>
+  <text x="268" y="520" text-anchor="middle" font-size="8.5" fill="#7D3C98">annotation · staleness gating · ranking · audience weighting</text>
+  <text x="268" y="536" text-anchor="middle" font-size="8.5" fill="#7D3C98">trust advises, never gates — users always see</text>
+  <text x="268" y="549" text-anchor="middle" font-size="8.5" fill="#7D3C98">what they're entitled to</text>
+
+  <!-- ============================== -->
+  <!-- LEVEL 3 — CATALOG (right) -->
+  <!-- ============================== -->
+  <rect x="450" y="360" width="400" height="210" rx="7" fill="#FDFEFE" stroke="#2A7EAA" stroke-width="2"/>
+  <rect x="450" y="360" width="78" height="210" rx="7" fill="#AED6F1"/>
+  <text x="489" y="455" text-anchor="middle" font-size="12" font-weight="700" fill="#1B4A6B">Level 3</text>
+  <text x="489" y="471" text-anchor="middle" font-size="8.5" fill="#1B4A6B">Catalog</text>
+
+  <text x="538" y="382" font-size="9" font-weight="700" fill="#1B4A6B">Solves: no single entry point</text>
+
+  <rect x="536" y="392" width="308" height="168" rx="6" fill="#EBF5FB" stroke="#2A7EAA" stroke-width="1.5"/>
+  <rect x="642" y="402" width="96" height="18" rx="9" fill="#D6EAF8" stroke="#2A7EAA" stroke-width="1"/>
+  <text x="690" y="414" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1B4A6B">ENTRY POINT</text>
+  <text x="690" y="438" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Catalog — DL's "yellow pages"</text>
+  <text x="690" y="456" text-anchor="middle" font-size="9" fill="#2A7EAA">One well-known Confluence page</text>
+  <text x="690" y="472" text-anchor="middle" font-size="9" fill="#2A7EAA">maps  type + subject  →  location of any DL output</text>
+  <text x="690" y="491" text-anchor="middle" font-size="9" fill="#2A7EAA">Tools consult it first instead of fanning out per query</text>
+  <text x="690" y="507" text-anchor="middle" font-size="9" fill="#2A7EAA">Query skills follow catalog pointers, not hard-coded routes</text>
+  <text x="690" y="531" text-anchor="middle" font-size="8.5" fill="#7AABCE" font-style="italic">Promotes to Postgres / indexed DB when subjects outgrow a page</text>
+
+</svg>

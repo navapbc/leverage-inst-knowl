@@ -1,0 +1,123 @@
+<svg width="860" height="640" viewBox="0 0 860 640" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>LIK Key Concepts Diagram</title>
+  <desc>Architecture diagram showing relationships among Data Sources, MCP, Discovery Layer (Catalog, Human-readable artifacts, Machine retrieval signals, Confirmation signals), DL-creation skill, Query skill, and Users/Agents/Apps.</desc>
+
+  <defs>
+    <marker id="arrDark" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#555"/>
+    </marker>
+    <marker id="arrDarkRev" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto-start-reverse">
+      <path d="M7,0 L0,3.5 L7,7 Z" fill="#555"/>
+    </marker>
+    <marker id="arrGreen" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2D8B57"/>
+    </marker>
+    <marker id="arrPurple" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#7D3C98"/>
+    </marker>
+    <marker id="arrBlue" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2E7AB0"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="860" height="640" fill="#F5F7FA"/>
+
+  <!-- ===== DATA SOURCES ===== -->
+  <rect x="40" y="550" width="780" height="70" rx="7" fill="#1B4A6B"/>
+  <text x="430" y="575" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Data Sources</text>
+  <text x="430" y="593" text-anchor="middle" font-size="10" fill="#A8CCED">Confluence · Jira · GitHub · Slack · Google Drive · Gmail · Salesforce · Workday</text>
+  <text x="430" y="609" text-anchor="middle" font-size="9.5" font-style="italic" fill="#7AABCE">Source of Truth — all durable writes happen here</text>
+
+  <!-- ===== MCP ===== -->
+  <rect x="40" y="472" width="780" height="62" rx="6" fill="#2A7EAA"/>
+  <text x="430" y="496" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">MCP  (Model Context Protocol)</text>
+  <text x="430" y="514" text-anchor="middle" font-size="10" fill="#CBE7F7">Service interface — all reads and writes to Data Sources flow through MCP under a verified user identity</text>
+  <text x="430" y="527" text-anchor="middle" font-size="9" fill="#97C8E8">Each DS enforces its own native permissions on every call</text>
+
+  <!-- MCP double arrow -->
+  <line x1="430" y1="472" x2="430" y2="550" stroke="#1B4A6B" stroke-width="2" marker-end="url(#arrDark)" marker-start="url(#arrDarkRev)"/>
+
+  <!-- ===== DISCOVERY LAYER box ===== -->
+  <rect x="40" y="128" width="500" height="332" rx="8" fill="#E8F3FA" stroke="#B0D0E8" stroke-width="1.5"/>
+  <text x="290" y="155" text-anchor="middle" font-size="14" font-weight="700" fill="#1B4A6B">Discovery Layer</text>
+  <text x="290" y="172" text-anchor="middle" font-size="9.5" font-style="italic" fill="#5A8BA8">Computed · derived from Data Sources · distributed across many stores</text>
+
+  <!-- Catalog -->
+  <rect x="60" y="181" width="460" height="64" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
+  <rect x="60" y="181" width="82" height="64" rx="6" fill="#D6EAF8"/>
+  <text x="101" y="208" text-anchor="middle" font-size="9" font-weight="700" fill="#1B4A6B">ENTRY</text>
+  <text x="101" y="221" text-anchor="middle" font-size="9" font-weight="700" fill="#1B4A6B">POINT</text>
+  <text x="300" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#1B4A6B">Catalog</text>
+  <text x="300" y="222" text-anchor="middle" font-size="10" fill="#2A7EAA">"Yellow pages" — one well-known address</text>
+  <text x="300" y="238" text-anchor="middle" font-size="9.5" fill="#5A8BA8">maps  type + subject  →  location of any DL output</text>
+
+  <!-- Human-readable artifacts -->
+  <rect x="60" y="258" width="218" height="92" rx="5" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
+  <text x="169" y="280" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">Human-readable</text>
+  <text x="169" y="294" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">artifacts</text>
+  <text x="169" y="309" text-anchor="middle" font-size="9" fill="#4A8A5A">summaries · digests · indexes</text>
+  <text x="169" y="322" text-anchor="middle" font-size="8.5" fill="#78AA82" font-style="italic">Confluence pages</text>
+  <text x="169" y="336" text-anchor="middle" font-size="8" fill="#4A8A5A">AI-gen · human-verified · human-created</text>
+  <text x="169" y="347" text-anchor="middle" font-size="7.5" fill="#78AA82" font-style="italic">recomputable → durable as authorship deepens</text>
+
+  <!-- Machine retrieval signals -->
+  <rect x="302" y="258" width="218" height="92" rx="5" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
+  <text x="411" y="280" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">Machine retrieval</text>
+  <text x="411" y="294" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">signals</text>
+  <text x="411" y="309" text-anchor="middle" font-size="9" fill="#4A8A5A">indexes · pointers · freshness</text>
+  <text x="411" y="322" text-anchor="middle" font-size="8.5" fill="#78AA82" font-style="italic">service-fronted tables</text>
+  <text x="411" y="336" text-anchor="middle" font-size="8" fill="#4A8A5A">AI-generated · always recomputable</text>
+
+  <!-- Confirmation signals -->
+  <rect x="60" y="364" width="460" height="68" rx="5" fill="#FFFFFF" stroke="#9B59B6" stroke-width="1.5"/>
+  <text x="290" y="389" text-anchor="middle" font-size="12" font-weight="700" fill="#6C2A6A">Confirmation signals</text>
+  <text x="290" y="406" text-anchor="middle" font-size="9.5" fill="#8E44AD">user trust feedback · human-originated · durable</text>
+  <text x="290" y="421" text-anchor="middle" font-size="8.5" fill="#A569BD" font-style="italic">not recomputable — revert is the only recovery</text>
+
+  <!-- DL to MCP -->
+  <line x1="290" y1="460" x2="290" y2="472" stroke="#2A7EAA" stroke-width="1.5" marker-end="url(#arrBlue)"/>
+
+  <!-- ===== DL-CREATION SKILL ===== -->
+  <rect x="565" y="272" width="255" height="92" rx="8" fill="#E9F7EF" stroke="#2D8B57" stroke-width="2"/>
+  <text x="692" y="300" text-anchor="middle" font-size="12" font-weight="700" fill="#1A5E34">DL-creation skill</text>
+  <text x="692" y="317" text-anchor="middle" font-size="9.5" fill="#2D8B57">automated producer of DL outputs</text>
+  <text x="692" y="332" text-anchor="middle" font-size="9" fill="#52BE80">queries one or more DSs</text>
+  <text x="692" y="347" text-anchor="middle" font-size="9" fill="#52BE80">non-user service identity</text>
+
+  <!-- DL-creation to DL -->
+  <line x1="565" y1="318" x2="520" y2="318" stroke="#2D8B57" stroke-width="2" marker-end="url(#arrGreen)"/>
+  <text x="541" y="311" text-anchor="middle" font-size="8.5" fill="#2D8B57">produces</text>
+
+  <!-- DL-creation to MCP dashed -->
+  <line x1="692" y1="364" x2="692" y2="472" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrGreen)"/>
+  <text x="718" y="422" font-size="8.5" fill="#2D8B57">reads</text>
+  <text x="718" y="434" font-size="8.5" fill="#2D8B57">via MCP</text>
+
+  <!-- ===== QUERY SKILL ===== -->
+  <rect x="565" y="128" width="255" height="92" rx="8" fill="#F4ECF7" stroke="#7D3C98" stroke-width="2"/>
+  <text x="692" y="158" text-anchor="middle" font-size="12" font-weight="700" fill="#5B2282">Query skill</text>
+  <text x="692" y="175" text-anchor="middle" font-size="9.5" fill="#7D3C98">steers agents at query time</text>
+  <text x="692" y="190" text-anchor="middle" font-size="9" fill="#A569BD">runs under user's own SSO identity</text>
+  <text x="692" y="205" text-anchor="middle" font-size="9" fill="#A569BD">Catalog → DL outputs + DSs</text>
+
+  <!-- Query skill to Catalog -->
+  <line x1="565" y1="178" x2="520" y2="213" stroke="#7D3C98" stroke-width="1.5" marker-end="url(#arrPurple)"/>
+  <text x="534" y="194" text-anchor="middle" font-size="8.5" fill="#7D3C98">queries</text>
+
+  <!-- ===== USERS ===== -->
+  <rect x="40" y="28" width="500" height="72" rx="8" fill="#EAECEE" stroke="#A0A8B0" stroke-width="1.5"/>
+  <text x="290" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="#2C3E50">Users / Agents / Apps</text>
+  <text x="290" y="78" text-anchor="middle" font-size="10" fill="#6B7785">ask questions · get answers · write new knowledge to Data Sources</text>
+
+  <!-- Users to Query skill arcs -->
+  <path d="M540,64 C575,64 565,128 565,174" stroke="#555" stroke-width="1.5" fill="none" marker-end="url(#arrDark)"/>
+  <path d="M565,148 C565,100 552,76 540,76" stroke="#555" stroke-width="1.5" fill="none" marker-end="url(#arrDark)"/>
+  <text x="568" y="118" font-size="8.5" fill="#555">asks /</text>
+  <text x="568" y="130" font-size="8.5" fill="#555">answers</text>
+
+  <!-- Users write via agent dashed arrow on left -->
+  <line x1="60" y1="100" x2="60" y2="472" stroke="#B0B8C0" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrDark)"/>
+  <text x="30" y="290" text-anchor="middle" font-size="8.5" fill="#A0A8B0" transform="rotate(-90,30,290)">writes via agent</text>
+
+</svg>
