@@ -86,7 +86,7 @@ The same column set applies in both realizations — a Confluence-page table fir
 | `last_validated_at` | timestamp | When the skill last confirmed the pointer resolves and sources are unchanged. |
 | `access_groups` | text[] | Propagated ACL **hint** — the output's single assigned audience group (no runtime intersection; §8). *Never trusted for enforcement*; routing/filtering only. |
 | `sensitivity` | enum | `restricted` (default) \| `cleared`. Restricted-by-default until explicitly cleared. |
-| `category` | text (nullable) | Classification + admin ACL-mapping criterion. |
+| `category` | text (nullable) | Descriptive classification. Also **read by** the admin ACL-mapping process (§8) as one input among several when a DS can't supply a Google Group |
 | `computed_by` | text | The skill/pipeline that owns this row (distinguishes re-derivable rows from hand-authored ones). |
 | `row_provenance` | enum | `skill` \| `human` — which writer owns the row, so the skill knows what it may re-derive vs. leave alone. |
 
