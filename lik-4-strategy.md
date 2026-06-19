@@ -255,7 +255,7 @@ It is the one artifact nothing points *to*, so it lives at a **well-known addres
 
 **This mirrors an emerging industry standard.** Google's [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) (v0.1 draft released June 12, 2026) — an open spec for handing AI agents curated organizational knowledge as a set of markdown files — reserves a special `index.md` file for exactly this purpose: a file at a known location that **lists what a directory contains so an agent can map it before opening any individual document** (progressive disclosure). Our catalog is the same idea applied to the whole Discovery Layer instead of a single folder — one well-known map of what exists and where, consulted before fetching the artifact itself. The one deliberate difference is *how* it's read: an OKF `index.md` is small enough to read whole, whereas our catalog spans every subject DL covers, so an agent resolves its question to a key and fetches only the matching row (see below) rather than loading the whole catalog.
 
-**Implemented as a [Confluence page](lik-dl-storage.md#confluence-pages) — chosen for transparency and in-place editing.** It is updated in place at a stable address, with version history and SSO-attributed edits for free, and sits alongside the source pages it indexes so anyone can open it and read exactly what the catalog claims. It is treated as **just another DS artifact**, with one tightening: because it's the single entry point every consumer hits first, **write access is limited to the DL-creation skill's service account and a small set of named catalog owners** — reads stay open for transparency. Consumers treat a **missing or malformed row as a cache miss** — fall back to the Query skill's routing (or a **bounded fan-out** — a capped search of the few most-likely stores, never the unbounded "search every store" fan-out of Level 1) rather than erroring. Suits low-cardinality pointers (dozens to low-hundreds of subjects). The schema is in [lik-3-architecture-concise.md §3](lik-3-architecture-concise.md).
+**Implemented as a [Confluence page](lik-dl-storage.md#confluence-pages) — chosen for transparency and in-place editing.** It is updated in place at a stable address, with version history and SSO-attributed edits for free, and sits alongside the source pages it indexes so anyone can open it and read exactly what the catalog claims. It is treated as **just another DS artifact**, with one tightening: because it's the single entry point every consumer hits first, **all writes go through the DL-creation skill's service account** — autonomously for the rows it computes, and under a verified human assertion for human-created rows (§4.3); no one edits rows directly. Reads stay open for transparency. Consumers treat a **missing or malformed row as a cache miss** — fall back to the Query skill's routing (or a **bounded fan-out** — a capped search of the few most-likely stores, never the unbounded "search every store" fan-out of Level 1) rather than erroring. Suits low-cardinality pointers (dozens to low-hundreds of subjects). The schema is in [lik-3-architecture-concise.md §3](lik-3-architecture-concise.md).
 
 **What gets cataloged.** Not every output a producer touches earns a row — registration is **per `(entry_type, subject)` key**, not per artifact, and an output qualifies only when it meets all three:
 
@@ -265,10 +265,10 @@ It is the one artifact nothing points *to*, so it lives at a **well-known addres
 
 The **producer decides**, by these conditions: a DL-creation skill registers the outputs its author designated catalog-worthy; a Level 4 synthesis is registered when the user opts to save it (§4.3); a Parallel-Track pipeline registers its reporting outputs the same way. The rule is uniform — *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
 
-**How it's created and kept honest.** The **DL-creation skill**, writing under its non-human service account (e.g., `summarizer@navapbc.com`), registers the location of each output it's configured to publish (per the conditions above) as it runs, appearing in version history like any editor. Because version history is *corrective, not preventive*, each run also **validates entries / dangling pointers and re-derives the rows it owns** (`row_provenance = 'skill'`), bounding any misdirection window; hand-authored rows it can't re-derive rely on revert.
+**How it's created and kept honest.** The **DL-creation skill**, writing under its non-human service account (e.g., `summarizer@navapbc.com`), registers the location of each output it's configured to publish (per the conditions above) as it runs, appearing in version history like any editor. Because version history is *corrective, not preventive*, each run also **validates entries / dangling pointers and re-derives the rows it owns** (`row_provenance = 'skill'`), bounding any misdirection window; human-created rows it can't re-derive rely on revert.
 
 *Hardening (inline):*
-- **The catalog stores pointers, not permissions.** Real access is enforced at each target store's group grant (§2 access control), so a tampered or wrong catalog row can *misdirect* a lookup but can never *widen* access. That bounds the blast radius of a bad write; restricting writers to the skill account and named owners (above) then keeps the shared entry point from being broken or redirected by any editor.
+- **The catalog stores pointers, not permissions.** Real access is enforced at each target store's group grant (§2 access control), so a tampered or wrong catalog row can *misdirect* a lookup but can never *widen* access. That bounds the blast radius of a bad write; routing every write through the skill account (above) then keeps the shared entry point from being broken or redirected by any editor.
 - **Promotion.** When subject count or pointer volume outgrows a page, promote the *same logical schema* to **[Postgres](lik-dl-storage.md#postgres-the-service-fronted-store) or any indexed DB**, served by the §2.6 service — consumers still do one `(entry_type, subject)` lookup. A catalog in a non-versioned store takes on the [governed-writer discipline](lik-dl-storage.md#governed-writer-controls) and adds its own audit columns (`created_at` / `updated_at` / `updated_by`), which the Confluence-page realization doesn't need. Because the catalog is the a-priori entry point, promotion must preserve its **well-known address**: consumers reach it through a stable alias/indirection, not the page's raw URL, so the backing store can change underneath without breaking any consumer.
 
 **Result.** Tools have one known starting point instead of fanning out per query. This is the core of "data democracy": authorized users reach knowledge without knowing where any artifact physically lives.
@@ -281,15 +281,15 @@ The **producer decides**, by these conditions: a DL-creation skill registers the
 
 ---
 
-## Level 4 — Flywheel: confirmed answers become new DL outputs
+## Level 4 — Flywheel: saved answers become new DL outputs
 
-**Goal:** grow DL coverage from the questions people actually ask. When the **Query skill** synthesizes an answer across several DSs that exists in no DL output yet, and a user confirms it's correct, offer to persist that confirmed synthesis as a new durable artifact — so the next person retrieves it instead of re-deriving it.
+**Goal:** grow DL coverage from the questions people actually ask. When the **Query skill** synthesizes an answer across several DSs that exists in no DL output yet, it offers to persist that synthesis as a new durable artifact — so the next person retrieves it instead of re-deriving it.
 
-The gap this closes: Level 2's DL-creation skills must **guess** what to precompute, and Level 3-Confirmations only captures trust on outputs that *already exist*. Neither turns a one-off cross-source answer — correct, but living only in one chat transcript — into reusable DL. Level 4 makes every confirmed novel synthesis a candidate DL output, so coverage grows **demand-driven** rather than by guesswork. It builds on Level 1 (the §1.3 Query skill and §1.2 write model do the work) and uses Level 3-Catalog to make each new output discoverable; it does *not* depend on Level 3-Confirmations.
+The gap this closes: Level 2's DL-creation skills must **guess** what to precompute, and Level 3-Confirmations only captures trust on outputs that *already exist*. Neither turns a one-off cross-source answer — correct, but living only in one chat transcript — into reusable DL. Level 4 makes every saved novel synthesis a candidate DL output, so coverage grows **demand-driven** rather than by guesswork. It builds on Level 1 (the §1.3 Query skill and §1.2 write model do the work) and uses Level 3-Catalog to make each new output discoverable; it does *not* depend on Level 3-Confirmations.
 
-### 4.1 The confirm-to-create gesture
+### 4.1 The save-to-create gesture
 
-This is **not** a §3.1 confirmation signal. Those attach trust to data that already exists — a DL output or DS record the answer cited. When the Query skill **synthesizes an answer across multiple DSs that matches no existing DL output**, a confirmation has nothing to attach to; the gesture is instead a request to **create** the missing artifact. Level 4 adds this one capability to the **Query skill**: after such an answer, it offers to save it — as simply as *"Create a Confluence page / Google Doc from this answer?"*
+When the Query skill **synthesizes an answer across multiple DSs that matches no existing DL output**, Level 4 lets it offer to **create** that missing output — as simply as *"Create a Confluence page / Google Doc from this answer?"*
 
 - **The skill detects the trigger.** It already knows whether it answered from an existing DL output (it looked one up) or had to fan out across DSs and synthesize. Only the latter — a synthesis with no DL home — prompts the offer.
 - **Whole answer or parts.** A response may stitch together several sources; the user can save the whole synthesis or just the section that was the good one.
@@ -309,7 +309,7 @@ It is **registered in the catalog** (§4.3) so the next consumer finds it throug
 
 ### 4.3 Registering in the catalog
 
-The artifact is written by the user's agent under their own SSO (§4.2), but the **catalog row is not** — §3-Catalog limits catalog writes to the DL-creation skill's service account and named owners, and a regular user is neither. The same split confirmations use applies (§3.1: the user supplies the signal, a service account writes the store): **the user creates the artifact; a service registers the pointer.**
+The artifact is written by the user's agent under their own SSO (§4.2), but the **catalog row is not** — §3-Catalog routes every catalog write through the DL-creation skill's service account, never a user's agent. The same split confirmations use applies (§3.1: the user supplies the signal, a service account writes the store): **the user creates the artifact; a service registers the pointer.**
 
 After writing the artifact, the Query skill calls the §2.6 scoped tool `register_catalog_entry` with the user's verified assertion. The service performs the catalog write under **its own service identity** — preserving the narrow-writer rule — and captures the creating user as `created_by`. This adds a second writer mode for catalog rows: §2.6 today writes them **service-only**; Level 4 writes them **service + user assertion**, the mode §2.6 already defines for confirmations.
 
@@ -321,24 +321,24 @@ The tool enforces three things at write time (the reason §2.6 forbids raw SQL):
 
 The row is marked **human-created**, not `row_provenance = 'skill'`: the §3-Catalog validation pass can't re-derive a human synthesis, so it **validates the pointer but doesn't recompute the row**, dropping or flagging it only if it goes dangling — revert is its recovery, consistent with its durable, non-recomputable nature (§4.2).
 
-Routing through the service account works in **both catalog realizations**: the service does the Confluence-page write today and the indexed-DB write after promotion (§2.6). Nothing forces promotion — but Level 4 is a real argument for it, since catalog growth now comes from many users, not a handful of named owners.
+Routing through the service account works in **both catalog realizations**: the service does the Confluence-page write today and the indexed-DB write after promotion (§2.6). Nothing forces promotion — but Level 4 is a real argument for it, since catalog growth now comes from many users supplying assertions, not just the skill's own runs.
 
 ### 4.4 The flywheel
 
 Each turn of the loop makes the next answer cheaper:
 
 1. A user asks something with no DL answer; the Query skill fans out across DSs and synthesizes.
-2. The user confirms the answer and saves it (§4.1–4.2).
+2. The user saves the answer (§4.1–4.2).
 3. The synthesis is now a durable DL output, discoverable via the catalog.
 4. The next person asking the same thing retrieves it in one step instead of re-fanning out — and can confirm it too, accruing trust (§3.2).
 
-Usage drives confirmations; confirmations drive new DL outputs; new outputs make answers faster and cheaper; faster answers drive more usage. DL coverage grows toward the questions people actually ask — the opposite of precomputing outputs nobody reads.
+Usage surfaces answers worth saving; saved answers become new DL outputs; new outputs make answers faster and cheaper; faster answers drive more usage. DL coverage grows toward the questions people actually ask — the opposite of precomputing outputs nobody reads.
 
 ### Guardrails
 
 - **One sensitivity tier per artifact (§2.3).** A cross-source synthesis can blend content from differently-restricted DSs. The save path must place it in a location no broader than its **most-restricted input** — default-deny when in doubt — so persisting an answer never widens access beyond what its sources allowed.
 - **No duplication storms.** Before creating, the skill checks the catalog for an existing artifact on the same `(entry_type, subject)` and updates it in place (§2.4) rather than spawning near-duplicates — the same de-duplication discipline confirmations use (§3.1).
-- **Trust the source, not the synthesis, long-term.** A saved synthesis goes stale as its underlying DSs change and — unlike an `AI-generated` output — isn't re-derived. The §3.2 staleness signals flag it ("confirmed, but sources edited since"), and the §3.3 backpropagation path lets its trust eventually move into the source DSs, after which the standalone synthesis can be archived.
+- **Trust the source, not the synthesis, long-term.** A saved synthesis goes stale as its underlying DSs change and — unlike an `AI-generated` output — isn't re-derived. The §3.2 staleness signals flag it ("verified, but sources edited since"), and the §3.3 backpropagation path lets its trust eventually move into the source DSs, after which the standalone synthesis can be archived.
 
 ### Expected limitations of this level
 
@@ -389,7 +389,7 @@ Every element of [lik-3-architecture-concise.md](lik-3-architecture-concise.md) 
 | Confirmation signals (durable DL-origin) | 3-Confirmations §3.1 |
 | Consuming confirmation signals at query time (annotation / staleness / ranking) | 3-Confirmations §3.2 |
 | The catalog, schema, DL-creation skill (non-human account), validate/re-derive | 3-Catalog |
-| Flywheel: confirmed cross-source answers persisted as new DL outputs | 4 |
+| Flywheel: saved cross-source answers persisted as new DL outputs | 4 |
 | Store promotion (page/table → DB), governed-writer controls | 2.2 / 2.6 / Parallel Track (inline) |
 | Deterministic pipeline, warehouse, BI dashboards | Parallel Track |
 
@@ -401,7 +401,7 @@ Each layer is an **evidence-driven bet**, and the order is chosen so each one's 
 - **Level 1** proves SSO-gated MCP access is enough for real work.
 - **Level 2** proves precomputed outputs beat fan-out search.
 - **Levels 3-Confirmations and 3-Catalog** are independent of each other — both build on Level 2, neither requires the other. Level 3-Confirmations proves a human trust signal improves answers in ways computed signals can't; Level 3-Catalog proves a single catalog entry point beats per-store fan-out. The gap backlog guides which to build first.
-- **Level 4** turns confirmed cross-source answers into reusable DL outputs, so coverage grows from real demand rather than precomputed guesses — complementing Level 2's proactive precomputation.
+- **Level 4** turns saved cross-source answers into reusable DL outputs, so coverage grows from real demand rather than precomputed guesses — complementing Level 2's proactive precomputation.
 - The **deterministic pipeline** runs as a parallel track, adding reporting whenever BI demands it.
 
 Ship one, learn, then spend on the next — rather than committing to the full system up front.

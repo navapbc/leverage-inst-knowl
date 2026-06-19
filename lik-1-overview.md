@@ -27,7 +27,7 @@ Every design choice in the later docs traces back to these.
 
 1. **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed (Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday, …). These hold the **primary knowledge** — records that exist for their own sake — and stay the **source of truth**: every lasting change is written here, and each system keeps controlling who may see what.
 
-2. **Discovery Layer (DL)** — a layer of *prepared material derived from the Data Sources*: summaries, indexes, pointers, and freshness/trust signals. Its whole reason to exist is to make knowledge **easy to find and reuse** — each piece is cataloged, ranked, and freshness-tracked so tools don't re-search everything from scratch. It is **derived** material — never primary knowledge authored for its own sake (that's a Data Source), and never a second source of truth. A quick test: a DL piece exists only *because* there's something to discover — remove the underlying records and a summary, index, or signal has nothing left to describe. **Most** of it is *recomputable* — rebuilt from the sources on demand, so it's cheap to keep and safe to discard. The exceptions are the parts that come from **people** and can't be re-derived: a summary someone wrote or confirmed as correct, and the confirmation signals (below) — these are kept and backed up deliberately.
+2. **Discovery Layer (DL)** — a layer of *prepared material derived from the Data Sources*: summaries, indexes, pointers, and freshness/trust signals. Its whole reason to exist is to make relevant knowledge **easy to find and reuse** — pertinent DS records can be cataloged, ranked, and/or rated so tools don't re-search everything from scratch. It is **derived** material — never primary knowledge authored for its own sake (that's a Data Source), and never a second source of truth. A quick test: a DL output exists only *because* there's something to discover — remove the underlying records and a summary, index, or signal has nothing left to describe. **Most** of it is *recomputable* — rebuilt from the sources on demand (typically by an AI), so it's cheap to update and safe to discard. The exceptions are the parts that were created manually by **people** and can't be re-derived: a summary someone wrote and the confirmation signals (below) — these are kept and backed up deliberately.
 
 3. **Catalog** — the Discovery Layer's "yellow pages": one well-known place that maps a *topic* to *where its prepared material lives*. A tool does **one lookup**, then follows the pointer — instead of searching every system. Move a piece of material and you change one line in the catalog, not the tools that use it.
 
@@ -127,7 +127,7 @@ Every artifact the strategy creates, where it lives, who writes it, and how it's
   - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
   - *Access control:* group-share for reads; users never get direct write access
 
-- **Persisted synthesis** *(Discovery Layer output)* — a confirmed cross-DS answer saved as a new human-created DL artifact
+- **Persisted synthesis** *(Discovery Layer output)* — a cross-DS answer saved as a new human-created DL artifact
   - *Resides in:* a [Confluence page or Google Doc](lik-dl-storage.md) (a DS-hosted store), registered in the catalog
   - *Written by:* the **user's own agent under their SSO** (human-authored DL output), born `human-verified`
   - *Read/used by:* people in the sharing group, via the catalog — like any other artifact
@@ -136,10 +136,10 @@ Every artifact the strategy creates, where it lives, who writes it, and how it's
 
 - **Catalog** *(Discovery Layer output — the index over the others)* — the "yellow pages" mapping `type + subject → location`
   - *Resides in:* a **[Confluence page](lik-dl-storage.md#confluence-pages) at a well-known address** → [Postgres](lik-dl-storage.md#postgres-the-service-fronted-store) / indexed DB at scale
-  - *Written by:* the DL-creation skill's **service account** (e.g., `summarizer@navapbc.com`) + a small set of **named catalog owners**
+  - *Written by:* the DL-creation skill's **service account** (e.g., `summarizer@navapbc.com`) — autonomously for the rows it computes, and under a **verified human assertion** for human-created rows (the same split Level 4 uses: a person supplies the pointer, the service writes the row)
   - *Read/used by:* **every consumer** — the first stop to find where any DL output lives
-  - *Durability:* skill-owned rows re-derived each run; hand-authored rows rely on revert
-  - *Access control:* reads open for transparency; writes limited to the skill account + named owners
+  - *Durability:* skill-owned rows re-derived each run; human-created rows rely on revert
+  - *Access control:* reads open for transparency; all writes go through the service account — no direct row editing
 
 - **Warehouse tables / BI outputs** — deterministic reporting, no AI in the loop
   - *Resides in:* a warehouse (e.g., BigQuery)

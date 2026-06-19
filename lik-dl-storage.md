@@ -21,7 +21,7 @@ The default for anything human-readable and for small-scale tables.
 | **Versioning** | Native **version history** — supplies attribution, the audit log, and **revert as the recovery path**, with no extra machinery. |
 | **Identity** | Edits are attributed to an SSO identity. A skill writes under a **non-human service account** (e.g. `summarizer@navapbc.com`) that appears in version history like any editor. |
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning must be configured.* |
-| **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is the recovery. For a shared single-entry artifact (the catalog), tighten writers to the skill service account plus a few named owners. |
+| **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is the recovery. For a shared single-entry artifact (the catalog), route every write through the skill service account — human-created rows come via a verified assertion (no direct editing), not from individual editors. |
 
 **Used for:** human-readable artifacts (summaries, digests, curated indexes); the catalog at small scale; machine-signal and confirmation **tables at small scale**, before they outgrow a page.
 

@@ -60,11 +60,11 @@ DL's directory — a "yellow pages" you consult to find *where* an output lives 
 
 It is the one un-pointed-to artifact, so it must live at a **well-known address** agents know a priori; everything else is discovered through it. It starts as a **single Confluence page** so no warehouse is needed at small scale.
 
-When in a **version-history DS**, it is treated as **just another DS artifact** ([lik-dl-storage.md](lik-dl-storage.md#confluence-pages)), with one tightening: because it's the single entry point every consumer hits first, **write access is limited to the DL skill's service account and a small set of named catalog owners** — reads stay open for transparency. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring.
+When in a **version-history DS**, it is treated as **just another DS artifact** ([lik-dl-storage.md](lik-dl-storage.md#confluence-pages)), with one tightening: because it's the single entry point every consumer hits first, **all writes go through the DL skill's service account** — autonomously for the rows it computes, and under a verified human assertion (§4.3) for human-created rows; no one edits rows directly. Reads stay open for transparency. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring.
 
 Two safeguards replace a write-governance regime:
 1. **Access enforcement never trusts the catalog's stored ACL metadata** — real access is enforced at the *target store* (§8), so a tampered hint can't widen access.
-2. Because version history is **corrective, not preventive**, the skill's regular run **validates entries / dangling pointers and re-derives the rows it owns**, bounding the misdirection window. Hand-authored rows it can't re-derive rely on revert.
+2. Because version history is **corrective, not preventive**, the skill's regular run **validates entries / dangling pointers and re-derives the rows it owns**, bounding the misdirection window. Human-created rows it can't re-derive rely on revert.
 
 **Start as a Confluence page, promote to a DB when scale demands.** The Confluence-page realization suits low-cardinality pointers (dozens to low-hundreds of subjects). When subject count or per-record pointer sets outgrow a page, the same logical schema is **promoted to Postgres (or any indexed DB)** with no change to consumers — they still do one `(entry_type, subject)` lookup. A catalog in such a **non-versioned** store takes on the [governed-writer discipline](lik-dl-storage.md#governed-writer-controls) and adds its own audit columns (see below). See [lik-dl-storage.md](lik-dl-storage.md) for both stores' mechanics.
 
@@ -90,7 +90,7 @@ The same column set applies in both realizations — a Confluence-page table fir
 | `access_groups` | text[] | Propagated ACL **hint** — the output's single assigned audience group (no runtime intersection; §8). *Never trusted for enforcement*; routing/filtering only. |
 | `sensitivity` | enum | `restricted` (default) \| `cleared`. Restricted-by-default until explicitly cleared. |
 | `category` | text (nullable) | Descriptive classification. Also **read by** the admin ACL-mapping process (§8) as one input among several when a DS can't supply a Google Group |
-| `computed_by` | text | The skill/pipeline that owns this row (distinguishes re-derivable rows from hand-authored ones). |
+| `computed_by` | text | The skill/pipeline that owns this row (distinguishes re-derivable rows from human-created ones). |
 | `row_provenance` | enum | `skill` \| `human` — which writer owns the row, so the skill knows what it may re-derive vs. leave alone. |
 
 **Keys & constraints.** Unique key `(entry_type, subject)` — extend to `(entry_type, subject, category)` if a subject has per-category variants. One subject may have several rows across different `entry_type`s (Atlas has a summary *and* an index). Index `access_groups` (GIN in Postgres) for query-time filtering where DL serves from its own store (§5.3).
@@ -99,10 +99,10 @@ The same column set applies in both realizations — a Confluence-page table fir
 1. **No `created_at`/`updated_at`/`updated_by` in the Confluence-page realization** — attribution and history come from the page's version history, not columns (the "just another DS artifact" simplification). Add those columns only after promotion to Postgres, where a governed-writer regime needs its own audit trail.
 2. **`access_groups` is a hint, not a gate** — it earns its place for routing/pre-filtering, but enforcement is the target store's (§8). Wiring authorization to it would let a tampered row widen access.
 3. **`source_refs` is the load-bearing column for the safeguards** — dangling-pointer detection and re-derivation both depend on knowing what each entry was computed from; storing etags/versions makes staleness a cheap delta instead of a full re-read.
-4. **`row_provenance` / `computed_by` resolve the hand-authored-row reconciliation** (Open Questions §12): the skill re-derives only `row_provenance = 'skill'` rows it owns and leaves human rows to revert-based recovery.
+4. **`row_provenance` / `computed_by` resolve the human-created-row reconciliation** (Open Questions §12): the skill re-derives only `row_provenance = 'skill'` rows it owns and leaves human-created rows (written via the §4.3 service path) to revert-based recovery.
 
 #### Recomputable vs. durable DL
-Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hints, catalog, propagated ACLs). The exceptions are **durable DL-origin data** that exist in no DS: **confirmation signals** (from user feedback) and **human-created** artifacts (hand-authored DL outputs, not recomputable). These require their own backup/retention, and revert is the only recovery for a bad edit.
+Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hints, catalog, propagated ACLs). The exceptions are **durable DL-origin data** that exist in no DS: **confirmation signals** (from user feedback) and **human-created** artifacts (DL outputs authored by people, not recomputable). These require their own backup/retention, and revert is the only recovery for a bad edit.
 
 ## 4. Design Principles
 
@@ -182,7 +182,7 @@ Preferred model: **Google SSO + Google Groups.**
 - **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it. Must be provenance-marked AI-generated, registered in the catalog, and written under a clear identity (user SSO for attended runs, non-human Google account for unattended), governed by native sharing + version history. It is unverified until a human reviews it, becoming human-verified DL content — a derived artifact that lives in a DS but stays DL by role (§3) — under that human's identity.
 - **Persisted synthesis** → a confirmed cross-source answer saved as a new **human-created** DL artifact, written under the **user's own SSO** and born `human-verified`; durable and **not recomputable**, so it needs its own backup/retention. Registered in the catalog like any other output (build plan in [lik-4-strategy.md](lik-4-strategy.md) Level 4).
 - **Confirmations** → durable DL-origin data; attributed; **start as a Confluence-page table**, promote to an integrity-enforcing store when write-time enforcement is needed (§5.4).
-- **The catalog** → DL topology, written by the skill service account + named catalog owners (not any editor) when in a version-history DS; reads stay open.
+- **The catalog** → DL topology, written by the skill service account only — autonomously for computed rows, under a verified human assertion for human-created ones (§4.3); reads stay open.
 - **DL writes** → only computed data, the catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
 
 > **Use case — secured project information (courtesy of Ryn Bennett).** Portfolio managers restrict PMR meeting notes, the only place comprehensive per-program risk metrics are discussed; MA PFML now requires Program Manager approval to share sprint metrics. These walls inhibit data democracy. Independently-vetted [Project Indexes](https://navasage.atlassian.net/wiki/x/A4BGoQ) was created as a workaround.
@@ -208,4 +208,4 @@ Goal: prove DL improves retrieval quality, speed, and trust without creating a s
 - **Staleness / change detection** underspecified: per-DS CDC/webhooks/delta tokens vs. full re-reads, DSs lacking delta primitives (Slack, Gmail), target refresh interval (also sets the permission-leak window), and 403-vs-404-vs-5xx error semantics so transient outages don't purge valid DL. Catalog pointers need the same.
 - **Catalog scale ceiling** — format is decided (Confluence page first, schema in §3, promote to Postgres/indexed DB for scale). Still open: the concrete subject-count / pointer-volume threshold that triggers promotion, and the migration runbook (page → DB) including how in-flight skill writes are handled during cutover.
 - **Provenance-marking convention** — concrete per-DS marker (label/property/naming) readable by humans and skills, plus the human-review → human-verified promotion rule.
-- **Catalog write integrity: detection & recovery** — with writes restricted to the skill account + named catalog owners, still open: detection cadence/trigger (skill validation pass vs. edit alerting), how the skill reconciles non-re-derivable human-owned rows, and the acceptable bound on the bad-pointer misdirection window.
+- **Catalog write integrity: detection & recovery** — with every write going through the skill account (autonomously, or under a verified human assertion for human-created rows), still open: detection cadence/trigger (skill validation pass vs. edit alerting), how the skill handles non-re-derivable human-created rows (validate the pointer, leave the row to revert), and the acceptable bound on the bad-pointer misdirection window.
