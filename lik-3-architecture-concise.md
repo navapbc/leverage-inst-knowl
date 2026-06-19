@@ -49,9 +49,9 @@ Realized via whatever the store supports (a column, a label, a page property) �
 
 #### Pluggable backing store
 Chosen along two axes — **who consumes it** and **how much integrity it needs**. Per-store mechanics (in-place vs. create-only, versioned vs. governed, group enforcement) live in **[lik-dl-storage.md](lik-dl-storage.md)**; the routing is:
-- **Human-readable artifacts** (summaries, digests, curated indexes) → a **Confluence page**. Must be **provenance-marked AI-generated**.
+- **Summaries & indexes** (distilled prose, digests) → a **Confluence page**. Must be **provenance-marked AI-generated**.
 - **Integrity-critical signals** (confirmations, trust metadata affecting ranking for all users) → **start as a Confluence-page table**, promote to a service-fronted Postgres store when large scale / untrusted writers / high-stakes ranking demand write-time enforcement of identity, rate-limiting, and provenance. Unlike the catalog these signals are **non-recomputable**, so revert — not re-derivation — is the only recovery, and they need their own backup/retention.
-- **Machine retrieval signals** (indexes, pointers, hints) → a service-fronted table vs. Postgres vs. BigQuery is a storage-engine choice driven by scale, not architecture.
+- **Retrieval signals** (indexes, pointers, hints) → a service-fronted table vs. Postgres vs. BigQuery is a storage-engine choice driven by scale, not architecture.
 
 #### The catalog
 DL's directory — a "yellow pages" you consult to find *where* an output lives (`type + subject → location`), then follow the pointer to it. It is itself a recomputable computed output, but it indexes DL's *topology* (where outputs live) rather than DS content, so it is kept distinct from the content "indexes" above.
@@ -102,7 +102,9 @@ The same column set applies in both realizations — a Confluence-page table fir
 4. **`row_provenance` / `computed_by` resolve the human-created-row reconciliation** (Open Questions §12): the skill re-derives only `row_provenance = 'skill'` rows it owns and leaves human-created rows (written via the §4.3 service path) to revert-based recovery.
 
 #### Recomputable vs. durable DL
-Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hints, catalog, propagated ACLs). The exceptions are **durable DL-origin data** that exist in no DS: **confirmation signals** (from user feedback) and **human-created** artifacts (DL outputs authored by people, not recomputable). These require their own backup/retention, and revert is the only recovery for a bad edit.
+Most DL **by volume** is **recomputable** from DSs (indexes, aggregations, categorization, hints, catalog, propagated ACLs) — bulk-generated per record, whereas the non-recomputable part accrues one human action at a time. The exceptions are **durable DL-origin data** that exist in no DS: **confirmation signals** (from user feedback) and **human-created** artifacts (DL outputs authored by people, not recomputable). These require their own backup/retention, and revert is the only recovery for a bad edit.
+
+**Overwrite safety.** A recomputable output lives in a DS that anyone with edit access can change, so before recomputing any output it owns, the DL-creation skill checks the target's **version history and overwrites only if the last revision was authored by its own service account**. If a person edited it since the last run, the skill leaves it untouched — that edit transferred ownership, promoting the output to `human-verified` / `human-created` (durable, revert-only). This is what makes "recomputable" safe to discard without ever clobbering a person's work. In non-versioned stores the same check reads the `provenance` / `row_provenance` columns instead of version history.
 
 ## 4. Design Principles
 
@@ -120,7 +122,7 @@ Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hin
 - **Write to DL:** depends on the store (mechanics in [lik-dl-storage.md](lik-dl-storage.md)) —
   - *Non-versioned store* (warehouse, Postgres): a **governed writer identity** with §8 controls.
   - *Version-history DS* (Confluence): ordinary DS edit under SSO identity; a skill uses a non-human service account. No special regime. (Google Sheets/Docs are create-only and can't be updated in place, so they aren't re-derivation write targets.)
-  - A skill writing human-readable artifacts into a DS needs **least-privilege native edit access** to the locations it writes (an expansion from a historical read-broad/write-DL-only identity).
+  - A skill writing summaries & indexes into a DS needs **least-privilege native edit access** to the locations it writes (an expansion from a historical read-broad/write-DL-only identity).
 
 ## 5. Data Flows
 
@@ -145,7 +147,7 @@ Durable updates → DSs
 All updates propagate/assign ACL metadata and register location in the catalog.
 
 - **Deterministic data pipelines** — for known, repeatable transforms (dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts), typically materialized in a warehouse. No AI.
-- **AI skills** — for interpretation-heavy content. A skill reads DS content (respecting ACLs), computes indexes/aggregations/categories, detects freshness/obsolescence, runs staleness checks on sources *and* its own pointers, chooses and writes to a backing store via MCP, registers the catalog entry, provenance-marks human-readable artifacts, rebuilds content, and updates trust/confirmation metadata. **There are many such skills, not one** — each is customized to the source it handles (its type, location, and owning team/project/program), validating and processing that source per that group's conventions and emitting a specific output type to a specific store.
+- **AI skills** — for interpretation-heavy content. A skill reads DS content (respecting ACLs), computes indexes/aggregations/categories, detects freshness/obsolescence, runs staleness checks on sources *and* its own pointers, chooses and writes to a backing store via MCP, registers the catalog entry, provenance-marks summaries & indexes, rebuilds content **it still owns** (overwriting only when the last revision was authored by its own service account — see *Recomputable vs. durable DL*), and updates trust/confirmation metadata. **There are many such skills, not one** — each is customized to the source it handles (its type, location, and owning team/project/program), validating and processing that source per that group's conventions and emitting a specific output type to a specific store.
 
 **Skill identity & scope** — the most privileged *reader*; read scope defined explicitly **per DS, least-privilege**. It must capture each item's **source ACL at read time** (failure silently widens access). Write posture depends on the target (§4). Reads and writes to non-versioned stores are audit-logged; version-history DS writes are audited by that history. Because version history is corrective, each run also validates catalog entries / dangling pointers and re-derives owned rows.
 
@@ -207,5 +209,5 @@ Goal: prove DL improves retrieval quality, speed, and trust without creating a s
 - **Confirmation loop** needs UI, write path, schema, store, consumer — consider deferring post-MVP.
 - **Staleness / change detection** underspecified: per-DS CDC/webhooks/delta tokens vs. full re-reads, DSs lacking delta primitives (Slack, Gmail), target refresh interval (also sets the permission-leak window), and 403-vs-404-vs-5xx error semantics so transient outages don't purge valid DL. Catalog pointers need the same.
 - **Catalog scale ceiling** — format is decided (Confluence page first, schema in §3, promote to Postgres/indexed DB for scale). Still open: the concrete subject-count / pointer-volume threshold that triggers promotion, and the migration runbook (page → DB) including how in-flight skill writes are handled during cutover.
-- **Provenance-marking convention** — concrete per-DS marker (label/property/naming) readable by humans and skills, plus the human-review → human-verified promotion rule.
+- **Provenance-marking convention** — concrete per-DS marker (label/property/naming) readable by humans and skills. The human-edit → durable trigger is now defined (the skill's overwrite-safety check: a last revision not authored by its own service account ⇒ treat as human-owned, leave untouched); still open is the explicit human-review → `human-verified` promotion UX and the per-DS marker.
 - **Catalog write integrity: detection & recovery** — with every write going through the skill account (autonomously, or under a verified human assertion for human-created rows), still open: detection cadence/trigger (skill validation pass vs. edit alerting), how the skill handles non-re-derivable human-created rows (validate the pointer, leave the row to revert), and the acceptable bound on the bad-pointer misdirection window.

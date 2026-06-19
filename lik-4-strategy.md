@@ -122,7 +122,7 @@ Where Level 1 ran under the **user's** SSO, DL outputs are produced by a **DL-cr
 
 A DL-creation skill runs on a schedule or on demand, querying **one or more DSs** and producing outputs that can link to data across several of them. Its identity is realized as a per-DS service principal — a Slack bot, a Jira/Salesforce service account, a Workday ISU, a GCP service account — each granted **least-privilege read**; the skill may use several of these principals in a single run. It authenticates with **keyless, rotated credentials** and writes with audit logging, scoped per-output-type where practical to bound a compromise.
 
-**Expect many DL-creation skills, not one.** A given skill is customized to the source data it handles — its type, location, and owning **team, project, or program** — so it can process and validate that source the way that team or program requires (their conventions, their quality bar, their sensitivity rules) and produce a **specific kind of output in a specific DS**. One skill might summarize a program's Confluence space into a curated index there; another might derive incident signals from Jira plus Slack. They share the disciplines below (service identity, least-privilege read, group assignment, provenance) but differ in what they read, how they validate it, and what they emit.
+**Expect many DL-creation skills, not one.** A given skill is customized to the source data it handles — its type, location, and owning **team, project, or program** — so it can process and validate that source the way that team or program requires (their conventions, their quality bar, their sensitivity rules) and produce a **specific kind of output in a specific DS**. One skill might summarize a program's Confluence space into an index there; another might derive incident signals from Jira plus Slack. They share the disciplines below (service identity, least-privilege read, group assignment, provenance) but differ in what they read, how they validate it, and what they emit.
 
 The scheduled re-derivation that recomputes an output also bounds how long it can outlive its source: a run that finds a source deleted or its access revoked drops or re-restricts the derived output, so "recomputable" never means "persists stale indefinitely."
 
@@ -152,13 +152,13 @@ Enforcement is the **store's own native group/role grant** — no separate layer
 
 Two disciplines keep this correct: **one sensitivity tier per output** (one group unambiguously matches the audience; blending tiers is a smell — split the output), and the author **names that group in the instructions** (the skill never chooses at runtime). Where a source isn't already group-based (Slack, Jira, Salesforce, Workday), an admin must provision a matching Google Group or the output stays default-deny. A genuinely cross-tier output is served by an admin-provisioned audience group, or — absent a standing audience — by storing pointers and recomputing at query time under the user's own SSO so each viewer sees only their slice. Before writing, the skill asserts the named group is no broader than the audience of every input it read; on failure the output stays default-deny.
 
-### 2.4 Human-readable artifacts
+### 2.4 Summaries & indexes
 
-Summaries, digests, curated indexes → written into a **Confluence page**, which is updatable in place so each re-derivation revises the same page rather than spawning a new file. Authorship starts as `AI-generated` (§2.2); a reviewer promotes it to `human-verified` under their own SSO identity, with version history supplying attribution, audit, and revert.
+Summaries, digests, indexes → written into a **Confluence page**, which is updatable in place so each re-derivation revises the same page rather than spawning a new file. Authorship starts as `AI-generated` (§2.2); a reviewer promotes it to `human-verified` under their own SSO identity, with version history supplying attribution, audit, and revert.
 
 Confluence is required here — not a Doc or Sheet — because the Google Drive connector can only create files, never update them in place; see [lik-dl-storage.md](lik-dl-storage.md#google-drive--docs--sheets).
 
-### 2.5 Machine retrieval signals
+### 2.5 Retrieval signals
 
 Indexes, prioritized pointers, retrieval hints, freshness/obsolescence signals → saved to a **service-fronted table** to start; BigQuery or Postgres at scale. Like §2.4, signals are updated in place as freshness changes — a write the Google Drive connector can't do — so they don't begin life in a Sheet.
 
@@ -172,7 +172,7 @@ The signal store (§2.5), the confirmation store (§3.1), and a promoted catalog
 
 **Two writer identities — a different shape than Level 1.** A Level 1 MCP proxies the *user's* identity through to a DS (§1.1 token exchange). This service instead writes under its **own service identity** to a store we own, in one of two modes:
 
-- **Service-only** — machine retrieval signals and catalog rows, written by the DL-creation skill's service identity with no user in the loop.
+- **Service-only** — retrieval signals and catalog rows, written by the DL-creation skill's service identity with no user in the loop.
 - **Service + user assertion** — a confirmation is written by the service account but carries the confirming user's verified identity as `confirmed_by` (§3.1); the tool needs the user's token both to attribute the write and to rate-limit per person.
 
 **What the service owns.** Centralizing the path puts three already-required disciplines in one place instead of scattering them (store mechanics in [lik-dl-storage.md](lik-dl-storage.md#postgres-the-service-fronted-store)):
@@ -221,7 +221,7 @@ Like all DL writes, a **service account writes the confirmation to the store** �
 
 ### 3.2 Using confirmation signals at query time
 
-The §3.1 table is just another §2.5 machine-retrieval signal: a **Query skill** (§1.3) triggered by a user's question can read it — joining on the DS-record or DL-output pointer the answer cites — and let accumulated trust shape the response. The skill runs under the **user's** SSO, so it only ever sees confirmations the group-share model already permits. How aggressively a skill leans on trust is the **skill author's choice**; the options below run from lightest-touch to most invasive.
+The §3.1 table is just another §2.5 retrieval signal: a **Query skill** (§1.3) triggered by a user's question can read it — joining on the DS-record or DL-output pointer the answer cites — and let accumulated trust shape the response. The skill runs under the **user's** SSO, so it only ever sees confirmations the group-share model already permits. How aggressively a skill leans on trust is the **skill author's choice**; the options below run from lightest-touch to most invasive.
 
 **Trust can also live in the DS itself.** Some data sources carry their own native trust signals — a Confluence page marked "verified," a resolved or accepted Jira ticket, reactions or endorsements, an owner's explicit sign-off. These are separate from DL confirmation signals, and it is up to the Query skill to **weigh the two together**: a DS-native endorsement and a DL confirmation are both evidence of trust, and the skill (under the user's SSO) reads whichever it can and combines them as the author sees fit.
 
@@ -299,13 +299,13 @@ Once the artifact exists, ordinary §3.1 confirmations apply to it like any othe
 
 ### 4.2 What gets written, and where
 
-The persisted synthesis is a **human-created Discovery Layer output** (§2.2) — a §2.4 human-readable artifact, born durable. It is **not** a DS record: a DS record is primary knowledge authored for its own sake, while this is *derived* material whose purpose is reuse and discovery. Like every §2.4 artifact, it simply lives in a DS-hosted store — a Confluence page or Google Doc.
+The persisted synthesis is a **human-created Discovery Layer output** (§2.2) — a §2.4 summary, born durable. It is **not** a DS record: a DS record is primary knowledge authored for its own sake, while this is *derived* material whose purpose is reuse and discovery. Like every §2.4 artifact, it simply lives in a DS-hosted store — a Confluence page or Google Doc.
 
 It is written under the **user's own SSO** — which §2.2 already allows for human-authored DL outputs (human-verified and human-created outputs come from people, not the service identity). Because a person vouched for it at creation, it is born **`human-verified`**: durable, not recomputable, attributed to the creating user in version history. Like confirmation signals, it is one of the strategy's durable, **non-recomputable** commitments (Key terms, §3.1) — it can't be rebuilt from the DSs, so it needs its own backup/retention, and revert is its only recovery.
 
 Access follows the **DL group-share model (§2.3)** — one sensitivity tier, audience no broader than its most-restricted source — *not* the single-location ACL inheritance of a §1.2 DS write, because a cross-source synthesis can blend tiers (see Guardrails).
 
-It is **registered in the catalog** (§4.3) so the next consumer finds it through the same single lookup as any other DL output, and from there it behaves exactly like a §2.4 human-readable artifact — read under the group-share model, ranked with the same signals, eligible for further confirmations (§3.1).
+It is **registered in the catalog** (§4.3) so the next consumer finds it through the same single lookup as any other DL output, and from there it behaves exactly like a §2.4 summary — read under the group-share model, ranked with the same signals, eligible for further confirmations (§3.1).
 
 ### 4.3 Registering in the catalog
 
@@ -348,7 +348,7 @@ The flywheel only covers subjects that get **asked about and confirmed** — a c
 
 ## Parallel Track — Deterministic data pipeline & warehouse
 
-**Goal:** serve operational reporting (BI dashboards) and scale DL's machine-retrieval signals, via the **same MCP interface** as everything else.
+**Goal:** serve operational reporting (BI dashboards) and scale DL's retrieval signals, via the **same MCP interface** as everything else.
 
 **This is not a fifth step — it's an independent track.** It builds on the same foundations as Levels 1–4 (MCP exposure, SSO, and — once it registers outputs — the catalog), but isn't gated on completing the levels in sequence: start it whenever the BI use case matters, provided the foundations it uses are already in place. Equally, Levels 1–4 stand on their own without it.
 
@@ -360,7 +360,7 @@ DSs → Deterministic Pipeline → Warehouse → BI Dashboards
 
 - **Deterministic pipelines** handle known, repeatable transforms — dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts — typically materialized in a **warehouse**. They assign each output a sharing group (the same fail-closed model as §2) and register their outputs in the catalog (Level 3-Catalog), exactly like the DL-creation skill does.
 - **The warehouse is exposed via MCP like any other DS.** An agent or app queries it through the same `verified-SSO-token` path; the catalog points to warehouse tables (`store_kind = warehouse`, `bq://dataset.table`) just as it points to a Confluence page. To consumers, the warehouse is simply one more discoverable store.
-- The warehouse is also **one option for DL's machine-retrieval backing store at scale** — the natural promotion target from §2.2 when signal volume is large. It is *one possibility*, not a requirement of the architecture.
+- The warehouse is also **one option for DL's retrieval-signal backing store at scale** — the natural promotion target from §2.2 when signal volume is large. It is *one possibility*, not a requirement of the architecture.
 
 *Hardening (inline):* the warehouse is a non-versioned store, so its writers (pipelines and any DL-signal promotion landing here) run under the [governed-writer controls](lik-dl-storage.md#governed-writer-controls). A BigQuery warehouse honors a Google Group via IAM directly; an admin only has to provision a Group for an audience whose source DS isn't already group-based.
 
@@ -384,8 +384,8 @@ Every element of [lik-3-architecture-concise.md](lik-3-architecture-concise.md) 
 | DL-creation skill (privileged reader, group assignment, provenance marking) | 2 |
 | Access control: group-share, fail-closed default, store→group/role table (mosaic dissolved via one-tier-per-output) | 2 (Access control) |
 | Provision/maintain a Google Group for audiences whose source isn't group-based | 2 (Access control) / Parallel Track |
-| Human-readable artifacts | 2.4 |
-| Machine retrieval signals | 2.5 |
+| Summaries & indexes | 2.4 |
+| Retrieval signals | 2.5 |
 | Confirmation signals (durable DL-origin) | 3-Confirmations §3.1 |
 | Consuming confirmation signals at query time (annotation / staleness / ranking) | 3-Confirmations §3.2 |
 | The catalog, schema, DL-creation skill (non-human account), validate/re-derive | 3-Catalog |
