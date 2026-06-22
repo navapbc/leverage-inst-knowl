@@ -98,7 +98,7 @@ Indexes, prioritized pointers, retrieval hints, content-freshness/obsolescence s
 ### 2.6 The service-fronted store — one MCP write/read path
 The signal store (§2.5), the confirmation store (§3.1-Confirmations), and a promoted Catalog (Level 3-Catalog) can be implemented as the **same thing** (typically a database), reached through an **MCP service** — the interface agents already use for DSs. For simplicity, treat it as **one component**.
 
-- **Scoped tools, never raw SQL** — intent-named tools (`confirm_source`, `upsert_signal`, `register_catalog_entry`) each enforce their own rules at write time. The validation lives in the tool; that's the whole reason a store graduates to a database.
+- **Scoped tools, never raw SQL** — intent-named tools (`confirm_source`, `upsert_signal`, `register_catalog_entry`) each enforce their own rules at write time; reads are equally scoped (`lookup_confirmations` by citation, version optional — pinned for staleness gating, omitted to total across versions). The validation lives in the tool; that's the whole reason a store graduates to a database.
 - **Two writer modes** — *service-only* (signals, Catalog rows) and *service + user assertion* (a confirmation carrying the confirming user's verified identity as `confirmed_by`).
 - **What the service owns** — reads resolve the caller's Google Groups into a row-level-security predicate; governed-writer controls on its connection; backup/retention for the confirmation tables (the durable, non-recomputable exception).
 - **Start as one service** fronting all three types, with separate roles/tables per type. Split only if confirmations' write-enforcement later needs isolation the others don't.
@@ -123,7 +123,7 @@ A user confirms that a **DL output** or **DS record** an AI built its response f
 - **Store:** can start as a [Confluence-page table](06-storage.md#confluence-pages); **promote** to the [service-fronted Postgres store](06-storage.md#postgres-the-service-fronted-store) (§2.6) when scale / untrusted writers / high-stakes ranking demand hard write-time enforcement. Durable and non-recomputable, so it needs its own backup/retention.
 
 ### 3.2 Using confirmation signals at query time
-The §3.1 table is just another §2.5 retrieval signal: a Query skill reads it (joining on the cited pointer) and lets accumulated trust shape the response, under the user's SSO. **Trust can also live in the DS itself** (a "verified" page, an accepted ticket, an owner's sign-off) — the skill weighs DS-native and DL trust together. How aggressively, lightest to most invasive:
+The §3.1 table is just another §2.5 retrieval signal: a Query skill does a **targeted keyed lookup** on the cited pointer (optionally pinned to a version), fetching only the matching rows and lets accumulated trust shape the response, under the user's SSO. **Trust can also live in the DS itself** (a "verified" page, an accepted ticket, an owner's sign-off) — the skill weighs DS-native and DL trust together. How aggressively, lightest to most invasive:
 
 - **A. Presentation only** — annotate "confirmed accurate by N people" or "reported inaccurate on <date>." Safest; never hides data.
 - **B. Version-aware** — **staleness gating** (downgrade if the record changed since confirmed) and **recency decay**.
@@ -132,13 +132,13 @@ The §3.1 table is just another §2.5 retrieval signal: a Query skill reads it (
 
 **Choosing:** start with **A + staleness gating (B)**; add the **tie-breaker (C)** once volume is trustworthy; defer hard filters and audience weighting until the gap backlog demands them. **Trust advises, never gates** — a record the user is entitled to is never hidden by low trust.
 
-### 3.3 Managing the signal store
+### 3.3 Signal lifecycle: promote and age out
 - **Backpropagate to the DS (with user validation).** Once a record accumulates enough confirmations, a user can promote that trust into the source itself (mark the page "verified," accept the ticket) under their own SSO; the matching DL signals become redundant and are removed/archived. Gated on user validation, never automatic — a write to the source of truth is far harder to undo than a DL revert.
 - **Age out on a moving window.** A confirmation counts toward the live signal only while recent; past the window it's **archived, not deleted** — kept for audit, no longer weighed.
 
 ---
 
-## Level 3-Catalog — The Catalog (a Confluence page)
+## Level 3-Catalog — The Catalog
 
 **Goal:** give every consumer **one lookup** to discover where any DL output lives, decoupled from storage decisions.
 
@@ -146,7 +146,7 @@ The Catalog is DL's "yellow pages" (`entry_type + subject → location`), indexi
 
 **This mirrors an emerging industry standard.** Google's [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) (v0.1 draft, June 12, 2026) reserves an `index.md` at a known location that lists what a directory contains so an agent can map it before opening any document. Our Catalog is the same idea applied to the whole DL — with one difference: an OKF `index.md` is small enough to read whole, whereas an agent resolves a question to a key and fetches only the matching row.
 
-**Implemented as a [Confluence page](06-storage.md#confluence-pages)** — chosen for transparency and in-place editing. Treated as **just another DS artifact**, with one tightening: because it's the single entry point everyone hits first, **all writes go through a DL-creation skill's service account** (autonomously for computed rows, under a verified human assertion for human-created rows — §4.3); no direct row editing. Consumers treat a **missing/malformed row as a cache miss** — fall back to the skill's routing or a **bounded fan-out** (a capped search of the few most-likely stores, never the unbounded Level 1 fan-out). Schema in [04-architecture.md §3](04-architecture.md#catalog-schema).
+**Can be implemented as a [Confluence page](06-storage.md#confluence-pages)** — chosen for transparency and in-place editing. Treated as **just another DS artifact**, with one tightening: because it's the single entry point everyone hits first, **all writes go through a DL-creation skill's service account** (autonomously for computed rows, under a verified human assertion for human-created rows — §4.3); no direct row editing. Consumers treat a **missing/malformed row as a cache miss** — fall back to the skill's routing or a **bounded fan-out** (a capped search of the few most-likely stores, never the unbounded Level 1 fan-out). Schema in [04-architecture.md §3](04-architecture.md#catalog-schema).
 
 **What gets cataloged.** Registration is **per `(entry_type, subject)` key**, not per artifact. An output qualifies only when it is **externally addressable** (answers a stable key a *non-producer* would look up), **meant to be discovered** (not a producer's private intermediate), and **worth a stable pointer** (a durable address surviving re-derivation). The **producer decides**: a skill registers what its author designated; a Level 4 synthesis when the user opts to save it. The rule: *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
 
