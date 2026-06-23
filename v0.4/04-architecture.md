@@ -89,12 +89,14 @@ A `location` can break: a DS page is deleted, a dataset is dropped, a doc is mov
 ```
 DSs → DL-creation skill (one of many, per source/team) → DL (Catalog + chosen store, via MCP)
 AI tools → Query skill (one of many, per topic) → known DL output directly, else read Catalog → follow pointers
+Saved synthesis → user writes artifact (own SSO) → service account registers the Catalog pointer (human-owned row)
 Confirmations → Confluence page (default) or integrity-enforcing store (at scale)
 Durable updates → DSs
 ```
 
 - **Creation & governance** — knowledge created/corrected/summarized in DSs; access via Google SSO + Groups (see <u>Access Control</u>).
 - **DL population & refresh** — AI-assisted content via scheduled/manual skills that compute outputs, write each to its store via MCP, register locations in the Catalog, and run staleness checks on referenced DS content *and* their own pointers.
+- **Saved synthesis** — when a user persists a cross-source answer (<u>Strategy</u> Level 4), the write **splits**: the user authors the artifact under their own SSO, then a service account registers the Catalog pointer with the user as `created_by` and `row_provenance = 'human'`. Because such an output isn't derivable from any single source, no skill re-derives it — recovery is revert.
 - **Query & retrieval** — AI tools query DSs and DL via MCP under a verified SSO token, guided by one of many topic-specialized query skills. A skill that knows where its topic lives points straight there, skipping the Catalog; otherwise the agent reads the Catalog, then follows pointers.
 - **Feedback & source updates** — users confirm whether a cited source was right or wrong (attributed, revertible); permanent updates always go to DSs.
 
