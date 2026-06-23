@@ -127,18 +127,18 @@ A broken pointer is never fatal: a consumer treats it as a **cache miss** and fa
 
 **Goal:** grow DL coverage from the questions people actually ask. When a Query skill synthesizes a cross-DS answer that exists in no DL output yet, it offers to persist that synthesis as a new durable artifact — so the next person retrieves it instead of re-deriving it.
 
-The gap this closes: Level 2's skills must **guess** what to precompute, and Level 3-Confirmations only captures trust on outputs that *already exist*. Level 4 makes every saved novel synthesis a candidate DL output, so coverage grows **demand-driven**. Builds on Level 1 (the §1.3 Query skills and §1.2 write model) and uses Level 3-Catalog for discoverability; does *not* depend on Level 3-Confirmations.
+The gap this closes: Level 2's skills must **guess** what to precompute, and Level 3-Confirmations only captures trust on outputs that *already exist*. Level 4 makes every saved novel synthesis a candidate DL output, so coverage grows **demand-driven**. Builds on Level 1 (the §1.3 Query skills and §1.2 write model). Level 3-Catalog is **optional but strongly recommended**: without it a saved synthesis still exists and is reachable by skill routing or bounded fan-out, but the Catalog is what makes it discoverable in one lookup. Does *not* depend on Level 3-Confirmations.
 
 ### 4.1 The save-to-create gesture
 When the skill synthesizes a cross-DS answer matching no existing DL output, it offers to **create** it — *"Create a Confluence page / Google Doc from this answer?"* The skill knows whether it answered from an existing output or had to fan out. The user can save the **whole synthesis or just the good section**. **Opt-in and user-driven** — the user vouches for both the content and the action; no silent writes.
 
 ### 4.2 What gets written, and how
-A **`human-created` DL output** — durable, not recomputable, attributed in version history — written under the **user's own SSO** into a DS-hosted store (a Confluence page or Google Doc), marked `discovery-layer`. The write **splits**: the user authors the artifact under their SSO, then a service account registers the Catalog pointer with the user as `created_by` (the same narrow-writer split confirmations use). Access follows the **DL group-share model** — one tier, audience no broader than its most-restricted source — *not* §1.2 single-location inheritance, because a cross-source synthesis can blend tiers. (Write split: <u>Architecture</u> §4; registration enforcement: <u>Architecture</u> §3.)
+A **`human-created` DL output** — durable, not recomputable, attributed in version history — written under the **user's own SSO** into a DS-hosted store (a Confluence page or Google Doc), marked `discovery-layer`. The write **splits**: the user authors the artifact under their SSO, then — where a Catalog exists — a service account registers a Catalog pointer with the user as `created_by` (the same narrow-writer split confirmations use). The pointer is recommended, not required: it's what makes the artifact discoverable in one lookup, but the artifact is valid and reachable by fan-out without it. Access follows the **DL group-share model** — one tier, audience no broader than its most-restricted source — *not* §1.2 single-location inheritance, because a cross-source synthesis can blend tiers. (Write split: <u>Architecture</u> §4; registration enforcement: <u>Architecture</u> §3.)
 
 ### 4.3 The flywheel
 1. A user asks something with no DL answer; the skill fans out and synthesizes.
 2. The user saves the answer.
-3. The synthesis is now a durable DL output, discoverable via the Catalog.
+3. The synthesis is now a durable DL output — discoverable in one lookup once registered in the Catalog, and still reachable by fan-out if it isn't.
 4. The next person retrieves it in one step instead of re-fanning out — and can confirm it, accruing trust.
 
 Usage surfaces answers worth saving; saved answers become new outputs; new outputs make answers faster; faster answers drive more usage.
