@@ -46,7 +46,7 @@ The promotion target when a Confluence-page table outgrows its scale (beyond low
 | Property | Behavior |
 |---|---|
 | **Write model** | In-place; reached through an **MCP service** — the same interface agents use for the Data Sources. |
-| **Versioning** | **Non-versioned** — no free attribution, audit log, or revert. Adds its **own audit columns** (`created_at` / `updated_at` / `updated_by`) and relies on **backup/retention** for recovery. |
+| **Versioning** | **Non-versioned** — no free attribution, audit log, or revert; it carries explicit `created_at` / `updated_at` / `updated_by` audit columns and relies on **backup/retention** for recovery. |
 | **Access enforcement** | No native Google Group grant. Needs a **`Google Group → Postgres role` bridge**, or a fronting service that resolves the caller's groups into a **row-level-security predicate**. (Index the access-group column — GIN — for query-time filtering.) |
 | **Governance** | A non-versioned store, so its writer runs under the governed-writer controls. |
 | **Backup/retention** | Required for the **non-recomputable** data it holds — confirmation signals, plus any human-created Catalog rows a non-versioned store can't revert. Skill-computed signals and Catalog rows recover by re-derivation; human-created/verified *artifacts* aren't stored here — they live in a DS, which backs them up. |

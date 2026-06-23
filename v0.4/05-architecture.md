@@ -41,7 +41,7 @@ Derived hints about how current a piece of prepared material (or its underlying 
 
 DL's directory — a "yellow pages" you consult to find *where* an output lives (`type + subject → location`), then follow the pointer. It indexes DL's **topology** (where outputs live), not DS content, so a subject's pointers can migrate from one store to another by changing one row, with no agent change.
 
-**Why it's needed:** DL deliberately spreads outputs across many stores. Without one known starting point, every tool would hard-code the topology or fan out and search every store on each query — the exact repetitive searching DL exists to eliminate. The Catalog gives consumers **one lookup**, decoupled from storage.
+**Why it's needed:** DL deliberately spreads outputs across many stores. Without one known starting point, every tool would hard-code the topology or fan out and search every store on each query — the exact repetitive searching DL exists to eliminate. The Catalog gives consumers **one lookup**, decoupled from storage. It is what makes discovery *scale*, not a hard prerequisite for any single output: the system still works without it — a consumer falls back to skill routing or a bounded fan-out — so an un-registered output (e.g., a freshly saved answer) is still reachable, just not in one lookup. That is why <u>Strategy</u> can treat it as essential at scale yet optional for an individual saved answer.
 
 **What qualifies for registration.** Registration is **per `(entry_type, subject)` key**, not per artifact. An output qualifies only when it is **externally addressable** (answers a stable key a *non-producer* would look up), **meant to be discovered** (not a producer's private intermediate), and **worth a stable pointer** (a durable address surviving re-derivation). The **producer decides**: a skill registers what its author designated; a saved synthesis (<u>Strategy</u> Level 4) when the user opts in. The rule: *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
 
@@ -74,7 +74,7 @@ The same columns apply in both realizations (Confluence-page table first, DB tab
 
 **Keys.** Unique `(entry_type, subject)` — extend to `(…, category)` for per-category variants. One subject may have several rows across `entry_type`s. Index `access_groups` (GIN in Postgres) for query-time filtering.
 
-**Notes.** No `created_at`/`updated_at`/`updated_by` in the Confluence realization — version history supplies them; add those columns only after promotion. `access_groups` is a hint, not a gate. `source_refs` is load-bearing: dangling-pointer detection and re-derivation both depend on it. `row_provenance`/`computed_by` let the skill re-derive only the rows it owns and leave human-created rows to revert-based recovery.
+**Notes.** The `created_at`/`updated_at`/`updated_by` columns are needed only in the Postgres realization; the Confluence realization's version history supplies that attribution natively. `access_groups` is a hint, not a gate. `source_refs` is load-bearing: dangling-pointer detection and re-derivation both depend on it. `row_provenance`/`computed_by` let the skill re-derive only the rows it owns and leave human-created rows to revert-based recovery.
 
 ### Dangling-pointer resilience
 
@@ -94,13 +94,13 @@ A `location` can break: a DS page is deleted, a dataset is dropped, a doc is mov
 DSs → DL-creation skill (one of many, per source/team) → DL (Catalog + chosen store, via MCP)
 AI tools → Query skill (one of many, per topic) → known DL output directly, else read Catalog → follow pointers
 Saved synthesis → user writes artifact (own SSO) → service account registers the Catalog pointer (human-owned row)
-Confirmations → Confluence page (default) or integrity-enforcing store (at scale)
+Confirmations → Confluence page (default) or service-fronted store (at scale)
 Durable updates → DSs
 ```
 
 - **Creation & governance** — knowledge created/corrected/summarized in DSs; access via Google SSO + Groups (see <u>Access Control</u>).
 - **DL population & refresh** — AI-assisted content via scheduled/manual skills that compute outputs, write each to its store via MCP, register locations in the Catalog, and run staleness checks on referenced DS content *and* their own pointers.
-- **Saved synthesis** — when a user persists a cross-source answer (<u>Strategy</u> Level 4), the write **splits**: the user authors the artifact under their own SSO, then a service account registers the Catalog pointer with the user as `created_by` and `row_provenance = 'human'`. Because such an output isn't derivable from any single source, no skill re-derives it — recovery is revert.
+- **Saved synthesis** — when a user persists a synthesized answer (<u>Strategy</u> Level 4), the write **splits**: the user authors the artifact under their own SSO, then a service account registers the Catalog pointer with the user as `created_by` and `row_provenance = 'human'`. Because it's a human-saved artifact rather than a skill's computed output, no skill re-derives it — recovery is revert.
 - **Query & retrieval** — AI tools query DSs and DL via MCP under a verified SSO token, guided by one of many topic-specialized query skills. A skill that knows where its topic lives points straight there, skipping the Catalog; otherwise the agent reads the Catalog, then follows pointers.
 - **Feedback & source updates** — users confirm whether a cited source was right or wrong (attributed, revertible); permanent updates always go to DSs.
 
@@ -118,7 +118,7 @@ All updates propagate/assign ACL metadata and register location in the Catalog.
 - **Corrections** → a DS (guide the user to fix the underlying record).
 - **Human-verified summaries** → a DS (DL may index/point to them).
 - **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it; provenance-marked, registered in the Catalog, written under a clear identity. Marked as `ai-generated`. Unverified until a human reviews it, becoming a `human-verified` DL output under that person's identity.
-- **Persisted synthesis** → a user-saved cross-source synthesis stored as a new `human-created` DL output, under the **user's own SSO**, born `human-created`; durable and not recomputable (<u>Strategy</u>, Level 4).
-- **Confirmations** → non-recomputable data; attributed; start as a Confluence-page table, promote to an integrity-enforcing store at scale.
+- **Persisted synthesis** → a user-saved synthesis stored as a new `human-created` DL output, under the **user's own SSO**, born `human-created`; durable and not recomputable (<u>Strategy</u>, Level 4).
+- **Confirmations** → non-recomputable data; attributed; start as a Confluence-page table, promote to the service-fronted store at scale.
 - **The Catalog** → DL topology, written by the skill service account only; reads stay open.
 - **DL writes** → only computed data, the Catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.

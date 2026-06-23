@@ -9,6 +9,7 @@
 - **DL output-type prioritization.** Partition the DL output types (summaries, indexes, hints, aggregations, freshness) into MVP-required / second-iteration / post-validation.
 - **AI-skill scope.** The skill bundles ETL + trust/ranking + ACL propagation + store selection + Catalog registration; consider narrowing the MVP scope.
 - **DS selection criteria** are undefined (connector availability, Group support, pilot coverage).
+- **Per-DS identity delegation.** For each candidate DS, confirm whether it supports on-behalf-of token exchange, per-user OAuth consent (stored refresh token), or no per-user path at all — the last excludes it from Level 1 (<u>Access Control</u>).
 - **Confirmation loop** needs UI, write path, schema, store, consumer — consider deferring post-MVP.
 
 ## Content freshness & change detection

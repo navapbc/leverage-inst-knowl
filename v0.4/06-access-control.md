@@ -14,7 +14,7 @@ Most DSs don't express permissions as Google Groups (Slack channels, Atlassian r
 
 ## Identity rules
 
-- **Read:** MCP services require a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes access. Identity is carried across each `agent → MCP → DS` hop via **on-behalf-of token exchange** — each MCP service exchanges the verified Google token for a store-native token, since a DS won't accept a Google-audience token directly. Applies equally to AI agents and automation (e.g., Zapier).
+- **Read:** MCP services require a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes access. Identity is carried across each `agent → MCP → DS` hop via **on-behalf-of token exchange** — each MCP service obtains a store-native **per-user** identity, since a DS won't accept a Google-audience token directly. **How** it obtains one varies by DS and must be confirmed per connector: some support direct token exchange, others require a one-time per-user OAuth consent with a stored refresh token, and some have no per-user delegation path at all. A DS in that last category cannot be read under per-user enforcement and is **out of scope until one exists** — never fall back to a shared service identity for user reads. Applies equally to AI agents and automation (e.g., Zapier).
 - **Write to DSs:** the user's verified SSO identity, via the DS's normal permissions.
 - **Write to DL:** depends on the store —
   - *Non-versioned store* (warehouse, Postgres): a **governed writer identity** with the controls below.

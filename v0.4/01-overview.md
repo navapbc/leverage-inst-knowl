@@ -23,16 +23,16 @@ The Discovery Layer is *mostly computed*: the bulk of it is derived from the ori
 
 Every design choice traces back to these.
 
-- **Very low maintenance** — most of the Discovery Layer is recomputed from the sources, so it can be rebuilt or discarded rather than tended. The small part that can't be rebuilt rides on existing backups: saved answers are backed up by the data source that holds them, and only people's confirmations need a backup the Discovery Layer runs itself.
+- **Very low maintenance** — most of the Discovery Layer is recomputed from the sources, so it can be rebuilt or discarded rather than tended. The small part that can't be rebuilt rides on existing backups: saved answers are backed up by the data source that holds them, and only people's confirmations need a backup the Discovery Layer runs itself. "Low maintenance" means the stored data needs little tending — not that ongoing cost is zero: recomputing it is recurring compute, and the skills that do the recomputing must be owned and kept current (see <u>Strategy</u>).
 - **Loosely coupled** — keep the pieces independent so any one — a store, a source, a tool — can be swapped without rewriting the rest, and no single vendor becomes hard to leave.
 - **Intuitive** — lean on standards (e.g., MCP) and common patterns rather than bespoke mechanisms, so people and tools pick it up quickly.
 - **Flexible** — adaptable to a wide range of questions, data, and tools: many small, specialized skills instead of one rigid system.
-- **One source of truth** — authoritative knowledge always stays in its original data source. The Discovery Layer holds only computed copies, pointers, and signals — never a competing master record.
+- **One source of truth** — authoritative knowledge always stays in its original data source. The Discovery Layer holds only computed copies, pointers, and signals — never a competing master record. (Two things are derived but not recomputable, the deliberate exceptions: people's confirmations, and saved answers. A saved answer goes stale because it's written once and not rebuilt, so it drifts as its sources change — but it lives *inside* a data source carrying the `discovery-layer` tag, so it's never mistaken as an original source; staleness flags it and, in time, a person folds its trust back into the sources by hand.)
 - **Secure by default** — least privilege, deny when unsure, and access always enforced by the *original data source*, never by the Discovery Layer's own metadata. A wrong entry can misdirect a lookup but can never unlock a door.
 - **Build on existing sign-in** — access reuses the existing Google SSO (single sign-on) and its group permissions instead of standing up a new identity system. (Sources that don't already use Google groups need a one-time mapping — see <u>Architecture</u>.)
 - **Earn each step** — add each capability only once the previous one's limits prove it's needed; spend follows evidence, not ambition.
 
-## The approach: buy first, then build only the gaps
+## The approach
 
 We don't commit to the full system up front. The <u>Strategy</u> is a sequence of evidence-driven bets, each justified by a limitation in the one before it:
 
