@@ -31,7 +31,7 @@
 
 * DS records, DL-creation skill, DL output: provided by Project Indexes
 * DL Confirmation signals: TODO
-* DL Catalog: adds (Confluence) Catalog entries via `discovery-catalog-sync`
+* DL Catalog: adds Catalog entries via `discovery-catalog-sync`
 * Query skill: `dl-project-index-query`
 
 ---

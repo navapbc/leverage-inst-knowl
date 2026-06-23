@@ -18,7 +18,6 @@
 
 ## Catalog
 
-- **Catalog scale ceiling.** Format is decided (Confluence page first, schema in <u>Architecture</u> §3, promote to Postgres / indexed DB). Still open: the concrete subject-count / pointer-volume threshold that triggers promotion, and the migration runbook (page → DB), including how in-flight skill writes are handled during cutover.
 - **Catalog write integrity: detection & recovery.** With every write going through the skill account (autonomously, or under a verified human assertion for human-created rows), still open: detection cadence/trigger (skill validation pass vs. edit alerting), how the skill handles non-re-derivable human-created rows (validate the pointer, leave the row to revert), and the acceptable bound on the bad-pointer misdirection window.
 
 ## Provenance

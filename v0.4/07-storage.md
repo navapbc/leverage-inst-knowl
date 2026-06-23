@@ -4,7 +4,7 @@
 
 Discovery Layer (DL) outputs deliberately live in more than one store, picked by **who consumes the output** and **how much write-time integrity it needs**. Two properties drive every choice:
 
-- **In-place update vs. create-only** — can a re-derivation revise the *same* artifact at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (the Catalog, confirmation tables, re-derived summaries) needs in-place update.
+- **In-place update vs. create-only** — can a re-derivation revise the *same* artifact at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (the Catalog, confirmation signals, re-derived summaries) needs in-place update.
 - **Versioned vs. non-versioned** — does the store give attribution, an audit log, and revert *for free*, or must a governed-writer regime supply them?
 
 The three stores below sit at different points on both axes.
@@ -17,13 +17,13 @@ The default for anything human-readable and for small-scale tables.
 
 | Property | Behavior |
 |---|---|
-| **Write model** | **In-place update** — each re-derivation revises the *same* page at a stable address. Tables (Catalog, confirmations) are appended and de-duplicated against the same page. |
+| **Write model** | **In-place update** — each re-derivation revises the *same* page at a stable address. |
 | **Versioning** | Native **version history** — supplies attribution, the audit log, and **revert as recovery**, with no extra machinery. |
 | **Identity** | Edits attributed to an SSO identity. A skill writes under a **non-human service account** (e.g., `summarizer@navapbc.com`) that appears in version history like any editor. |
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning configured.* |
-| **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. For a shared single-entry artifact (the Catalog), route every write through the skill service account — human-created rows via a verified assertion, not direct editing. |
+| **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. |
 
-**Used for:** summaries & indexes; the Catalog at small scale; confirmation **tables at small scale**, before they outgrow a page.
+**Used for:** summaries, indexes, and other human-readable DL outputs. *(The Catalog and confirmation signals are not stored here — they need keyed lookup and write-time enforcement, so they live in the service-fronted store below.)*
 
 ---
 
@@ -41,7 +41,7 @@ The default for anything human-readable and for small-scale tables.
 
 ## Postgres (the service-fronted store)
 
-The promotion target when a Confluence-page table outgrows its scale (beyond low-hundreds of subjects/pointers), when writers are untrusted, or when high-stakes ranking demands hard write-time enforcement.
+The home for DL's structured data — the **Catalog** and **confirmation signals** — reached through an MCP service. Both need keyed lookup, write-time enforcement, and (for confirmations) untrusted-writer controls, so they live here from the start.
 
 | Property | Behavior |
 |---|---|
@@ -57,7 +57,7 @@ The promotion target when a Confluence-page table outgrows its scale (beyond low
 - **Service-only** — Catalog rows, written by the skill's service identity with no user in the loop.
 - **Service + user assertion** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the tool needs the user's token both to attribute the write and to rate-limit per person.
 
-**Used for:** the Catalog and confirmation tables at scale; high-stakes ranking; untrusted writers needing hard write-time enforcement.
+**Used for:** the Catalog and confirmation signals; high-stakes ranking; untrusted writers needing hard write-time enforcement.
 
 ---
 

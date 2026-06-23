@@ -19,7 +19,7 @@ The systems where knowledge is created, corrected, summarized, governed, and acc
 A **computed layer derived from DSs** — a *logical role, not a single store*. What makes something DL is **purpose, not location**: it exists to make DS knowledge faster to find and reuse, and never holds primary knowledge authored for its own sake. Each piece is a **DL output**, and by **where it lives and who backs it up** every output is one of three:
 - **A DS record** — most DL by volume: a summary, aggregation, index, categorization, prioritized pointer, retrieval hint, relationship map, dedup/canonical pointer, content-freshness/obsolescence signal, or propagated access-control hint, written into a DS and tagged with a `discovery-layer` marker. Still DL by role, but **a DS record for storage — the DS governs and backs it up** (so its durability is only as good as that DS's backup), with version-history revert as recovery. Born `ai-generated` and recomputable (rebuilt on demand); a person editing or verifying it makes that copy durable (`human-created`/`human-verified`).
 - **The Catalog** — a directory mapping `type + subject → location` so tools know where each output lives (§3). Recomputable, so it's rebuilt rather than backed up.
-- **Confirmation signals** — captured human trust that is no DS record and can't be derived from any DS. The **one DL output DL must retain deliberately** — recoverable only by restoring an earlier version, so wherever it outgrows a DS page into DL's own store, that store is what DL backs up (backup/retention mechanics in <u>Storage</u>).
+- **Confirmation signals** — captured human trust that is no DS record and can't be derived from any DS. The **one DL output DL must retain deliberately** — non-recomputable, so it lives in DL's own service-fronted store, and **that store is what DL backs up** (backup/retention mechanics in <u>Storage</u>).
 
 ### Tags that travel with a DL output
 Realized via whatever the store supports (a column, a label, a page property) — no bespoke system.
@@ -45,13 +45,13 @@ DL's directory — a "yellow pages" you consult to find *where* an output lives 
 
 **What qualifies for registration.** Registration is **per `(entry_type, subject)` key**, not per artifact. An output qualifies only when it is **externally addressable** (answers a stable key a *non-producer* would look up), **meant to be discovered** (not a producer's private intermediate), and **worth a stable pointer** (a durable address surviving re-derivation). The **producer decides**: a skill registers what its author designated; a saved synthesis (<u>Strategy</u> Level 4) when the user opts in. The rule: *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
 
-It is the one un-pointed-to artifact, so it lives at a **well-known address** agents know a priori. It can be a **single Confluence page** and is treated as **just another DS artifact**, with one tightening: because it's the single entry point everyone hits first, **all writes go through a DL-creation skill's service account** — autonomously for rows it computes, under a verified human assertion for human-created rows; no one edits rows directly. Reads stay open. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring.
+It is the one un-pointed-to artifact, so it lives at a **well-known address** agents know a priori — a **service-fronted store (a database) reached through the same MCP interface agents use for the Data Sources**. Because it's the single entry point everyone hits first, **all writes go through a DL-creation skill's service account** — autonomously for rows it computes, under a verified human assertion for human-created rows; no one edits rows directly. Reads stay open. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring.
 
-**Start as a page, promote to a DB at scale.** A page suits low-cardinality pointers (dozens to low-hundreds of subjects). When subject count outgrows it, the same schema is **promoted to Postgres (or any indexed DB)** with no change to consumers — they still do one `(entry_type, subject)` lookup. See <u>Storage</u>.
+**A database from the start.** The Catalog lives in a service-fronted store — **Postgres (or any indexed DB)**, reached through MCP — so consumers do one `(entry_type, subject)` lookup at any scale. See <u>Storage</u>.
 
 ### Catalog schema
 
-The same columns apply in both realizations (Confluence-page table first, DB table later).
+The columns of the service-fronted store:
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -74,7 +74,7 @@ The same columns apply in both realizations (Confluence-page table first, DB tab
 
 **Keys.** Unique `(entry_type, subject)` — extend to `(…, category)` for per-category variants. One subject may have several rows across `entry_type`s. Index `access_groups` (GIN in Postgres) for query-time filtering.
 
-**Notes.** The `created_at`/`updated_at`/`updated_by` columns are needed only in the Postgres realization; the Confluence realization's version history supplies that attribution natively. `access_groups` is a hint, not a gate. `source_refs` is load-bearing: dangling-pointer detection and re-derivation both depend on it. `row_provenance`/`computed_by` let the skill re-derive only the rows it owns and leave human-created rows to revert-based recovery.
+**Notes.** The `created_at`/`updated_at`/`updated_by` columns carry attribution and the audit trail, since the service-fronted store is non-versioned. `access_groups` is a hint, not a gate. `source_refs` is load-bearing: dangling-pointer detection and re-derivation both depend on it. `row_provenance`/`computed_by` let the skill re-derive only the rows it owns and leave human-created rows to revert-based recovery.
 
 ### Dangling-pointer resilience
 
@@ -94,7 +94,7 @@ A `location` can break: a DS page is deleted, a dataset is dropped, a doc is mov
 DSs → DL-creation skill (one of many, per source/team) → DL (Catalog + chosen store, via MCP)
 AI tools → Query skill (one of many, per topic) → known DL output directly, else read Catalog → follow pointers
 Saved synthesis → user writes artifact (own SSO) → service account registers the Catalog pointer (human-owned row)
-Confirmations → Confluence page (default) or service-fronted store (at scale)
+Confirmations → service-fronted store (via MCP)
 Durable updates → DSs
 ```
 
@@ -119,6 +119,6 @@ All updates propagate/assign ACL metadata and register location in the Catalog.
 - **Human-verified summaries** → a DS (DL may index/point to them).
 - **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it; provenance-marked, registered in the Catalog, written under a clear identity. Marked as `ai-generated`. Unverified until a human reviews it, becoming a `human-verified` DL output under that person's identity.
 - **Persisted synthesis** → a user-saved synthesis stored as a new `human-created` DL output, under the **user's own SSO**, born `human-created`; durable and not recomputable (<u>Strategy</u>, Level 4).
-- **Confirmations** → non-recomputable data; attributed; start as a Confluence-page table, promote to the service-fronted store at scale.
+- **Confirmations** → non-recomputable data; attributed; stored in the service-fronted store (via MCP), recovered by backup.
 - **The Catalog** → DL topology, written by the skill service account only; reads stay open.
 - **DL writes** → only computed data, the Catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
