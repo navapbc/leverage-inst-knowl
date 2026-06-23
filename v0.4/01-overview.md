@@ -10,7 +10,7 @@ A company's knowledge is scattered across many data sources — storage (Google 
 
 Leave the knowledge where it already lives. On top of it, add a **Discovery Layer** that makes finding things fast — **without** copying everything into one place and **without** creating a second, competing "source of truth."
 
-The Discovery Layer is *mostly computed*: the bulk of it is derived from the original data sources and rebuilt on demand, so it needs no careful tending. A small, slow-growing part — people's confirmations and saved answers — can't be rebuilt, and that part is backed up deliberately.
+The Discovery Layer is *mostly computed*: the bulk of it is derived from the original data sources and rebuilt on demand, so it needs no careful tending. The small part that can't be rebuilt is still kept safe: saved answers live in a data source and ride on its backup like any record, while people's confirmations are the one piece the Discovery Layer stores and backs up itself.
 
 ## The value
 
@@ -23,7 +23,7 @@ The Discovery Layer is *mostly computed*: the bulk of it is derived from the ori
 
 Every design choice traces back to these.
 
-- **Very low maintenance** — most of the Discovery Layer is recomputed from the sources, so it can be rebuilt or discarded rather than tended. Only a small, slow-growing part (people's confirmations and saved answers) must be kept and backed up.
+- **Very low maintenance** — most of the Discovery Layer is recomputed from the sources, so it can be rebuilt or discarded rather than tended. The small part that can't be rebuilt rides on existing backups: saved answers are backed up by the data source that holds them, and only people's confirmations need a backup the Discovery Layer runs itself.
 - **Loosely coupled** — keep the pieces independent so any one — a store, a source, a tool — can be swapped without rewriting the rest, and no single vendor becomes hard to leave.
 - **Intuitive** — lean on standards (e.g., MCP) and common patterns rather than bespoke mechanisms, so people and tools pick it up quickly.
 - **Flexible** — adaptable to a wide range of questions, data, and tools: many small, specialized skills instead of one rigid system.

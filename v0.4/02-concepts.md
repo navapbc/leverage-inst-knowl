@@ -8,7 +8,7 @@
 
 2. **Discovery Layer (DL)** — a layer of *prepared material derived from the Data Sources*: summaries, indexes, pointers, and content-freshness/trust signals. Each such piece — a summary, an index, a pointer, a signal, the Catalog itself — is a **DL output**. Its whole reason to exist is to make relevant knowledge **easy to find and reuse**, so tools don't re-search everything from scratch. It is **derived** material — never primary knowledge authored for its own sake (that's a Data Source), and never a second source of truth. A quick test: a DL output exists only *because* there's something to discover — remove the underlying records and a summary, index, or signal has nothing left to describe.
 
-   **Most** of it is *recomputable* — rebuilt from the sources on demand, so it's cheap to update and safe to discard. But **editing or verifying an output transfers ownership**: that copy becomes durable, exempt from future rebuilds, and backed up deliberately — like the parts people authored from scratch.
+   **Most** of it is *recomputable* — rebuilt from the sources on demand, so it's cheap to update and safe to discard. But **editing or verifying an output transfers ownership**: that copy becomes durable and exempt from future rebuilds. Because such an output lives in a Data Source, that source backs it up like any of its records — so the only part the Discovery Layer needs to back up itself is people's confirmations (below).
 
 3. **Catalog** — the Discovery Layer's "yellow pages": one well-known place that maps a *topic* to *where its prepared material lives*. A tool does **one lookup**, then follows the pointer — instead of searching every system. Move a piece of material and you change one line in the Catalog, not the tools that use it.
 
@@ -16,7 +16,7 @@
 
 5. **Query skills** — the *guides*. Given a question, a skill steers an AI agent to the right prepared material or the right source. They can only help an agent *find* answers faster — never widen access, because every search runs under the asking person's own permissions. **There are many, not one** — each covers a topic or question type. A skill built for a known topic can go straight to the relevant material, skipping the Catalog; the Catalog is the fallback for questions no skill already knows how to answer.
 
-6. **Confirmation signals** — people vouching that the source behind an answer was right (or flagging it wrong). A confirmation attaches to a **cited DS record or DL output the answer drew from** — never to the AI's response text itself; that's why answers always cite their sources. This is one of the durable, people-sourced parts of the layer: it can't be re-derived, so it is kept and backed up deliberately.
+6. **Confirmation signals** — people vouching that the source behind an answer was right (or flagging it wrong). A confirmation attaches to a **cited DS record or DL output the answer drew from** — never to the AI's response text itself; that's why answers always cite their sources. It can't be re-derived and lives in no Data Source, so — unlike outputs that a Data Source backs up — it's the one part the Discovery Layer needs to back up itself.
 
 Two relationships tie these together:
 

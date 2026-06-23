@@ -49,7 +49,7 @@ The promotion target when a Confluence-page table outgrows its scale (beyond low
 | **Versioning** | **Non-versioned** — no free attribution, audit log, or revert. Adds its **own audit columns** (`created_at` / `updated_at` / `updated_by`) and relies on **backup/retention** for recovery. |
 | **Access enforcement** | No native Google Group grant. Needs a **`Google Group → Postgres role` bridge**, or a fronting service that resolves the caller's groups into a **row-level-security predicate**. (Index the access-group column — GIN — for query-time filtering.) |
 | **Governance** | A non-versioned store, so its writer runs under the [governed-writer controls](#governed-writer-controls). |
-| **Backup/retention** | Required for any **non-recomputable** data it holds — confirmation signals and human-created artifacts. Recomputable rows (signals, Catalog) recover by re-derivation. |
+| **Backup/retention** | Required for the **non-recomputable** data it holds — confirmation signals, plus any human-created Catalog rows a non-versioned store can't revert. Skill-computed signals and Catalog rows recover by re-derivation; human-created/verified *artifacts* aren't stored here — they live in a DS, which backs them up. |
 
 **Served through scoped tools, never raw SQL.** The MCP service exposes **intent-named tools** — e.g., `confirm_source`, `upsert_signal`, `register_catalog_entry` — each enforcing its own rules *at write time* (rate-limiting, de-duplication, "reject a confirmation whose citation doesn't resolve"). A generic `run_sql` would hand that enforcement back to the caller and forfeit the reason for moving off a page.
 
