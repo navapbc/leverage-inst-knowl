@@ -1,18 +1,38 @@
+Availability of MCP servers for data sources used at Nava
 
+Each data source below is tagged with one status:
 
-(SSA data sources)
-* **Salesforce**: Generally **available**. Salesforce provides fully hosted MCP servers (such as the Data 360 and Salesforce DX servers), enabling AI agents to securely query and act upon your organization’s data and setups using natural language.  
-* **Greenhouse**: Generally **available**. The Greenhouse MCP allows users to connect AI platforms directly to their hiring and applicant tracking processes. It supports actions like candidate creation and job discovery.  
-  * rolling out starting June 2026. There are also community/third-party Greenhouse MCP servers.  
-* **Workday**: While Workday features an active Agent System of Record (ASOR) designed for agent-to-agent and MCP communication, direct connections are typically facilitated through **third-party automation hubs and integration tools** like [Workato](https://www.workato.com/product-hub/mcp-monday-26-pre-built-mcp-servers-one-enterprise-platform/) or [CData](https://www.cdata.com/kb/tech/workday-cloud-claude-agent-sdk.rst) rather than a native Workday-hosted MCP.  
-  * CData’s Workday MCP server and Workato’s Workday End User MCP server. CData says its server connects LLMs to Workday data; Unified.to explicitly notes Workday does **not** ship an official MCP server.  
-* **Unanet**: Unanet relies on standard integration methods (such as Unanet Connect and **APIs**) rather than Model Context Protocol (MCP) servers.  
-  * **Community MCP server**, not clearly official; the GitHub repo exists but was archived by the owner on May 12, 2026.  
-* (SSA will do one-time static loads from ***Lever and Paylocity***)
+* ✅ **Official** — the vendor provides its own MCP server.
+* 🔌 **Third-party** — no vendor server; access is through an integration platform (e.g. CData, Workato).
+* 👥 **Community** — an unofficial, community-built server exists.
+* ⛔ **None** — no MCP server is available.
 
-Other data sources
-* Google Drive — official/vendor MCP server
-    * (Gmail — MCP servers available; must set up Cloud project)
-* Confluence/Jira — official/vendor MCP server via Atlassian Rovo MCP
-* GitHub — official/vendor MCP server
-* Slack — official/vendor MCP server
+### Main data sources
+* **Confluence / Jira** — ✅ **Official.** Atlassian Rovo MCP Server, a cloud-hosted remote server, now generally available ([docs](https://www.atlassian.com/platform/remote-mcp-server)).
+* **GitHub** — ✅ **Official.** GitHub-hosted remote MCP server, with a local Docker option ([repo](https://github.com/github/github-mcp-server)).
+* **Slack** — ✅ **Official.** Slack MCP server, generally available since February 2026 ([docs](https://docs.slack.dev/ai/slack-mcp-server/)).
+
+### Google data sources
+* **Google Drive** — ✅ **Official.** Google-hosted remote MCP server.
+* **Google Sheets** — 👥 **Community.** Not covered by Google's hosted endpoints (see note below). Available through community servers (e.g. [taylorwilsdon/google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp)).
+* **Google Docs** — 👥 **Community.** Not covered by Google's hosted endpoints (see note below). Available through the same community servers as Sheets.
+* **Google Slides** — 👥 **Community.** Not covered by Google's hosted endpoints (see note below). Available through the same community servers as Sheets.
+
+Note: Google's hosted Workspace MCP endpoints currently cover Gmail, Drive, Calendar, Chat, and Contacts — not Sheets or Docs ([docs](https://developers.google.com/workspace/guides/configure-mcp-servers)).
+
+### SSA data sources
+SSA will build a data pipeline that loads data from these sources into the BigQuery warehouse, for building BI dashboards.
+
+* **Salesforce** — ✅ **Official.** Salesforce Hosted MCP Servers are generally available (since April 2026) and include a Data 360 query server ([docs](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/servers-reference.html)). A broader, open-source Data 360 server is in developer preview, with a hosted version expected to reach general availability in 2026.
+* **Greenhouse** — 🟡 **Official (rolling out).** Greenhouse launched its MCP in May 2026, rolling out to customers starting June 2026 ([announcement](https://www.greenhouse.com/newsroom/greenhouse-launches-mcp-giving-hiring-teams-a-governed-way-to-connect-ai-tools-to-greenhouse)). Community servers also exist.
+* **Workday** — 🔌 **Third-party.** Workday does not ship its own MCP server. Its Agent System of Record (ASOR) supports MCP through an Agent Gateway, but data access today goes through integration platforms such as [CData](https://www.cdata.com/drivers/workday/mcp/) or [Workato](https://www.workato.com/product-hub/mcp-monday-26-pre-built-mcp-servers-one-enterprise-platform/).
+* **Unanet** — 👥 **Community.** No official server; Unanet integrates via standard APIs (Unanet Connect). One community server exists but was archived by its owner on May 12, 2026 ([repo](https://github.com/culstrup/unanet-mcp-server)).
+
+### Historical data sources
+SSA will do one-time static loads of historical data from these into the BigQuery warehouse.
+* **Lever** — replaced by Greenhouse.
+* **Paylocity** — replaced by Workday.
+
+### Other data sources with sensitive data
+* **Eden (Eden Workplace)** — ⛔ **None.** Eden Workplace, the ticketing/workplace tool, offers no MCP server and no public API. (The earlier eden.so link referred to an unrelated social-media research product.)
+* **Gmail** — ✅ **Official.** Google-hosted remote MCP server; requires setting up a Google Cloud project / custom connector.
