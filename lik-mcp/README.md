@@ -20,9 +20,11 @@ There is **no** generic query tool by design.
 ## Set up
 
 ```sh
-uv venv && source .venv/bin/activate
+uv venv                        # creates .venv
 uv pip install -e ".[dev]"
 ```
+
+Run everything through `uv run` (it uses `.venv` automatically — no activation needed).
 
 ## Configuration
 
@@ -39,7 +41,7 @@ docker compose up -d          # postgres:18.4, applies db/init.sql
 ## Test
 
 ```sh
-pytest
+uv run pytest
 ```
 
 The suite `TRUNCATE`s the tables, so it **refuses to run unless `LIK_DB_NAME` ends in
@@ -53,8 +55,8 @@ point the server at it:
 
 ```sh
 docker compose exec db createdb -U lik likdb_local
-LIK_DB_NAME=likdb_local python scripts/init_db.py          # apply schema
-LIK_ENV=local LIK_DB_NAME=likdb_local python -m lik_mcp
+LIK_DB_NAME=likdb_local uv run python scripts/init_db.py   # apply schema
+LIK_ENV=local LIK_DB_NAME=likdb_local uv run python -m lik_mcp
 ```
 
 ## Initialize a deployed database
@@ -63,8 +65,8 @@ The Docker entrypoint only initializes the local test DB. For any other database
 the (idempotent) schema with the service's own config:
 
 ```sh
-python scripts/init_db.py                                  # uses .env / env vars
-LIK_DB_HOST=prod-db LIK_DB_SSLMODE=require python scripts/init_db.py
+uv run python scripts/init_db.py                           # uses .env / env vars
+LIK_DB_HOST=prod-db LIK_DB_SSLMODE=require uv run python scripts/init_db.py
 ```
 
 Schema only — never drops or truncates. Grant the app role membership in the
