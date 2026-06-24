@@ -27,8 +27,8 @@ _SELECT = """
 SELECT id, confirmed_by, version, created_at
 FROM confirmations
 WHERE store_kind = %(store_kind)s AND location = %(location)s
-  AND locator = %(locator)s AND version = %(version)s AND archived_at IS NULL
-ORDER BY created_at
+  AND locator = %(locator)s AND archived_at IS NULL
+ORDER BY version, created_at
 """
 
 
@@ -47,7 +47,10 @@ def confirm_source(
 
 
 def read_confirmations(db: Database, citation: Citation) -> ConfirmationsResult:
-    """Return confirmations (and a count) for one cited source-version."""
+    """Return confirmations (and a count) across ALL versions of a cited source, matched
+    on store_kind + location + locator. Each row carries its own `version`, so a consumer
+    can use the latest version's trust or weigh prior-version trust. The citation's own
+    `version` is not used to filter (confirm_source still records per exact version)."""
     with db.connection() as conn:
         rows = conn.execute(_SELECT, citation.model_dump()).fetchall()
     confirmations = [

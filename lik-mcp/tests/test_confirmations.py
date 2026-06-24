@@ -28,8 +28,21 @@ def test_duplicate_deduped(db):
     assert read_confirmations(db, citation).count == 1
 
 
-def test_version_bound_trust(db):
-    """AE4 — a confirmation on v5 is not counted for v7 of the same source."""
+def test_read_is_cross_version(db):
+    """AE4 (redefined, R9) — read_confirmations returns confirmations across all versions
+    of a source; each row carries its version so the consumer weighs current vs prior.
+    confirm_source still records per exact version."""
     confirm_source(db, _citation(version="v5"), ALICE, RESOLVER)
-    assert read_confirmations(db, _citation(version="v5")).count == 1
-    assert read_confirmations(db, _citation(version="v7")).count == 0
+
+    # Reading with any version of the same source surfaces the v5 confirmation.
+    by_v5 = read_confirmations(db, _citation(version="v5"))
+    by_v7 = read_confirmations(db, _citation(version="v7"))
+    assert by_v5.count == 1
+    assert by_v7.count == 1
+    assert by_v7.confirmations[0]["version"] == "v5"
+
+    # A second confirmation on a later version accumulates; both versions are returned.
+    confirm_source(db, _citation(version="v7"), ALICE, RESOLVER)
+    both = read_confirmations(db, _citation(version="v7"))
+    assert both.count == 2
+    assert sorted(c["version"] for c in both.confirmations) == ["v5", "v7"]
