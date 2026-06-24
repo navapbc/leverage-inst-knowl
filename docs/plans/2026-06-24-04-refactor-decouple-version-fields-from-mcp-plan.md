@@ -1,7 +1,7 @@
 ---
 title: "refactor: Decouple version fields from MCP capabilities"
 type: refactor
-status: active
+status: completed
 date: 2026-06-24
 origin: docs/brainstorms/2026-06-24-04-decouple-version-fields-from-mcp-requirements.md
 ---

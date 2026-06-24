@@ -112,7 +112,7 @@ def build_server(
 
     @mcp.tool(name="read_confirmations")
     def _read_confirmations(citation: Citation, token: str | None = None) -> ConfirmationsResult:
-        """Return accumulated confirmations for one cited source-version."""
+        """Return accumulated confirmations for one cited source. Version is optional — omit when the store does not provide one."""
         logger.info(
             "tool=read_confirmations request store_kind=%r location=%r locator=%r version=%r",
             citation.store_kind, citation.location, citation.locator, citation.version,
