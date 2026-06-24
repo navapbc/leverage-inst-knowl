@@ -33,6 +33,27 @@ uv pip install -e ".[dev]"
 docker compose up -d          # starts postgres:18.4 and applies db/init.sql
 ```
 
+## Local dev database (for manual testing)
+
+The test DB (`likdb_test`) is `TRUNCATE`d between test runs. For manual testing —
+exercising the catalog/query skills against data that should survive `pytest` — use a
+separate, persistent `likdb_dev` in the same container. Create it once:
+
+```sh
+docker compose exec db createdb -U lik likdb_dev          # one-time
+LIK_DB_NAME=likdb_dev python scripts/init_db.py           # apply the schema
+```
+
+Then run the MCP server against it:
+
+```sh
+LIK_ENV=dev LIK_DB_NAME=likdb_dev python -m lik_mcp
+```
+
+`pytest` keeps pointing at `likdb_test`; the `_test`-suffix guard (below) means the
+suite can never truncate `likdb_dev`. Switching the server between the two databases
+is an env change, not a code change.
+
 ## Initialize a deployed database
 
 The Docker entrypoint only runs `db/init.sql` for the local test DB. For any other
