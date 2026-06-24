@@ -3,6 +3,12 @@
 * Keep the architecture relatively simple. Question any changes that would complicate the architecture.
 * Minimize jargon since the audience may be non-technical.
 
+## Coding
+
+* The software is being implemented based on the docs in the `v0.4` folder.
+* As code is being written ensure it aligns with the goals and intent of those docs.
+* Run `eval mise list` to initialize the Python 3.14 environment
+
 ## Help user be efficient
 
 * When presenting options, enable the user to type in a single letter or number to choose the option.
