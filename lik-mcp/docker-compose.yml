@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:18.4
     environment:
-      POSTGRES_DB: likdb
+      POSTGRES_DB: likdb_test
       POSTGRES_USER: lik
       POSTGRES_PASSWORD: lik
     ports:
@@ -13,7 +13,7 @@ services:
       # whole dir, not /var/lib/postgresql/data.
       - likdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lik -d likdb"]
+      test: ["CMD-SHELL", "pg_isready -U lik -d likdb_test"]
       interval: 5s
       timeout: 5s
       retries: 10

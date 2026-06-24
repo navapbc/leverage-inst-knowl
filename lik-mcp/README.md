@@ -49,13 +49,13 @@ membership in the `*_writer` / `dl_reader` roles per your governed-writer policy
 ## Test
 
 ```sh
-LIK_ENV=test pytest
+pytest
 ```
 
-The suite **requires `LIK_ENV=test`** and aborts otherwise — it `TRUNCATE`s the
-tables between tests, so it must point at a disposable database, never the deployed
-one (which runs `LIK_ENV=prod`). It skips with a hint if no database is reachable.
-Point `LIK_DB_*` at a throwaway DB (e.g. the docker compose one).
+It `TRUNCATE`s the tables between tests, so it must point at a disposable database.
+As a guardrail the suite **refuses to run unless `LIK_DB_NAME` ends in `_test`** (the
+docker compose DB is `likdb_test`); a deployed DB like `likdb` can never be hit. It
+skips with a hint if no database is reachable.
 
 ## Configuration
 

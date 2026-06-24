@@ -12,14 +12,15 @@ INIT_SQL = pathlib.Path(__file__).resolve().parents[1] / "db" / "init.sql"
 
 
 def pytest_configure(config):
-    """Hard gate: the suite TRUNCATEs catalog/confirmations, so it only runs in an
-    explicit test mode. The deployed DB runs LIK_ENV=prod and can never be hit here."""
-    env = Settings().env
-    if env != "test":
+    """Hard gate: the suite TRUNCATEs catalog/confirmations, so the target database
+    must identify itself as disposable. LIK_DB_NAME must end in '_test' — the deployed
+    DB (e.g. 'likdb') can never match, no matter how LIK_ENV is set."""
+    settings = Settings()
+    if not settings.db_name.endswith("_test"):
         raise pytest.UsageError(
-            f"Refusing to run tests with LIK_ENV={env!r} (expected 'test'). "
-            "This suite TRUNCATEs catalog and confirmations, so it must point at a "
-            "disposable database. Run `LIK_ENV=test pytest` against a throwaway DB "
+            f"Refusing to run tests against LIK_DB_NAME={settings.db_name!r}: this "
+            "suite TRUNCATEs catalog and confirmations, so the database name must end "
+            "in '_test' to mark it disposable. Point LIK_DB_* at a throwaway DB "
             "(e.g. the docker compose one) — never the deployed DB."
         )
 
@@ -46,7 +47,7 @@ def db(settings):
 
 @pytest.fixture(autouse=True)
 def clean(db, settings):
-    assert settings.env == "test"  # defense in depth: never TRUNCATE outside test mode
+    assert settings.db_name.endswith("_test")  # defense in depth: only TRUNCATE a disposable DB
     with db.connection() as conn:
         conn.execute("TRUNCATE catalog, confirmations RESTART IDENTITY")
         conn.commit()

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     db_host: str = "localhost"
     db_port: int = 5432
-    db_name: str = "likdb"
+    db_name: str = "likdb_test"
     db_user: str = "lik"
     db_password: str = "lik"
     db_sslmode: str = "prefer"
