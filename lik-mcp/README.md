@@ -12,6 +12,7 @@ and [../docs/brainstorms/2026-06-24-01-catalog-confirmations-mcp-service-require
 
 - `register_catalog_entry(entry)` — upsert a Catalog row on `(entry_type, subject)`.
 - `lookup_catalog_entry(entry_type, subject)` — one exact-match lookup; a miss is a clean not-found.
+- `list_catalog_entries(entry_type)` — every Catalog row for one `entry_type`, ordered by subject; bounded by the discovery key, not a free-form predicate.
 - `confirm_source(citation)` — record a confirmation; rejects unresolvable citations, dedupes per user per source-version.
 - `read_confirmations(citation)` — accumulated confirmations for one cited source-version.
 
@@ -56,8 +57,63 @@ point the server at it:
 ```sh
 docker compose exec db createdb -U lik likdb_local
 LIK_DB_NAME=likdb_local uv run python scripts/init_db.py   # apply schema
-LIK_ENV=local LIK_DB_NAME=likdb_local uv run python -m lik_mcp
+LIK_ENV=local LIK_DB_NAME=likdb_local uv run python -m lik_mcp   # foreground boot check
 ```
+
+That last line runs the server on stdio in the foreground — useful to confirm it boots, but
+an agent spawns its own copy. The skills below drive the service through an agent (Claude
+Code), so connect it there instead of running it by hand.
+
+### Connect the service to your agent
+
+Register lik-mcp as an MCP server, pinned to `likdb_local`.
+
+**Claude CLI** — from the `lik-mcp` folder:
+
+```sh
+claude mcp add lik-mcp -- \
+  env LIK_ENV=local LIK_DB_NAME=likdb_local uv run python -m lik_mcp
+```
+
+**Claude Desktop** — it doesn't inherit your shell or working directory, so use absolute
+paths. Edit `claude_desktop_config.json` (Settings → Developer → Edit Config; on macOS it's
+`~/Library/Application Support/Claude/claude_desktop_config.json`) and add:
+
+```json
+{
+  "mcpServers": {
+    "lik-mcp": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/ik-arch/lik-mcp", "python", "-m", "lik_mcp"],
+      "env": { "LIK_ENV": "local", "LIK_DB_NAME": "likdb_local" }
+    }
+  }
+}
+```
+
+Use the absolute path to your checkout, and if `uv` isn't on Desktop's `PATH`, give its full
+path (`which uv`) as `command`. Restart Claude Desktop to load the server.
+
+The skills also call the Atlassian (Confluence) MCP tools, so connect that server too. The
+lik-mcp tools (`register_catalog_entry`, `lookup_catalog_entry`, `list_catalog_entries`,
+`confirm_source`, `read_confirmations`) should now show up in the agent.
+
+### Populate the Catalog
+
+The Catalog starts empty. Run the **`sync-catalog-from-project-indexes`** skill — it crawls
+every Confluence page tagged `project-index` and upserts one Catalog row per page via
+`register_catalog_entry`. It's idempotent, so re-running just updates rows in place. It writes
+to whatever DB lik-mcp points at, so confirm the server is on `likdb_local` (not `likdb_test`)
+first. Expect a summary like `Synced N project-index pages … X inserted, Y updated`.
+
+### Query the Catalog
+
+With rows in place, run the **`query-project-index`** skill and pass a project question (e.g.
+*"what has Nava done with Medicaid?"*). It escalates through exact lookup → list-and-scan →
+bounded Confluence search, **asking before it widens scope** at each step, then ranks the cited
+pages by their confirmation signals (`read_confirmations`) and offers to record your own
+(`confirm_source`). Because `LIK_ENV=local` uses the stub verifier, confirmations are attributed
+to whatever email you pass as the token — fine for testing, not real trust.
 
 ## Initialize a deployed database
 
