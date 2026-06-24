@@ -19,54 +19,22 @@ There is **no** generic query tool by design.
 
 ## Set up
 
-Create and activate a virtual environment, then install the package:
-
 ```sh
-uv venv                        # creates .venv
-source .venv/bin/activate
+uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
+
+## Configuration
+
+Copy `.env.example` to `.env` and edit. `LIK_ENV=local|test` uses a stub identity
+verifier; any other value — including cloud `dev`/`prod` — fails closed (real Google OIDC
+is a later slice). Swapping databases is a credentials change here, never code.
 
 ## Run the test database
 
 ```sh
-docker compose up -d          # starts postgres:18.4 and applies db/init.sql
+docker compose up -d          # postgres:18.4, applies db/init.sql
 ```
-
-## Local database (for manual testing)
-
-The test DB (`likdb_test`) is `TRUNCATE`d between test runs. For manual testing —
-exercising the catalog/query skills against data that should survive `pytest` — use a
-separate, persistent `likdb_local` in the same container. Create it once:
-
-```sh
-docker compose exec db createdb -U lik likdb_local        # one-time
-LIK_DB_NAME=likdb_local python scripts/init_db.py         # apply the schema
-```
-
-Then run the MCP server against it:
-
-```sh
-LIK_ENV=local LIK_DB_NAME=likdb_local python -m lik_mcp
-```
-
-`pytest` keeps pointing at `likdb_test`; the `_test`-suffix guard (below) means the
-suite can never truncate `likdb_local`. Switching the server between the two databases
-is an env change, not a code change. (`LIK_ENV=local` is named to avoid confusion with a
-cloud-deployed `dev` environment, which fails closed.)
-
-## Initialize a deployed database
-
-The Docker entrypoint only runs `db/init.sql` for the local test DB. For any other
-database, apply the (idempotent) schema once with the same config the service reads:
-
-```sh
-python scripts/init_db.py                                  # uses .env / env vars
-LIK_DB_HOST=prod-db LIK_DB_SSLMODE=require python scripts/init_db.py
-```
-
-It creates schema only — never drops or truncates. Grant the deployed app role
-membership in the `*_writer` / `dl_reader` roles per your governed-writer policy.
 
 ## Test
 
@@ -74,23 +42,38 @@ membership in the `*_writer` / `dl_reader` roles per your governed-writer policy
 pytest
 ```
 
-It `TRUNCATE`s the tables between tests, so it must point at a disposable database.
-As a guardrail the suite **refuses to run unless `LIK_DB_NAME` ends in `_test`** (the
-docker compose DB is `likdb_test`); a deployed DB like `likdb` can never be hit. It
-skips with a hint if no database is reachable.
+The suite `TRUNCATE`s the tables, so it **refuses to run unless `LIK_DB_NAME` ends in
+`_test`** — a deployed DB like `likdb` can never be hit. It skips if no database is reachable.
 
-## Configuration
+## Local database (for manual testing)
 
-Copy `.env.example` to `.env` and edit. Swapping the test DB for the real one is a
-credentials change here, not a code change. `LIK_ENV=local|test` uses a stub identity
-verifier; any other value — including a cloud-deployed `dev` — fails closed (real Google
-OIDC is a later slice).
+Manual testing needs data that survives the `TRUNCATE` above, so use a separate, persistent
+`likdb_local` (the `_test` guard keeps the suite from touching it). Create it once, then
+point the server at it:
+
+```sh
+docker compose exec db createdb -U lik likdb_local
+LIK_DB_NAME=likdb_local python scripts/init_db.py          # apply schema
+LIK_ENV=local LIK_DB_NAME=likdb_local python -m lik_mcp
+```
+
+## Initialize a deployed database
+
+The Docker entrypoint only initializes the local test DB. For any other database, apply
+the (idempotent) schema with the service's own config:
+
+```sh
+python scripts/init_db.py                                  # uses .env / env vars
+LIK_DB_HOST=prod-db LIK_DB_SSLMODE=require python scripts/init_db.py
+```
+
+Schema only — never drops or truncates. Grant the app role membership in the
+`*_writer` / `dl_reader` roles per your governed-writer policy.
 
 ## TODO
 
-This is a local/test harness with throwaway data, not a production service. "Full
-serving" — real callers in prod with verified identities and enforced access — is
-not built yet. Until it is:
+A local/test harness with throwaway data, not a production service. Until real serving
+(verified identities, enforced access) lands:
 
 **Current limits (do not treat these as done):**
 
