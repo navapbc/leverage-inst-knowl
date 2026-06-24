@@ -23,6 +23,19 @@ There is **no** generic query tool by design.
 docker compose up -d          # starts postgres:18.4 and applies db/init.sql
 ```
 
+## Initialize a deployed database
+
+The Docker entrypoint only runs `db/init.sql` for the local test DB. For any other
+database, apply the (idempotent) schema once with the same config the service reads:
+
+```sh
+python scripts/init_db.py                                  # uses .env / env vars
+LIK_DB_HOST=prod-db LIK_DB_SSLMODE=require python scripts/init_db.py
+```
+
+It creates schema only — never drops or truncates. Grant the deployed app role
+membership in the `*_writer` / `dl_reader` roles per your governed-writer policy.
+
 ## Test
 
 ```sh
