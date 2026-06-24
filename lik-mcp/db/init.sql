@@ -33,20 +33,26 @@ CREATE TABLE IF NOT EXISTS catalog (
 -- Index the ACL hint for later query-time filtering.
 CREATE INDEX IF NOT EXISTS catalog_access_groups_gin ON catalog USING GIN (access_groups);
 
--- Confirmation signals: durable, non-recomputable human trust. `locator` is NOT NULL
--- DEFAULT '' so the dedup key is reliable (a NULL never equals a NULL in UNIQUE).
+-- Confirmation signals: durable, non-recomputable human trust. `locator` and `version`
+-- are NOT NULL DEFAULT '' so the dedup key is reliable (a NULL never equals a NULL in UNIQUE).
+-- `version` defaults to '' when the store cannot supply one (e.g. Confluence via MCP);
+-- use `created_at` for recency-based trust weighing in that case.
 CREATE TABLE IF NOT EXISTS confirmations (
     id           bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     store_kind   text        NOT NULL,
     location     text        NOT NULL,
     locator      text        NOT NULL DEFAULT '',
-    version      text        NOT NULL,
+    version      text        NOT NULL DEFAULT '',
     confirmed_by text        NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now(),
     archived_at  timestamptz,  -- reserved for the deferred age-out/archive lifecycle
     -- At most one confirmation per user per cited source-version.
     CONSTRAINT confirmations_unique UNIQUE (confirmed_by, store_kind, location, locator, version)
 );
+
+-- Idempotent migration: add DEFAULT '' to version on existing instances.
+-- CREATE TABLE IF NOT EXISTS above won't alter an already-existing table.
+ALTER TABLE confirmations ALTER COLUMN version SET DEFAULT '';
 
 -- Least-privilege roles per output type (R11). The deployed app role is granted
 -- membership as needed; per-action role switching is wired in a later slice.

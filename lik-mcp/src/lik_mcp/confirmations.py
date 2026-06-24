@@ -11,9 +11,19 @@ class ConfirmResult(BaseModel):
     reason: Optional[str] = None
 
 
+class ConfirmationRow(BaseModel):
+    """One row returned by read_confirmations. When `version` is '' (store did not provide
+    one), use `created_at` for recency-based trust weighing instead."""
+
+    id: int
+    confirmed_by: str
+    version: str
+    created_at: str  # ISO 8601; rank by this when version is ''
+
+
 class ConfirmationsResult(BaseModel):
     count: int
-    confirmations: list[dict]
+    confirmations: list[ConfirmationRow]
 
 
 _INSERT = """
@@ -48,18 +58,19 @@ def confirm_source(
 
 def read_confirmations(db: Database, citation: Citation) -> ConfirmationsResult:
     """Return confirmations (and a count) across ALL versions of a cited source, matched
-    on store_kind + location + locator. Each row carries its own `version`, so a consumer
-    can use the latest version's trust or weigh prior-version trust. The citation's own
-    `version` is not used to filter (confirm_source still records per exact version)."""
+    on store_kind + location + locator. Each row carries its own `version` and `created_at`.
+    When `version` is '' (store did not supply one), use `created_at` for recency-based
+    trust weighing. The citation's own `version` is not used to filter — confirm_source
+    records per exact version, so cross-version reads return all signals."""
     with db.connection() as conn:
         rows = conn.execute(_SELECT, citation.model_dump()).fetchall()
     confirmations = [
-        {
-            "id": r["id"],
-            "confirmed_by": r["confirmed_by"],
-            "version": r["version"],
-            "created_at": r["created_at"].isoformat(),
-        }
+        ConfirmationRow(
+            id=r["id"],
+            confirmed_by=r["confirmed_by"],
+            version=r["version"],
+            created_at=r["created_at"].isoformat(),
+        )
         for r in rows
     ]
     return ConfirmationsResult(count=len(confirmations), confirmations=confirmations)

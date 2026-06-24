@@ -1,5 +1,6 @@
 from lik_mcp.catalog import (
     CatalogEntry,
+    SourceRef,
     list_catalog_entries,
     lookup_catalog_entry,
     register_catalog_entry,
@@ -60,3 +61,48 @@ def test_list_unknown_type_returns_empty(db):
     result = list_catalog_entries(db, "no-such-type")
     assert result.count == 0
     assert result.entries == []
+
+
+def test_source_refs_with_fetched_at(db):
+    """source_refs round-trips with fetched_at populated (R4)."""
+    entry = _entry(source_refs=[SourceRef(id="p1", fetched_at="2026-06-24T00:00:00Z")])
+    register_catalog_entry(db, entry, updated_by="svc")
+
+    result = list_catalog_entries(db, "project-summary")
+    refs = result.entries[0]["source_refs"]
+    assert len(refs) == 1
+    assert refs[0]["id"] == "p1"
+    assert refs[0]["fetched_at"] == "2026-06-24T00:00:00Z"
+
+
+def test_source_refs_legacy_shape(db):
+    """Legacy source_refs with only id (no version, no fetched_at) deserializes
+    with explicit null fields — not absent keys (R3)."""
+    entry = _entry(source_refs=[SourceRef(id="p1")])
+    register_catalog_entry(db, entry, updated_by="svc")
+
+    result = list_catalog_entries(db, "project-summary")
+    ref = result.entries[0]["source_refs"][0]
+    assert ref["id"] == "p1"
+    assert ref["version"] is None
+    assert ref["fetched_at"] is None
+
+
+def test_source_refs_version_preserved(db):
+    """Non-null version round-trips intact — stores that expose versions can use them (R6)."""
+    entry = _entry(source_refs=[SourceRef(id="p1", version="v5")])
+    register_catalog_entry(db, entry, updated_by="svc")
+
+    result = list_catalog_entries(db, "project-summary")
+    ref = result.entries[0]["source_refs"][0]
+    assert ref["version"] == "v5"
+
+
+def test_source_refs_empty_list(db):
+    """Empty source_refs is accepted — existing behavior preserved."""
+    entry = _entry(source_refs=[])
+    first = register_catalog_entry(db, entry, updated_by="svc")
+    assert first.status == "inserted"
+
+    result = list_catalog_entries(db, "project-summary")
+    assert result.entries[0]["source_refs"] == []

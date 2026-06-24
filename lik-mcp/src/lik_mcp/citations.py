@@ -8,16 +8,23 @@ KNOWN_STORE_KINDS = {"gdoc", "gsheet", "confluence", "postgres", "bigquery"}
 
 class Citation(BaseModel):
     """A resolvable reference to a cited source: store_kind + location + locator + version
-    (the same shape the Catalog uses). `locator` normalizes to '' so it joins reliably."""
+    (the same shape the Catalog uses). `locator` and `version` normalize to '' so they
+    join reliably in UNIQUE constraints. `version` is optional — use `created_at` for
+    recency weighing when the store cannot supply a version number."""
 
     store_kind: str
     location: str
     locator: str = ""
-    version: str
+    version: str = ""
 
     @field_validator("locator", mode="before")
     @classmethod
     def _normalize_locator(cls, v):
+        return v or ""
+
+    @field_validator("version", mode="before")
+    @classmethod
+    def _normalize_version(cls, v):
         return v or ""
 
 
@@ -34,5 +41,4 @@ class ShapeResolver:
         return (
             citation.store_kind in KNOWN_STORE_KINDS
             and bool(citation.location.strip())
-            and bool(citation.version.strip())
         )

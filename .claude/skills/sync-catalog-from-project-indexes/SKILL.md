@@ -33,11 +33,13 @@ For each result, collect:
 - `title` → the project name
 - `webUrl` → the page URL
 - page **ID** → the Confluence page ID
-- `version` (the page's current version number) → for `source_refs`
 - `space.name`, `summary`, `lastModified`, `author.displayName` → context (optional)
 
 The `label = "project-index"` CQL is the canonical source of truth — it matches exactly what
 the Project Index Directory renders via its Page Properties Report macro.
+
+**Note:** The Confluence MCP connector does not expose page version numbers. Do not attempt
+to collect a version from the search result — use a fetch timestamp instead (see Step 2).
 
 ### Step 2 — Register one Catalog row per page
 
@@ -48,7 +50,7 @@ For each page, call `register_catalog_entry` (the lik-mcp tool) with an `entry` 
 - `location`: the page `webUrl`
 - `store_kind`: `"confluence"`
 - `locator`: the Confluence page ID  *(so a consumer can `getConfluencePage` directly)*
-- `source_refs`: `[{ "id": "<pageId>", "version": "<version>" }]`  *(powers staleness checks)*
+- `source_refs`: `[{ "id": "<pageId>", "fetched_at": "<current UTC timestamp in ISO 8601>" }]`  *(powers staleness checks; `version` is omitted because the Confluence MCP connector does not expose it — use `fetched_at` as the proxy recency signal instead)*
 - `computed_by`: `"sync-catalog-from-project-indexes"`
 - `row_provenance`: `"skill"`
 

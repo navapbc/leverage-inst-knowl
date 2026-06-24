@@ -1,10 +1,21 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from psycopg.types.json import Json
 from pydantic import BaseModel, Field
 
 from .db import Database
+
+
+class SourceRef(BaseModel):
+    """One entry in `source_refs`: a pointer to a DS record this Catalog row was derived
+    from. `version` is the store's own version identifier when available; `fetched_at` is
+    an ISO 8601 timestamp recorded at sync time as a proxy when no version is available.
+    Both are optional so legacy rows (missing either field) deserialize without error."""
+
+    id: str
+    version: Optional[str] = None
+    fetched_at: Optional[str] = None
 
 
 class CatalogEntry(BaseModel):
@@ -21,7 +32,7 @@ class CatalogEntry(BaseModel):
     verified_by: Optional[str] = None
     verified_at: Optional[datetime] = None
     freshness: str = "current"
-    source_refs: list[Any] = Field(default_factory=list)
+    source_refs: list[SourceRef] = Field(default_factory=list)
     last_computed_at: Optional[datetime] = None
     last_validated_at: Optional[datetime] = None
     access_groups: list[str] = Field(default_factory=list)
@@ -79,7 +90,7 @@ def _serialize(row: dict) -> dict:
 def register_catalog_entry(db: Database, entry: CatalogEntry, updated_by: str) -> RegisterResult:
     """Upsert a Catalog row on (entry_type, subject) — re-registering a key updates in place."""
     params = entry.model_dump()
-    params["source_refs"] = Json(params["source_refs"])
+    params["source_refs"] = Json([r.model_dump(mode="json") for r in entry.source_refs])
     params["updated_by"] = updated_by
     with db.connection() as conn:
         row = conn.execute(_UPSERT, params).fetchone()
