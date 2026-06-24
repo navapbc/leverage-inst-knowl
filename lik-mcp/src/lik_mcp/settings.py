@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # local | test -> StubVerifier; anything else (incl. a cloud `dev`) -> fail-closed.
     env: str = "local"
 
+    # How the server is exposed. "stdio" (default) is spawned per-session by an MCP
+    # client; "streamable-http" runs a long-lived HTTP listener (used by the container).
+    # FastMCP's own host/port/path come from FASTMCP_-prefixed env vars.
+    transport: str = "stdio"
+
     @property
     def conninfo(self) -> str:
         return (

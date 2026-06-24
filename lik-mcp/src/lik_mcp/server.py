@@ -1,4 +1,5 @@
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from .auth import Verifier
 from .catalog import (
@@ -25,7 +26,15 @@ def build_server(db: Database, verifier: Verifier, resolver: CitationResolver) -
     stub verifier / resolver and a test database. The service exposes ONLY the four
     intent-named tools below — there is no generic SQL tool."""
 
-    mcp = FastMCP("lik-mcp")
+    # The HTTP transport must bind 0.0.0.0 inside a container to be reachable through a
+    # published port, so loopback-binding can't be the DNS-rebinding guard. Restrict the
+    # accepted Host header to loopback instead (the host side publishes 127.0.0.1 only).
+    # Harmless under stdio (no HTTP middleware runs). A real deploy must widen this.
+    transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"],
+    )
+    mcp = FastMCP("lik-mcp", transport_security=transport_security)
 
     @mcp.tool(name="register_catalog_entry")
     def _register_catalog_entry(entry: CatalogEntry, token: str | None = None) -> RegisterResult:
