@@ -42,6 +42,11 @@ class LookupResult(BaseModel):
     entry: Optional[dict] = None
 
 
+class ListResult(BaseModel):
+    count: int
+    entries: list[dict] = Field(default_factory=list)
+
+
 _UPSERT = """
 INSERT INTO catalog (
     entry_type, subject, location, store_kind, locator, provenance, verification,
@@ -96,3 +101,15 @@ def lookup_catalog_entry(db: Database, entry_type: str, subject: str) -> LookupR
     if row is None:
         return LookupResult(found=False)
     return LookupResult(found=True, entry=_serialize(row))
+
+
+def list_catalog_entries(db: Database, entry_type: str) -> ListResult:
+    """Return every Catalog row for one entry_type, ordered by subject. Bounded by the
+    discovery key, not a free-form predicate — no row matches is a clean empty list."""
+    with db.connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM catalog WHERE entry_type = %s ORDER BY subject",
+            (entry_type,),
+        ).fetchall()
+    entries = [_serialize(row) for row in rows]
+    return ListResult(count=len(entries), entries=entries)

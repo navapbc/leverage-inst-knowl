@@ -3,8 +3,10 @@ from mcp.server.fastmcp import FastMCP
 from .auth import Verifier
 from .catalog import (
     CatalogEntry,
+    ListResult,
     LookupResult,
     RegisterResult,
+    list_catalog_entries,
     lookup_catalog_entry,
     register_catalog_entry,
 )
@@ -36,6 +38,13 @@ def build_server(db: Database, verifier: Verifier, resolver: CitationResolver) -
         """Resolve (entry_type, subject) -> location in one exact-match lookup. Miss = not found."""
         verifier.verify(token)
         return lookup_catalog_entry(db, entry_type, subject)
+
+    @mcp.tool(name="list_catalog_entries")
+    def _list_catalog_entries(entry_type: str, token: str | None = None) -> ListResult:
+        """List every Catalog row of one entry_type (e.g. 'index'). Bounded by the
+        discovery key — not a generic query. Empty type = empty list, never an error."""
+        verifier.verify(token)
+        return list_catalog_entries(db, entry_type)
 
     @mcp.tool(name="confirm_source")
     def _confirm_source(citation: Citation, token: str | None = None) -> ConfirmResult:
