@@ -43,7 +43,7 @@ A single token per `(store, location, locator)` representing the current content
 
 | `store_kind` | Preferred native token (if the connector returns it) | Universal fallback |
 |---|---|---|
-| `confluence` | `version.createdAt` (v2) / `version.when` (v1) | content hash |
+| `confluence` | *none via the MCP connector* — verified live (see Assumptions); raw REST has `version.when` but the connector drops it | content hash (the marker actually used) |
 | `gdoc` | head revision id or `modifiedTime` | content hash |
 | `gsheet` | revision id or `modifiedTime` | content hash |
 | `postgres` | row `updated_at` / `xmin` | content hash |
@@ -90,15 +90,15 @@ The version/etag assumption is woven through the v0.4 docs and must move to the 
 - Re-confirming the edited page clears the "edited since" flag for that user (marker updated to current).
 - A user cannot double-confirm the same source in one state; dedup is one row per user per `(store, location, locator)`.
 - No `fetched_at` remains in `source_refs`; reconciliation/recency uses `catalog.updated_at`.
-- A sync skill registers `source_refs` with a `source_state` token (hash or `version.createdAt` (v2) / `version.when` (v1)) and no version number.
+- A sync skill registers `source_refs` with a `source_state` token (a content hash for Confluence; a native signal for stores whose connector exposes one) and no version number.
 - The same confirm / "edited since" flow works unchanged for a non-Confluence source (e.g. a `gdoc` using its revision id, or any store falling back to a content hash) — no store-specific code path.
 - The architecture and strategy docs describe the marker model, not version/etag, with no remaining version-number framing for change detection.
 
 ## Assumptions
 
-- **Modification timestamp is available on both search and per-page fetch.** [Certain] v2 API (`GET /wiki/api/v2/pages`) returns `version.createdAt` inline on list/search results with no `expand` needed. v1 CQL search (`/wiki/rest/api/content/search`) requires `expand=version` to get `version.when`. Either path covers the sync crawl. Field is named `version.createdAt` (v2) or `version.when` (v1) — not `lastModified`. If absent entirely, content hash remains the fallback and the design is unchanged.
+- **The MCP connector exposes no usable native marker for Confluence — content hash it is.** [Certain] Verified live against the `01fd8586-…` connector: `getConfluencePage` and `searchConfluenceUsingCql` return `lastModified` only as a relative display string (e.g. `"about 5 hours ago"`) and ignore `expand=version` / `expand=history.lastUpdated`, so no stable timestamp comes through. The raw Confluence *REST* API does return `version.when` / `version.createdAt`, but this connector does not pass them through — an earlier check confirmed the API layer, not the connector the skills actually call, which is the layer that matters. Per the brainstorm's own fallback, Confluence uses a content hash of the page body, and the design is unchanged. See [limitations.md](../../limitations.md).
 - Content hash is reproducible only if DL hashes a canonical field consistently (e.g. Confluence storage-format body or extracted text). The exact field is a planning decision.
-- Any edit (including cosmetic) advances `lastModified` / changes the hash, so "edited since" over-flags rather than under-flags — acceptable conservatism for a trust signal.
+- Any edit (including cosmetic) changes the body hash, so "edited since" over-flags rather than under-flags — acceptable conservatism for a trust signal.
 
 ## Open for planning
 
