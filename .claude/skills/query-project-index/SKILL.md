@@ -21,14 +21,23 @@ source is (`read_confirmations`) and offers to record the user's confirmation (`
 
 Use the text the user passes to this skill as their question.
 
-## Level 1 — exact Catalog lookup
+## Level 1 — exact Catalog lookup, then fuzzy lookup
 
 If the question names a specific project, derive `subject = "project: <name>"` and call
 `lookup_catalog_entry` with `entry_type = "index"` and that `subject`.
 
 - **Hit:** follow the row — `getConfluencePage` at its `locator` (page ID) or `location` (URL) —
   read the page, and answer from it. Go to **Rank & present**.
-- **Miss**, or the question doesn't name a single project: go to **Level 2 (ask first)**.
+- **Miss**, or the question doesn't name a single project exactly: call
+  `search_catalog_entries` with `entry_type = "index"` and the question's key terms as
+  `query`. This catches partial names, typos, and reordered words.
+  - **Candidate hit(s):** follow the top candidate's pointer (`getConfluencePage` at its
+    `locator`/`location`), read the page, and answer. Go to **Rank & present**.
+  - **No candidates:** go to **Level 2 (ask first)**.
+
+`search_catalog_entries` is a **targeted, bounded keyed lookup** — top-N ranked candidates,
+not a full read — so it runs **without** the "ask before widening" prompt that Levels 2 and 3
+require. It stays part of the primary Catalog path.
 
 ## Level 2 — list and scan (ask the user first)
 
