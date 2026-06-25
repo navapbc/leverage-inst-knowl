@@ -167,6 +167,29 @@ LIK_DB_HOST=prod-db LIK_DB_SSLMODE=require uv run python scripts/init_db.py
 Schema only — never drops or truncates. Grant the app role membership in the
 `*_writer` / `dl_reader` roles per your governed-writer policy.
 
+## Help
+
+### Update the containers after code or schema changes
+
+App code (`src/`) is baked into the `lik-mcp` image, so rebuild it after editing:
+
+```sh
+docker compose up -d --build lik-mcp
+```
+
+`db/init.sql` is applied only on **first** volume init, so an already-created database
+won't pick up edits. Either re-apply the schema in place (`scripts/init_db.py`, see
+"Initialize a deployed database"), or drop and re-create from scratch (destructive —
+deletes `likdb_local` and `likdb_test`):
+
+```sh
+docker compose down -v && docker compose up -d
+```
+
+### New MCP tools not showing up in Claude Desktop
+
+`mcp-remote` caches the tool list from the server. After deploying new tools, restart Claude Desktop to force a fresh tool-list fetch.
+
 ## TODO
 
 A local/test harness with throwaway data, not a production service. Until real serving

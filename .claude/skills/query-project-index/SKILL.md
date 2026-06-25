@@ -21,6 +21,14 @@ source is (`read_confirmations`) and offers to record the user's confirmation (`
 
 Use the text the user passes to this skill as their question.
 
+## Errors
+
+If any tool call fails or a required tool is unavailable, **stop immediately**. Do not fall
+through to the next level. Present:
+1. The error or missing tool name
+2. Likely root causes (e.g. server not running, tool not yet deployed, MCP session stale)
+3. Remedies (e.g. restart the server, reconnect MCP, redeploy)
+
 ## Level 1 — exact Catalog lookup, then fuzzy lookup
 
 If the question names a specific project, derive `subject = "project: <name>"` and call
