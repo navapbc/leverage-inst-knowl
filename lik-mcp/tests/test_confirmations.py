@@ -133,6 +133,95 @@ def test_edited_since_none_when_no_live_marker(db):
     assert rows.confirmations[0].edited_since is None
 
 
+# --- Signed votes (thumbs up / down) -------------------------------------------------
+
+def _raw_votes(db):
+    """Raw (vote, reason, comment) rows straight from the table, so the write path is
+    verifiable independent of what read_confirmations exposes."""
+    with db.connection() as conn:
+        return conn.execute(
+            "SELECT vote, reason, comment FROM confirmations ORDER BY id"
+        ).fetchall()
+
+
+def test_upvote_default_records_positive(db):
+    """AE1: a bare confirmation defaults to an up vote with no reason or comment."""
+    assert confirm_source(db, _citation(), ALICE, RESOLVER).status == "recorded"
+    assert _raw_votes(db) == [{"vote": "up", "reason": None, "comment": None}]
+
+
+def test_downvote_bad_retrieval_records_without_note(db):
+    """AE3: a down/bad-retrieval vote records the reason with no note required."""
+    result = confirm_source(db, _citation(), ALICE, RESOLVER, vote="down", reason="bad-retrieval")
+    assert result.status == "recorded"
+    assert _raw_votes(db) == [{"vote": "down", "reason": "bad-retrieval", "comment": None}]
+
+
+def test_downvote_wrong_content_stores_note(db):
+    """AE2: a down/wrong-content vote stores the reason and the free-text note."""
+    note = "states the 2019 rate, superseded in 2022"
+    result = confirm_source(
+        db, _citation(), ALICE, RESOLVER, vote="down", reason="wrong-content", comment=note
+    )
+    assert result.status == "recorded"
+    assert _raw_votes(db) == [{"vote": "down", "reason": "wrong-content", "comment": note}]
+
+
+def test_revote_flip_replaces_to_one_row(db):
+    """AE4 / R6: flipping an up vote to a down vote replaces it — one row, now negative."""
+    confirm_source(db, _citation(), ALICE, RESOLVER)  # up
+    confirm_source(db, _citation(), ALICE, RESOLVER, vote="down", reason="bad-retrieval")
+    assert read_confirmations(db, _citation()).count == 1
+    assert _raw_votes(db) == [{"vote": "down", "reason": "bad-retrieval", "comment": None}]
+
+
+def test_revote_change_reason_clears_stale_comment(db):
+    """Changing reason replaces in place: a later bad-retrieval vote clears the prior
+    wrong-content note rather than leaving it behind."""
+    confirm_source(db, _citation(), ALICE, RESOLVER, vote="down", reason="wrong-content", comment="old note")
+    confirm_source(db, _citation(), ALICE, RESOLVER, vote="down", reason="bad-retrieval")
+    assert _raw_votes(db) == [{"vote": "down", "reason": "bad-retrieval", "comment": None}]
+
+
+def test_downvote_missing_reason_rejected(db):
+    """A down vote with no reason is rejected and writes nothing."""
+    result = confirm_source(db, _citation(), ALICE, RESOLVER, vote="down")
+    assert result.status == "rejected"
+    assert result.reason == "missing_reason"
+    assert _raw_votes(db) == []
+
+
+def test_downvote_invalid_reason_rejected(db):
+    """A down vote with an out-of-enum reason is rejected and writes nothing."""
+    result = confirm_source(db, _citation(), ALICE, RESOLVER, vote="down", reason="bogus")
+    assert result.status == "rejected"
+    assert result.reason == "invalid_reason"
+    assert _raw_votes(db) == []
+
+
+def test_upvote_with_reason_rejected(db):
+    """An up vote may not carry a reason — rejected, nothing written."""
+    result = confirm_source(db, _citation(), ALICE, RESOLVER, vote="up", reason="bad-retrieval")
+    assert result.status == "rejected"
+    assert result.reason == "reason_on_upvote"
+    assert _raw_votes(db) == []
+
+
+def test_invalid_vote_rejected(db):
+    """An unknown vote direction is rejected, nothing written."""
+    result = confirm_source(db, _citation(), ALICE, RESOLVER, vote="sideways")
+    assert result.status == "rejected"
+    assert result.reason == "invalid_vote"
+    assert _raw_votes(db) == []
+
+
+def test_comment_on_upvote_is_stored(db):
+    """R3: the comment field is reason-agnostic — an up vote may carry a note."""
+    result = confirm_source(db, _citation(), ALICE, RESOLVER, comment="handy")
+    assert result.status == "recorded"
+    assert _raw_votes(db) == [{"vote": "up", "reason": None, "comment": "handy"}]
+
+
 def test_edited_since_true_when_stored_marker_empty(db):
     """A stored '' marker differs from any non-empty live marker -> edited_since is True."""
     confirm_source(db, _citation_no_state(), ALICE, RESOLVER)

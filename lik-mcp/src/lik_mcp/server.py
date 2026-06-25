@@ -121,15 +121,23 @@ def build_server(
         return result
 
     @mcp.tool(name="confirm_source")
-    def _confirm_source(citation: Citation, token: str | None = None) -> ConfirmResult:
-        """Record a user's confirmation that a cited source was right. The confirming
-        identity comes from the verified token (never self-asserted)."""
+    def _confirm_source(
+        citation: Citation,
+        vote: str = "up",
+        reason: str | None = None,
+        comment: str | None = None,
+        token: str | None = None,
+    ) -> ConfirmResult:
+        """Record a user's signed vote on a cited source. `vote` is 'up' (the source was
+        right) or 'down' (wrong); a down vote names a `reason` ('bad-retrieval' |
+        'wrong-content'), an up vote names none. `comment` is an optional free-text note.
+        The confirming identity comes from the verified token (never self-asserted)."""
         logger.info(
-            "tool=confirm_source request store_kind=%r location=%r locator=%r source_state=%r",
-            citation.store_kind, citation.location, citation.locator, citation.source_state,
+            "tool=confirm_source request store_kind=%r location=%r locator=%r source_state=%r vote=%r reason=%r",
+            citation.store_kind, citation.location, citation.locator, citation.source_state, vote, reason,
         )
         identity = _authorize("confirm_source", token)
-        result = confirm_source(db, citation, identity.email, resolver)
+        result = confirm_source(db, citation, identity.email, resolver, vote, reason, comment)
         logger.info("tool=confirm_source result %s", result.model_dump())
         return result
 

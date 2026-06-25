@@ -31,14 +31,20 @@ class ConfirmationsResult(BaseModel):
     confirmations: list[ConfirmationRow]
 
 
-# Upsert: one confirmation per user per source. The content-state marker is non-key
-# state, so re-confirming the same source updates the marker (and the timestamp) instead
-# of inserting a second row — so a resolvable confirmation is always "recorded".
+# The two reasons a down vote can carry. An up vote carries none.
+DOWN_REASONS = {"bad-retrieval", "wrong-content"}
+
+# Upsert: one confirmation per user per source. The vote/reason/comment and the content-state
+# marker are all non-key state, so re-voting the same source (flip up<->down or change reason)
+# updates that row in place instead of inserting a second — a resolvable vote is always
+# "recorded". The DO UPDATE set-list overwrites every non-key field so a flip fully replaces
+# the prior vote rather than leaving a stale reason/comment behind.
 _INSERT = """
-INSERT INTO confirmations (store_kind, location, locator, source_state, confirmed_by)
-VALUES (%(store_kind)s, %(location)s, %(locator)s, %(source_state)s, %(confirmed_by)s)
+INSERT INTO confirmations (store_kind, location, locator, source_state, confirmed_by, vote, reason, comment)
+VALUES (%(store_kind)s, %(location)s, %(locator)s, %(source_state)s, %(confirmed_by)s, %(vote)s, %(reason)s, %(comment)s)
 ON CONFLICT (confirmed_by, store_kind, location, locator)
-DO UPDATE SET source_state = EXCLUDED.source_state, created_at = now()
+DO UPDATE SET source_state = EXCLUDED.source_state, vote = EXCLUDED.vote,
+              reason = EXCLUDED.reason, comment = EXCLUDED.comment, created_at = now()
 """
 
 # `id` is a stable tiebreak so rows with identical created_at (e.g. same-now() re-confirms)
@@ -53,14 +59,39 @@ ORDER BY created_at, id
 
 
 def confirm_source(
-    db: Database, citation: Citation, confirmed_by: str, resolver: CitationResolver
+    db: Database,
+    citation: Citation,
+    confirmed_by: str,
+    resolver: CitationResolver,
+    vote: str = "up",
+    reason: Optional[str] = None,
+    comment: Optional[str] = None,
 ) -> ConfirmResult:
-    """Record a confirmation against a cited source. Rejects an unresolvable citation;
-    otherwise upserts to one row per user per source — re-confirming an edited source
-    updates the stored content-state marker to what the user just vouched for."""
+    """Record a signed vote on a cited source. `vote` is 'up' (right) or 'down' (wrong);
+    a down vote names a `reason` ('bad-retrieval' | 'wrong-content'), an up vote names none.
+    `comment` is an optional free-text note, available to any vote. Rejects an unresolvable
+    citation or a malformed vote; otherwise upserts to one row per user per source — re-voting
+    (flip up<->down or change reason) replaces the prior vote rather than stacking a second."""
     if not resolver.resolve(citation):
         return ConfirmResult(status="rejected", reason="unresolvable_citation")
-    params = {**citation.model_dump(), "confirmed_by": confirmed_by}
+    reason = reason or None
+    comment = comment or None
+    if vote not in ("up", "down"):
+        return ConfirmResult(status="rejected", reason="invalid_vote")
+    if vote == "down":
+        if reason is None:
+            return ConfirmResult(status="rejected", reason="missing_reason")
+        if reason not in DOWN_REASONS:
+            return ConfirmResult(status="rejected", reason="invalid_reason")
+    elif reason is not None:
+        return ConfirmResult(status="rejected", reason="reason_on_upvote")
+    params = {
+        **citation.model_dump(),
+        "confirmed_by": confirmed_by,
+        "vote": vote,
+        "reason": reason,
+        "comment": comment,
+    }
     with db.connection() as conn:
         conn.execute(_INSERT, params)
         conn.commit()
