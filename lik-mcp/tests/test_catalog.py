@@ -180,6 +180,45 @@ def test_search_category_prefilter(db):
     assert subjects == ["project: Atlas North"]
 
 
+def test_search_empty_query_is_empty(db):
+    """An empty or whitespace query must not degenerate into match-all."""
+    _seed_index(db, "project: Atlas", "project: Borealis")
+
+    for q in ("", "   "):
+        result = search_catalog_entries(db, "index", q)
+        assert result.count == 0
+        assert result.entries == []
+
+
+def test_search_limit_clamped(db):
+    """Degenerate limits neither error nor defeat the bound: 0/negative clamp up to >=1,
+    oversized clamps down to the cap (50)."""
+    _seed_index(db, *[f"project: Atlas {i}" for i in range(3)])
+
+    # 0 and negative would otherwise return nothing / raise in Postgres.
+    assert search_catalog_entries(db, "index", "Atlas", limit=0).count >= 1
+    assert search_catalog_entries(db, "index", "Atlas", limit=-5).count >= 1
+    # Oversized is accepted (no error) and bounded by available rows.
+    assert search_catalog_entries(db, "index", "Atlas", limit=10_000).count == 3
+
+
+def test_search_like_metacharacters_are_literal(db):
+    """`%` in the query is matched literally, not as an ILIKE wildcard (no over-match)."""
+    _seed_index(db, "project: Atlas", "project: Borealis", "project: 50% target")
+
+    result = search_catalog_entries(db, "index", "%")
+    # Only the row containing a literal '%' matches; '%' must not match every row.
+    assert [e["subject"] for e in result.entries] == ["project: 50% target"]
+
+
+def test_search_min_similarity_threshold(db):
+    """A high min_similarity excludes a fuzzy (non-substring) match that the default admits."""
+    _seed_index(db, "project: Atlas")
+
+    assert search_catalog_entries(db, "index", "Atals").count == 1  # default 0.3 admits
+    assert search_catalog_entries(db, "index", "Atals", min_similarity=0.99).count == 0
+
+
 def test_search_scoped_to_entry_type(db):
     """Search never returns rows of another entry_type, even on a subject match."""
     _seed_index(db, "project: Atlas")

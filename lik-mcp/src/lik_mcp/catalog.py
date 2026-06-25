@@ -151,17 +151,30 @@ def search_catalog_entries(
     isn't diluted by a long subject (e.g. "Atals" still matches "project: Atlas"). The
     substring arm keeps partials that fall below the similarity floor. `category`, when
     given, is an exact-match pre-filter (it is not fuzzy-matched; note that index rows
-    currently leave category NULL). No match is a clean empty result, never an error —
-    mirrors lookup/list. Like those, it applies no ACL filtering."""
+    currently leave category NULL). An empty/whitespace query is a clean empty result (it
+    must not degenerate into a match-all), and `limit` is clamped to a sane range so a
+    caller can neither error nor pull an unbounded page. No match is a clean empty result,
+    never an error — mirrors lookup/list. Like those, it applies no ACL filtering.
+
+    The gin_trgm_ops index on `subject` accelerates the ILIKE arm; the word_similarity arm
+    is computed over the entry_type-filtered subset (narrowed by the composite PK). Fine at
+    thousands of rows; if a single entry_type grows much larger, switch to a GiST
+    gist_trgm_ops index and the `<%` operator to index the fuzzy arm."""
+    if not query.strip():
+        return SearchResult(count=0)
+    limit = max(1, min(limit, 50))
+    # Escape LIKE metacharacters so a literal % or _ in the query isn't treated as a
+    # wildcard — the substring arm should match the user's literal text, not over-match.
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     sql = [
         "SELECT *, word_similarity(%(query)s, subject) AS score FROM catalog",
         "WHERE entry_type = %(entry_type)s",
-        "AND (subject ILIKE %(like)s OR word_similarity(%(query)s, subject) >= %(min)s)",
+        "AND (subject ILIKE %(like)s ESCAPE '\\' OR word_similarity(%(query)s, subject) >= %(min)s)",
     ]
     params: dict = {
         "entry_type": entry_type,
         "query": query,
-        "like": f"%{query}%",
+        "like": f"%{escaped}%",
         "min": min_similarity,
         "limit": limit,
     }
