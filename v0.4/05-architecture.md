@@ -122,3 +122,33 @@ All updates propagate/assign ACL metadata and register location in the Catalog.
 - **Confirmations** → non-recomputable data; attributed; stored in the service-fronted store (via MCP), recovered by backup.
 - **The Catalog** → DL topology, written by the skill service account only; reads stay open.
 - **DL writes** → only computed data, the Catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
+
+## 7. What an MCP service for a Data Source must provide
+
+Every DS is reached through an **MCP service** — the one interface agents, skills, apps, and the Level 0 tools use to read and write it. Adding a new DS means standing up an MCP service that meets the requirements below. They are written to be **general to any DS**: a requirement pinned to one source's quirks (a Confluence page ID, a Jira field) would break on the next source, so each is stated in store-agnostic terms and realized with whatever the specific store supports.
+
+### 7.1 Capabilities the service exposes
+
+- **Search / find** — turn a request into candidate records. This is what a <u>Strategy</u> §1.3 Query skill calls to locate the right DS records, and what a §2 DL-creation skill calls to gather inputs. Keyed or text search is the floor; richer matching is optional per store.
+- **Fetch by pointer** — resolve a `location` (plus optional `locator` for a sub-location) to the actual content. This powers citation resolution, the confirmation step that shows a user the exact source, and re-derivation.
+- **Write** — create or update a record, following the fixed write model (§6): new knowledge, human-verified summaries, and provenance-marked DL artifacts go to the DS; corrections guide the user to the underlying record rather than overwriting silently.
+
+### 7.2 Identity and permissions
+
+- **Run under the caller's verified identity.** Every read and write happens on behalf of the signed-in user, via token verification and on-behalf-of exchange across the `agent → MCP → DS` hop (<u>Access Control</u>). The user only ever sees what they could see in the DS directly.
+- **Lean on the DS's native permissions.** The MCP service adds **no separate enforcement layer** — the DS decides what each request returns. New data written through it inherits the DS's protections automatically.
+- **Support a non-user service identity** for DL-creation skills (<u>Strategy</u> §2): a least-privilege, per-DS service principal with keyless, rotated, audit-logged credentials, distinct from the end-user SSO path.
+- **Require a verifiable end-user assertion at the third-party boundary.** When a Level 0 tool is repointed at the service, reject service-credential-only requests — the service must always know *which person* it is acting for (<u>Access Control</u>).
+
+### 7.3 Citation and freshness support
+
+- **Return a structured, resolvable reference** for every record, in the shape the Catalog and confirmations already use: `store_kind + location + locator + source_state`. An answer that can't produce this can't be cited, and an uncited answer can't be confirmed (<u>Strategy</u> §1.3, §3.1).
+- **Expose a content-state marker (`source_state`).** An opaque per-record signal — a native change signal where the DS offers one, otherwise a content hash — compared by **equality, not ordering**. It drives staleness/drift detection (§2) and "confirmed but edited since" (§3.1).
+- **Expose a last-updated timestamp** for each record, so freshness signals (§2) and the confirmation step ("title + last-updated") have something to show.
+
+### 7.4 Provenance and overwrite safety
+
+- **Read and write the tags that travel with a DL output** (§2) — `discovery-layer`, provenance — using whatever the store supports (a column, a label, a page property); no bespoke tagging system.
+- **Reveal who last wrote a record** — version-history author where the store is versioned, a provenance column where it isn't — so a skill can apply the overwrite-safety check (§5) and overwrite only its own prior output.
+
+The Catalog's own store is reached through this **same MCP interface** (§3), so the contract above spans both the Data Sources and DL's service-fronted store.
