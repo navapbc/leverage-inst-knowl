@@ -218,3 +218,9 @@ A local/test harness with throwaway data, not a production service. Until real s
 - Governed-writer controls: keyless/rotated credentials, least privilege, audit logging.
 - Confirmation backup/retention, plus rate-limiting / minimum-distinct-confirmer thresholds.
 - The producer (DL-creation) and Query skills that call this service.
+
+**Confirmation table maintenance/management**
+
+- Age out old confirmations for scalability.
+- Migrate/Capture trustworthiness in original DS records and archive confirmation signals for scalability.
+- Correct DS record for negative confirmations where `reason`=`wrong-content`.
