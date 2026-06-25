@@ -58,6 +58,14 @@ class ListResult(BaseModel):
     entries: list[dict] = Field(default_factory=list)
 
 
+class SearchResult(BaseModel):
+    """Ranked candidate rows from a partial/fuzzy search. Each entry carries a `score`
+    (trigram similarity to the query, 0..1). Bounded by `limit` — never the full table."""
+
+    count: int
+    entries: list[dict] = Field(default_factory=list)
+
+
 _UPSERT = """
 INSERT INTO catalog (
     entry_type, subject, location, store_kind, locator, provenance, verification,
@@ -124,3 +132,44 @@ def list_catalog_entries(db: Database, entry_type: str) -> ListResult:
         ).fetchall()
     entries = [_serialize(row) for row in rows]
     return ListResult(count=len(entries), entries=entries)
+
+
+def search_catalog_entries(
+    db: Database,
+    entry_type: str,
+    query: str,
+    *,
+    category: Optional[str] = None,
+    limit: int = 10,
+    min_similarity: float = 0.3,
+) -> SearchResult:
+    """Partial + fuzzy search on `subject` within one entry_type, returning the top
+    `limit` rows ranked by word similarity (highest first). A row matches when its subject
+    contains the query as a substring (ILIKE) OR the query is trigram-similar to some
+    extent of the subject (`word_similarity` >= `min_similarity`, which catches typos and
+    reordered words). `word_similarity` — not plain `similarity` — is used so a short query
+    isn't diluted by a long subject (e.g. "Atals" still matches "project: Atlas"). The
+    substring arm keeps partials that fall below the similarity floor. `category`, when
+    given, is an exact-match pre-filter (it is not fuzzy-matched; note that index rows
+    currently leave category NULL). No match is a clean empty result, never an error —
+    mirrors lookup/list. Like those, it applies no ACL filtering."""
+    sql = [
+        "SELECT *, word_similarity(%(query)s, subject) AS score FROM catalog",
+        "WHERE entry_type = %(entry_type)s",
+        "AND (subject ILIKE %(like)s OR word_similarity(%(query)s, subject) >= %(min)s)",
+    ]
+    params: dict = {
+        "entry_type": entry_type,
+        "query": query,
+        "like": f"%{query}%",
+        "min": min_similarity,
+        "limit": limit,
+    }
+    if category is not None:
+        sql.append("AND category = %(category)s")
+        params["category"] = category
+    sql.append("ORDER BY score DESC, subject LIMIT %(limit)s")
+    with db.connection() as conn:
+        rows = conn.execute("\n".join(sql), params).fetchall()
+    entries = [_serialize(row) for row in rows]
+    return SearchResult(count=len(entries), entries=entries)
