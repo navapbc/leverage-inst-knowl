@@ -33,13 +33,16 @@ For each result, collect:
 - `title` → the project name
 - `webUrl` → the page URL
 - page **ID** → the Confluence page ID
-- `space.name`, `summary`, `lastModified`, `author.displayName` → context (optional)
+- `lastModified` → the page's content-state marker (`source_state`, see Step 3)
+- `space.name`, `summary`, `author.displayName` → context (optional)
 
 The `label = "project-index"` CQL is the canonical source of truth — it matches exactly what
 the Project Index Directory renders via its Page Properties Report macro.
 
-**Note:** The Confluence MCP connector does not expose page version numbers. Do not attempt
-to collect a version from the search result — use a fetch timestamp instead (see Step 2).
+**Note:** The Confluence MCP connector does not expose page version numbers, but it does
+return `lastModified` on the search result. Use that as the page's opaque content-state
+marker (`source_state`) — it changes whenever the page is edited, which is all "edited
+since" detection needs (equality comparison, no ordering).
 
 ### Step 2 — Read each page's Update History
 
@@ -79,7 +82,7 @@ For each page, call `register_catalog_entry` (the lik-mcp tool) with an `entry` 
 - `location`: the page `webUrl`
 - `store_kind`: `"confluence"`
 - `locator`: the Confluence page ID  *(so a consumer can `getConfluencePage` directly)*
-- `source_refs`: `[{ "id": "<pageId>", "fetched_at": "<current UTC timestamp in ISO 8601>" }]`  *(powers staleness checks; `version` is omitted because the Confluence MCP connector does not expose it — use `fetched_at` as the proxy recency signal instead)*
+- `source_refs`: `[{ "id": "<pageId>", "source_state": "<lastModified from the Step 1 search result>" }]`  *(powers staleness checks; `source_state` is the page's opaque content-state marker — here its `lastModified` — compared by equality to detect "edited since")*
 - `verification`: `"human-verified"` or `"unverified"` — from Step 2
 - `verified_by`: the "Approved By" value from the Update History table, or null
 - `verified_at`: the "Date" value (ISO 8601 UTC), or null

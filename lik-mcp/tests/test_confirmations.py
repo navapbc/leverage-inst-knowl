@@ -1,5 +1,8 @@
 import re
 
+import pytest
+from pydantic import ValidationError
+
 from lik_mcp.citations import Citation, ShapeResolver
 from lik_mcp.confirmations import confirm_source, read_confirmations
 
@@ -18,6 +21,13 @@ def _citation_no_state(**overrides) -> Citation:
     base = dict(store_kind="confluence", location="page:123", locator="")
     base.update(overrides)
     return Citation(**base)
+
+
+def test_citation_rejects_removed_version_field(db):
+    """Citation forbids extra fields, so a caller still sending the removed `version` fails
+    loudly rather than silently recording an empty marker."""
+    with pytest.raises(ValidationError):
+        Citation(store_kind="confluence", location="page:1", version="v5")
 
 
 def test_unresolvable_citation_rejected(db):

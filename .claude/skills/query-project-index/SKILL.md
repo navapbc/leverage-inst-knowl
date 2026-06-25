@@ -79,29 +79,32 @@ For each page you're about to cite, build a citation:
 - `store_kind`: `"confluence"`
 - `location`: the page URL
 - `locator`: the page ID
-- `version`: the **current** page version (from `getConfluencePage` in this run)
+- `source_state`: the live page's `lastModified` (from `getConfluencePage` in this run) — its
+  opaque content-state marker, the **same field** the `sync-catalog-from-project-indexes` skill
+  records, so stored and live markers compare correctly.
 
-Call `read_confirmations` with that citation. It returns confirmations across **all versions** of
-the source, each carrying its own `version`. Split them:
-- **current-version** confirmations (row `version` == the live page version), and
-- **prior-version** confirmations (any other version).
+Call `read_confirmations` with that citation **and** `current_source_state` set to the same live
+`lastModified`. It returns one row per user who confirmed the source, each carrying:
+- `confirmed_by`, and
+- `edited_since` — `true` if that user vouched for content that has since changed (their stored
+  marker ≠ the live marker), `false` if their confirmation still matches the live content.
 
-Rank sources with current-version trust weighed more heavily than prior-version trust, and present
-the answer with each citation annotated, e.g. *"(3 confirmations on this version, 1 on an earlier
-version)"*.
+Rank sources with `edited_since = false` confirmations weighed more heavily than `edited_since =
+true` ones, and present the answer with each citation annotated, e.g. *"(3 confirmations, 1 on a
+since-edited version)"*.
 
 ## Confirm (after answering)
 
 Offer: *"Confirm any of these sources as correct? Reply with the source number."* On a pick, call
-`confirm_source` with the **same citation** (the live page `version`), passing the user's email as
-the token so `confirmed_by` is the real person, not the service account. Report the result:
-- `recorded` — confirmation saved.
-- `duplicate` — this user already confirmed this source-version (no-op).
+`confirm_source` with the **same citation** (the live `lastModified` as `source_state`), passing
+the user's email as the token so `confirmed_by` is the real person, not the service account.
+Re-confirming a source updates the user's stored marker to the current content. Report the result:
+- `recorded` — confirmation saved (or updated, if they had confirmed an earlier version).
 - `rejected` — the citation didn't resolve; say so and don't retry.
 
 ## Notes
 
-- Use one consistent `version` per source within a run (the live page version) so the confirmation
-  you write and the ones you read line up.
+- Use the live page's `lastModified` as the `source_state` consistently within a run — the value
+  you write and the `current_source_state` you read with must be the same field so they line up.
 - This skill is self-contained — it does not fetch instructions from Confluence.
 - Reads are open; writes (confirmations) are attributed to the verified caller.

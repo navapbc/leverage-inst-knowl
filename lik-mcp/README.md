@@ -13,8 +13,8 @@ and [../docs/brainstorms/2026-06-24-01-catalog-confirmations-mcp-service-require
 - `register_catalog_entry(entry)` — upsert a Catalog row on `(entry_type, subject)`.
 - `lookup_catalog_entry(entry_type, subject)` — one exact-match lookup; a miss is a clean not-found.
 - `list_catalog_entries(entry_type)` — every Catalog row for one `entry_type`, ordered by subject; bounded by the discovery key, not a free-form predicate.
-- `confirm_source(citation)` — record a confirmation; rejects unresolvable citations, dedupes per user per source-version.
-- `read_confirmations(citation)` — accumulated confirmations for one cited source-version.
+- `confirm_source(citation)` — record a confirmation; rejects unresolvable citations, one row per user per source (re-confirming updates the stored content-state marker).
+- `read_confirmations(citation, current_source_state=None)` — accumulated confirmations for one cited source, one row per user; pass the live marker to flag each row's `edited_since`.
 
 There is **no** generic query tool by design.
 

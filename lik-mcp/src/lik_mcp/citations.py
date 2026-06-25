@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 # The store kinds the Catalog knows how to point at (v0.4/05-architecture.md).
 KNOWN_STORE_KINDS = {"gdoc", "gsheet", "confluence", "postgres", "bigquery"}
@@ -11,7 +11,12 @@ class Citation(BaseModel):
     (the same shape the Catalog uses). `locator` and `source_state` normalize to '' so they
     join reliably. `source_state` is an opaque content-state marker (a native change signal
     or a content hash, not necessarily a version number); it is compared by equality to
-    detect "edited since" and is optional — defaults to '' when the store supplies none."""
+    detect "edited since" and is optional — defaults to '' when the store supplies none.
+    Extra fields are forbidden so a caller still sending the removed `version` fails loudly
+    at the contract boundary instead of having it silently dropped (which would record an
+    empty marker and make "edited since" never fire)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     store_kind: str
     location: str

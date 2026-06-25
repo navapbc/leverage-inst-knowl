@@ -33,22 +33,22 @@ class ConfirmationsResult(BaseModel):
 
 # Upsert: one confirmation per user per source. The content-state marker is non-key
 # state, so re-confirming the same source updates the marker (and the timestamp) instead
-# of inserting a second row. RETURNING id fires on both insert and update, so a resolvable
-# confirmation is always "recorded".
+# of inserting a second row — so a resolvable confirmation is always "recorded".
 _INSERT = """
 INSERT INTO confirmations (store_kind, location, locator, source_state, confirmed_by)
 VALUES (%(store_kind)s, %(location)s, %(locator)s, %(source_state)s, %(confirmed_by)s)
 ON CONFLICT (confirmed_by, store_kind, location, locator)
 DO UPDATE SET source_state = EXCLUDED.source_state, created_at = now()
-RETURNING id
 """
 
+# `id` is a stable tiebreak so rows with identical created_at (e.g. same-now() re-confirms)
+# read back in a deterministic order.
 _SELECT = """
 SELECT id, confirmed_by, source_state, created_at
 FROM confirmations
 WHERE store_kind = %(store_kind)s AND location = %(location)s
   AND locator = %(locator)s AND archived_at IS NULL
-ORDER BY created_at
+ORDER BY created_at, id
 """
 
 
