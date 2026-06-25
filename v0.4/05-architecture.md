@@ -47,7 +47,7 @@ DL's directory — a "yellow pages" you consult to find *where* an output lives 
 
 It is the one un-pointed-to artifact, so it lives at a **well-known address** agents know a priori — a **service-fronted store (a database) reached through the same MCP interface agents use for the Data Sources**. Because it's the single entry point everyone hits first, **all writes go through a DL-creation skill's service account** — autonomously for rows it computes, under a verified human assertion for human-created rows; no one edits rows directly. Reads stay open. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring.
 
-**A database from the start.** The Catalog lives in a service-fronted store — **Postgres (or any indexed DB)**, reached through MCP — so consumers do one `(entry_type, subject)` lookup at any scale. See <u>Storage</u>.
+**A database from the start.** The Catalog lives in a service-fronted store — **Postgres (or any indexed DB)**, reached through MCP — so consumers do one `(entry_type, subject)` lookup at any scale. Keyed lookup is the floor; an implementation **may** add partial or fuzzy matching on the keys (e.g., `subject ILIKE`, trigram index) when it helps consumers place a question — the store choice doesn't constrain this. See <u>Storage</u>.
 
 ### Catalog schema
 
