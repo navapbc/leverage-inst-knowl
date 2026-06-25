@@ -2,6 +2,10 @@
 -- Idempotent: safe to run on an empty DB via the Docker entrypoint or by hand
 --   (`psql "$CONNINFO" -f db/init.sql`).
 
+-- Trigram matching powers partial + fuzzy Catalog search on `subject`
+-- (see catalog_subject_trgm below). Requires CREATE privilege on first run.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- The Catalog: a directory mapping (entry_type, subject) -> where an output lives.
 -- Columns follow v0.4/05-architecture.md section 3.
 CREATE TABLE IF NOT EXISTS catalog (
@@ -32,6 +36,10 @@ CREATE TABLE IF NOT EXISTS catalog (
 
 -- Index the ACL hint for later query-time filtering.
 CREATE INDEX IF NOT EXISTS catalog_access_groups_gin ON catalog USING GIN (access_groups);
+
+-- Trigram index on `subject` to accelerate partial (ILIKE) and fuzzy (similarity)
+-- matching in search_catalog_entries.
+CREATE INDEX IF NOT EXISTS catalog_subject_trgm ON catalog USING GIN (subject gin_trgm_ops);
 
 -- Confirmation signals: durable, non-recomputable human trust. `locator` and `version`
 -- are NOT NULL DEFAULT '' so the dedup key is reliable (a NULL never equals a NULL in UNIQUE).
