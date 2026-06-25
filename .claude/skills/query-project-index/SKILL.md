@@ -79,12 +79,21 @@ For each page you're about to cite, build a citation:
 - `store_kind`: `"confluence"`
 - `location`: the page URL
 - `locator`: the page ID
-- `source_state`: the live page's `lastModified` (from `getConfluencePage` in this run) — its
-  opaque content-state marker, the **same field** the `sync-catalog-from-project-indexes` skill
-  records, so stored and live markers compare correctly.
+- `source_state`: the live page's content-state marker — the **SHA-256 hex digest of its
+  markdown body** (from the `getConfluencePage` you already ran to read the page). Compute it
+  exactly as the marker recipe below specifies.
+
+**Content-state marker recipe (shared with `sync-catalog-from-project-indexes`).** Take the
+`body` field **verbatim** from `getConfluencePage(pageId, contentFormat: "markdown")`, write it
+to a file (no added trailing newline, no normalization), and hash it: `shasum -a 256 FILE | cut
+-d' ' -f1` (or `sha256sum FILE | cut -d' ' -f1`). The sync skill stores `source_state` this
+identical way, so a live marker matches the stored one whenever content is unchanged. The
+Confluence connector exposes no stable native signal (no version number; `lastModified` is only
+a relative string like `"about 5 hours ago"`), so a body hash is the only reliable marker — see
+[../../../limitations.md](../../../limitations.md).
 
 Call `read_confirmations` with that citation **and** `current_source_state` set to the same live
-`lastModified`. It returns one row per user who confirmed the source, each carrying:
+body hash. It returns one row per user who confirmed the source, each carrying:
 - `confirmed_by`, and
 - `edited_since` — `true` if that user vouched for content that has since changed (their stored
   marker ≠ the live marker), `false` if their confirmation still matches the live content.
@@ -96,7 +105,7 @@ since-edited version)"*.
 ## Confirm (after answering)
 
 Offer: *"Confirm any of these sources as correct? Reply with the source number."* On a pick, call
-`confirm_source` with the **same citation** (the live `lastModified` as `source_state`), passing
+`confirm_source` with the **same citation** (the live body hash as `source_state`), passing
 the user's email as the token so `confirmed_by` is the real person, not the service account.
 Re-confirming a source updates the user's stored marker to the current content. Report the result:
 - `recorded` — confirmation saved (or updated, if they had confirmed an earlier version).
@@ -104,7 +113,7 @@ Re-confirming a source updates the user's stored marker to the current content. 
 
 ## Notes
 
-- Use the live page's `lastModified` as the `source_state` consistently within a run — the value
-  you write and the `current_source_state` you read with must be the same field so they line up.
+- Compute the body-hash `source_state` once per page within a run and reuse it for both the
+  `current_source_state` you read with and the citation you confirm with, so they line up.
 - This skill is self-contained — it does not fetch instructions from Confluence.
 - Reads are open; writes (confirmations) are attributed to the verified caller.
