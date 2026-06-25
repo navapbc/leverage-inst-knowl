@@ -22,9 +22,9 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 
 ## Requirements
 
-- R1. `sync-catalog-from-project-indexes` fetches project-index pages via the canonical CQL (`label = "project-index"`) and registers one Catalog row per page, idempotently.
+- R1. `lik-sync-catalog-from-project-indexes` fetches project-index pages via the canonical CQL (`label = "project-index"`) and registers one Catalog row per page, idempotently.
 - R2. Rows are keyed `(entry_type="index", subject="project: <title>")`, `store_kind="confluence"`, with `location`, `locator` (page ID), and `source_refs` (page ID + version) populated.
-- R3. `query-project-index` runs the three-level escalation in order, requiring explicit user confirmation before Level 1→2 and before 2→3.
+- R3. `lik-query-project-index` runs the three-level escalation in order, requiring explicit user confirmation before Level 1→2 and before 2→3.
 - R4. The query skill ranks cited sources by `read_confirmations` count and offers `confirm_source` after answering; citation `version` is sourced consistently within a run.
 - R5. New intent-named MCP tool `list_catalog_entries(entry_type)`: returns all rows for one `entry_type`, no free-form predicate, miss returns empty list, reads stay open.
 - R6. A persistent `likdb_local` holds the synced catalog and survives `pytest` (which truncates `likdb_test`); switching the server between the two is env-only.
@@ -162,7 +162,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 
 ---
 
-- U3. **`sync-catalog-from-project-indexes` skill (DL-creation)**
+- U3. **`lik-sync-catalog-from-project-indexes` skill (DL-creation)**
 
 **Goal:** A self-contained skill that crawls Confluence project-index pages and registers one Catalog row each via `register_catalog_entry`, idempotently.
 
@@ -171,13 +171,13 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 **Dependencies:** U1 (a DB to write to for a real run); conceptually independent of U2.
 
 **Files:**
-- Create: `sync-catalog-from-project-indexes/SKILL.md`
+- Create: `lik-sync-catalog-from-project-indexes/SKILL.md`
 
 **Approach:**
 - Mirror `discovery-catalog-sync/SKILL.md`'s structure and canonical CQL, but swap the Confluence-table sink for per-page `register_catalog_entry` calls.
 - Frontmatter `name` + `description` with triggers ("sync project indexes into the catalog", "refresh the project-index catalog").
 - Step 1 — `searchConfluenceUsingCql` with `cql: label = "project-index" AND type = page`, limit 250; collect `title`, `webUrl`, `space.name`, `summary`, `version`/`lastModified`, page ID, `author`.
-- Step 2 — per page, build the `CatalogEntry`: `entry_type="index"`, `subject="project: <title>"`, `location=webUrl`, `store_kind="confluence"`, `locator=<pageId>`, `source_refs=[{id:<pageId>, version:<version>}]`, `category`/`access_groups` left default, `computed_by="sync-catalog-from-project-indexes"`, `row_provenance="skill"`; call `register_catalog_entry(entry)`.
+- Step 2 — per page, build the `CatalogEntry`: `entry_type="index"`, `subject="project: <title>"`, `location=webUrl`, `store_kind="confluence"`, `locator=<pageId>`, `source_refs=[{id:<pageId>, version:<version>}]`, `category`/`access_groups` left default, `computed_by="lik-sync-catalog-from-project-indexes"`, `row_provenance="skill"`; call `register_catalog_entry(entry)`.
 - Step 3 — tally `RegisterResult.status` (`inserted` vs `updated`) and report `N pages seen, X inserted, Y updated`.
 - Notes — idempotent upsert on the key (re-runs update in place); run on demand only; writes to whatever DB the MCP server points at (`likdb_local` for manual testing); the CQL is the canonical source of truth.
 
@@ -223,7 +223,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 
 ---
 
-- U4. **`query-project-index` skill (Query + confirmations)**
+- U4. **`lik-query-project-index` skill (Query + confirmations)**
 
 **Goal:** A self-contained skill that answers project questions from the Catalog via the three-level user-gated escalation, ranks cited sources by confirmation trust (current and prior version), and lets the user confirm a source.
 
@@ -232,7 +232,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 **Dependencies:** U2 (Level 2 needs `list_catalog_entries`); U5 (cross-version ranking); U3 + U1 for a populated DB to query in a real run.
 
 **Files:**
-- Create: `query-project-index/SKILL.md`
+- Create: `lik-query-project-index/SKILL.md`
 
 **Approach:**
 - Self-contained (no live-instructions fetch). Frontmatter `name` + `description` with triggers like the existing `dl-project-index-query` description, minus the Step 0 indirection.

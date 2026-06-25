@@ -261,14 +261,14 @@ Two fields in the Discovery Layer store require version numbers that the Conflue
 
 - U6. **Update skill documentation to reflect new `source_refs` shape**
 
-**Goal:** Update the `sync-catalog-from-project-indexes` SKILL.md so future skill invocations populate `fetched_at` and omit the hardcoded `version: "1"` that triggered this refactor.
+**Goal:** Update the `lik-sync-catalog-from-project-indexes` SKILL.md so future skill invocations populate `fetched_at` and omit the hardcoded `version: "1"` that triggered this refactor.
 
 **Requirements:** R3, R4
 
 **Dependencies:** U3
 
 **Files:**
-- Modify: `.claude/skills/sync-catalog-from-project-indexes/SKILL.md`
+- Modify: `.claude/skills/lik-sync-catalog-from-project-indexes/SKILL.md`
 
 **Approach:**
 - In Step 2 ("Register one Catalog row per page"), update the `source_refs` example from `[{ "id": "<pageId>", "version": "<version>" }]` to `[{ "id": "<pageId>", "fetched_at": "<ISO 8601 timestamp at time of sync>" }]`.

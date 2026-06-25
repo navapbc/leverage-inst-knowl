@@ -17,7 +17,7 @@ and deployed differ only by environment, not by serving shape.
 
 ## Problem Frame
 
-Testing the skills (`sync-catalog-from-project-indexes`, `query-project-index`) in Claude
+Testing the skills (`lik-sync-catalog-from-project-indexes`, `lik-query-project-index`) in Claude
 Desktop means standing the server up locally. The current README path makes the tester install
 uv, provision the Python 3.14 environment, create `likdb_local`, and hand-edit
 `claude_desktop_config.json` with absolute paths to `uv` and the checkout — and Desktop doesn't
@@ -53,7 +53,7 @@ networking, or startup path the deployed one uses.
 - F2. Populate then query
   - **Trigger:** Catalog is empty on first run.
   - **Actors:** A1, A2, A3, A4
-  - **Steps:** Run `sync-catalog-from-project-indexes` to populate → run `query-project-index` with a question → confirm a source.
+  - **Steps:** Run `lik-sync-catalog-from-project-indexes` to populate → run `lik-query-project-index` with a question → confirm a source.
   - **Outcome:** Tester gets a real, confirmation-ranked answer end to end.
   - **Covered by:** R4, R5
 

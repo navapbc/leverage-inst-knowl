@@ -9,8 +9,8 @@ topic: project-index-catalog-skills
 
 Two agent skills that exercise the [lik-mcp](../../lik-mcp/README.md) Catalog end-to-end for manual testing, plus the one MCP tool they need:
 
-1. **`sync-catalog-from-project-indexes`** (DL-creation skill) — fetches every Confluence page tagged `project-index` and registers one Catalog row per page in Postgres via `register_catalog_entry`. Same source-of-truth and one-row-per-page model as the existing [discovery-catalog-sync/SKILL.md](../../discovery-catalog-sync/SKILL.md), but the sink is Postgres-behind-MCP, not a Confluence table.
-2. **`query-project-index`** (Query skill) — answers a user's question from the Catalog using a three-level, user-gated escalation: exact-match lookup → (on miss) list-and-scan → Confluence fallback. It **ranks cited sources by their confirmation count** (`read_confirmations`) and lets the user **confirm a cited source** (`confirm_source`) after answering.
+1. **`lik-sync-catalog-from-project-indexes`** (DL-creation skill) — fetches every Confluence page tagged `project-index` and registers one Catalog row per page in Postgres via `register_catalog_entry`. Same source-of-truth and one-row-per-page model as the existing [discovery-catalog-sync/SKILL.md](../../discovery-catalog-sync/SKILL.md), but the sink is Postgres-behind-MCP, not a Confluence table.
+2. **`lik-query-project-index`** (Query skill) — answers a user's question from the Catalog using a three-level, user-gated escalation: exact-match lookup → (on miss) list-and-scan → Confluence fallback. It **ranks cited sources by their confirmation count** (`read_confirmations`) and lets the user **confirm a cited source** (`confirm_source`) after answering.
 3. **`list_catalog_entries(entry_type)`** — a new intent-named MCP tool in lik-mcp, required by the query skill's Level 2. Bounded by `entry_type`; no free-form filtering.
 
 The point is dogfooding: prove the register → lookup → confirm round-trip exercises all four lik-mcp tools against a real Postgres, the way the README's deferred "producer and Query skills that call this service" anticipated.
@@ -28,8 +28,8 @@ The load-bearing constraint: the Catalog exposes exactly one read tool, `lookup_
 ## Actors
 
 - **A1. Tester (you)** — runs the skills by hand against the dockerized `likdb_test` DB in `LIK_ENV=local`/`test`, to verify the round-trip; also the **confirming user** whose verified identity (`confirmed_by`, stubbed in local/test) is recorded when confirming a cited source.
-- **A2. `sync-catalog-from-project-indexes`** — the producer skill; reads Confluence, writes Catalog rows under its own service identity (`computed_by`).
-- **A3. `query-project-index`** — the consumer skill; reads the Catalog and, when needed, Confluence, to answer a question; reads confirmations to rank sources and records the user's confirmations.
+- **A2. `lik-sync-catalog-from-project-indexes`** — the producer skill; reads Confluence, writes Catalog rows under its own service identity (`computed_by`).
+- **A3. `lik-query-project-index`** — the consumer skill; reads the Catalog and, when needed, Confluence, to answer a question; reads confirmations to rank sources and records the user's confirmations.
 - **A4. lik-mcp service** — owns Postgres; exposes `register_catalog_entry`, `lookup_catalog_entry`, the new `list_catalog_entries`, plus `confirm_source` / `read_confirmations`.
 - **A5. Confluence (Rovo MCP)** — the data source; `searchConfluenceUsingCql` / `getConfluencePage`.
 
@@ -38,7 +38,7 @@ The load-bearing constraint: the Catalog exposes exactly one read tool, `lookup_
 ## Key Flows
 
 ### F1. Sync the catalog from project-index pages
-- **Trigger:** tester runs `sync-catalog-from-project-indexes` ("sync project indexes into the catalog").
+- **Trigger:** tester runs `lik-sync-catalog-from-project-indexes` ("sync project indexes into the catalog").
 - **Steps:**
   1. `searchConfluenceUsingCql` with `cql: label = "project-index" AND type = page`, limit 250.
   2. For each result, build a `CatalogEntry`:
@@ -48,7 +48,7 @@ The load-bearing constraint: the Catalog exposes exactly one read tool, `lookup_
      - `store_kind = "confluence"`
      - `locator = <Confluence page ID>` (so a consumer can `getConfluencePage` directly)
      - `source_refs = [{ id: <pageId>, version: <lastModified or version> }]`
-     - `computed_by = "sync-catalog-from-project-indexes"`, `row_provenance = "skill"`
+     - `computed_by = "lik-sync-catalog-from-project-indexes"`, `row_provenance = "skill"`
      - leave provenance/verification/freshness/sensitivity at schema defaults
   3. Call `register_catalog_entry(entry)` per page (upsert on the key — re-running updates in place, never duplicates).
   4. Report a summary: N pages seen, X inserted, Y updated.
@@ -89,17 +89,17 @@ The load-bearing constraint: the Catalog exposes exactly one read tool, `lookup_
 
 ## Requirements
 
-- **R1.** `sync-catalog-from-project-indexes` fetches project-index pages via the same canonical CQL as `discovery-catalog-sync` (`label = "project-index"`).
+- **R1.** `lik-sync-catalog-from-project-indexes` fetches project-index pages via the same canonical CQL as `discovery-catalog-sync` (`label = "project-index"`).
 - **R2.** It registers exactly one Catalog row per page, keyed `(entry_type="index", subject="project: <title>")`, via `register_catalog_entry`; re-running is idempotent (upsert), reported as inserted vs. updated.
 - **R3.** Each row carries enough to be followed and freshness-checked later: `location` (webUrl), `store_kind="confluence"`, `locator` (page ID), and `source_refs` with the page ID + version/lastModified.
-- **R4.** `query-project-index` runs the three-level escalation in order, and **requires explicit user confirmation before leaving Level 1 for Level 2, and before Level 2 reaches Level 3**.
+- **R4.** `lik-query-project-index` runs the three-level escalation in order, and **requires explicit user confirmation before leaving Level 1 for Level 2, and before Level 2 reaches Level 3**.
 - **R5.** Level 1 maps the question to a `subject` and does one `lookup_catalog_entry`; on hit it follows the pointer and answers from the page.
 - **R6.** Level 3 falls back to Confluence CQL search over project-index pages; a Catalog miss or a dangling pointer never errors — it degrades to fallback.
 - **R7.** Manual-testing runs target a **persistent local database (`likdb_local`)**, not the disposable `likdb_test`; both skills assume `LIK_ENV=local` with the stub verifier, no real identity/ACL/prod. The synced Catalog must survive `pytest` runs (which `TRUNCATE`), so it cannot live in the test DB.
-- **R12.** Provision `likdb_local` as a second database in the same Postgres container: create it, then apply the schema with `scripts/init_db.py` (schema-only, never drops/truncates). The MCP server used for manual testing runs with `LIK_DB_NAME=likdb_local`; the test suite keeps `LIK_DB_NAME=likdb_test`. The existing `_test`-suffix gate already guarantees the suite can never truncate `likdb_local`. `sync-catalog-from-project-indexes` is run on demand only (it's an expensive Confluence crawl); `query-project-index` reads whatever the last sync left in `likdb_local`.
+- **R12.** Provision `likdb_local` as a second database in the same Postgres container: create it, then apply the schema with `scripts/init_db.py` (schema-only, never drops/truncates). The MCP server used for manual testing runs with `LIK_DB_NAME=likdb_local`; the test suite keeps `LIK_DB_NAME=likdb_test`. The existing `_test`-suffix gate already guarantees the suite can never truncate `likdb_local`. `lik-sync-catalog-from-project-indexes` is run on demand only (it's an expensive Confluence crawl); `lik-query-project-index` reads whatever the last sync left in `likdb_local`.
 - **R8.** New MCP tool `list_catalog_entries(entry_type)`: returns all rows for one `entry_type`, no free-form predicate, reads stay open, miss returns an empty list (not an error). Added to `catalog.py` + `server.py` with a unit test mirroring the existing catalog tests.
-- **R9.** Both skills are self-contained `SKILL.md` files at repo root (siblings of the existing two); `query-project-index` does **not** use the live-instructions-from-Confluence indirection that `dl-project-index-query` uses.
-- **R10.** Before presenting an answer, `query-project-index` calls `read_confirmations` for each cited source and uses the `count` to rank/weight sources, displaying the count alongside each citation. Citation `version` must match the page version the row was built from (carried in the row's `source_refs`), since confirmations are version-specific.
+- **R9.** Both skills are self-contained `SKILL.md` files at repo root (siblings of the existing two); `lik-query-project-index` does **not** use the live-instructions-from-Confluence indirection that `dl-project-index-query` uses.
+- **R10.** Before presenting an answer, `lik-query-project-index` calls `read_confirmations` for each cited source and uses the `count` to rank/weight sources, displaying the count alongside each citation. Citation `version` must match the page version the row was built from (carried in the row's `source_refs`), since confirmations are version-specific.
 - **R11.** After answering, the skill offers to confirm a cited source and, on the user's pick, calls `confirm_source` with the same `Citation` (same `version`); it reports `recorded` / `duplicate` / `rejected` without retrying. Identity is taken from the verified token, never placed in the payload.
 
 ---

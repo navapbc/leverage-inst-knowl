@@ -9,7 +9,7 @@
 The Catalog supports only exact-match lookup on its `(entry_type, subject)` key
 (`lik-mcp/src/lik_mcp/catalog.py:105-114`). When a caller doesn't know the exact
 subject string, the only fallback is `list_catalog_entries` — pull every row for an
-`entry_type` and scan terms in-memory (Level 2 in the `query-project-index` skill).
+`entry_type` and scan terms in-memory (Level 2 in the `lik-query-project-index` skill).
 
 That in-memory scan is the part that won't scale. The Catalog is expected to hold
 **thousands of rows across many `entry_type`s** soon. Returning the full list to the
@@ -57,7 +57,7 @@ exact-match `lookup_catalog_entry` stays as the Level 1 fast path.
 Surface it as a **new** MCP query tool alongside the existing ones (exact-match
 `lookup_catalog_entry` unchanged). (Exact tool name, params, and SQL are planning decisions.)
 
-### query-project-index skill change
+### lik-query-project-index skill change
 
 The new tool slots into **Level 1** as a fuzzy fallback after the exact lookup:
 
@@ -69,7 +69,7 @@ The new tool slots into **Level 1** as a fuzzy fallback after the exact lookup:
 3. On a fuzzy miss, fall through to **Level 2** (list + scan, ask first) and **Level 3**
    (Confluence fallback, ask first) — both **unchanged**.
 
-`.claude/skills/query-project-index/SKILL.md` — extend Level 1 (currently lines 24-31);
+`.claude/skills/lik-query-project-index/SKILL.md` — extend Level 1 (currently lines 24-31);
 leave Level 2 (33-45) and Level 3 (47-54) as-is.
 
 ### Approaches considered
@@ -88,7 +88,7 @@ leave Level 2 (33-45) and Level 3 (47-54) as-is.
 - A caller can find a row despite a typo or reordered words in the query term.
 - The query returns a bounded ranked candidate set, not the full `entry_type` table.
 - Exact-match `lookup_catalog_entry` behavior is unchanged.
-- `query-project-index` Level 1 calls the new fuzzy query on an exact miss (no widening
+- `lik-query-project-index` Level 1 calls the new fuzzy query on an exact miss (no widening
   prompt) and answers from a candidate hit; Level 2 and Level 3 behavior unchanged.
 
 ## Dependencies / Assumptions
@@ -112,4 +112,4 @@ leave Level 2 (33-45) and Level 3 (47-54) as-is.
 - `lik-mcp/db/init.sql:7-34` — schema; existing GIN index on `access_groups`
 - `v0.4/04-strategy.md:116-125` — Catalog design; line 120 permits optional partial/fuzzy matching on keys
 - `v0.4/05-architecture.md:40-89` — Catalog as cache/directory
-- `.claude/skills/query-project-index/SKILL.md:24-54` — Level 1/2/3 query escalation (Level 1 extended by this work)
+- `.claude/skills/lik-query-project-index/SKILL.md:24-54` — Level 1/2/3 query escalation (Level 1 extended by this work)

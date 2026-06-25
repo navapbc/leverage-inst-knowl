@@ -1,5 +1,5 @@
 ---
-name: query-project-index
+name: lik-query-project-index
 description: Answer questions about Nava's projects using the Discovery Layer Catalog in Postgres (the lik-mcp service) and the project-index pages it points to. Use whenever someone asks about past work, project capabilities, agencies Nava has worked with, technologies used, or anything answerable from vetted project-index pages. Triggers on questions like "what has Nava done with X?", "find projects related to Y", "which projects involve Z agency", "tell me about the <name> project". Do NOT use for HR/policy questions or general web research.
 ---
 
@@ -16,7 +16,7 @@ source is (`read_confirmations`) and offers to record the user's confirmation (`
 ## Prerequisites
 
 - The **lik-mcp** MCP service is connected (pointed at `likdb_local` for manual testing) and the
-  Catalog has been populated by the `sync-catalog-from-project-indexes` skill.
+  Catalog has been populated by the `lik-sync-catalog-from-project-indexes` skill.
 - The Atlassian (Confluence) MCP tools are available (for reading pages and the Level 3 fallback).
 
 Use the text the user passes to this skill as their question.
@@ -83,7 +83,7 @@ For each page you're about to cite, build a citation:
   markdown body** (from the `getConfluencePage` you already ran to read the page). Compute it
   exactly as the marker recipe below specifies.
 
-**Content-state marker recipe (shared with `sync-catalog-from-project-indexes`).** Take the
+**Content-state marker recipe (shared with `lik-sync-catalog-from-project-indexes`).** Take the
 `body` field **verbatim** from `getConfluencePage(pageId, contentFormat: "markdown")`, write it
 to a file (no added trailing newline, no normalization), and hash it: `shasum -a 256 FILE | cut
 -d' ' -f1` (or `sha256sum FILE | cut -d' ' -f1`). The sync skill stores `source_state` this

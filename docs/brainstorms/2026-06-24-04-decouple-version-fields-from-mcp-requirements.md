@@ -38,7 +38,7 @@ As long as these fields are required and MCP cannot supply them, the architectur
 **Migration surface:**
 - `db/init.sql`: drop `NOT NULL` on `version`, default `''`.
 - `citations.py`: make `version` optional (`str = ""`), relax `ShapeResolver` check to allow empty.
-- `sync-catalog-from-project-indexes` skill: stop passing `version: "1"` (or omit the field).
+- `lik-sync-catalog-from-project-indexes` skill: stop passing `version: "1"` (or omit the field).
 
 ### 2. `catalog.source_refs[].version` — use fetch timestamp as proxy
 
@@ -54,7 +54,7 @@ As long as these fields are required and MCP cannot supply them, the architectur
 
 **Migration surface:**
 - `db/init.sql`: no column-type change needed (already `jsonb`).
-- `sync-catalog-from-project-indexes` skill: write `fetched_at` at sync time, omit `version` or set `null`.
+- `lik-sync-catalog-from-project-indexes` skill: write `fetched_at` at sync time, omit `version` or set `null`.
 - Any reconciliation skill: use `fetched_at` to flag rows not re-validated within a threshold.
 
 ## Success criteria

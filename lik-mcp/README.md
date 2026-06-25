@@ -111,7 +111,7 @@ connector URL to Anthropic's cloud, which opens the connection from its own serv
 This needs Node/`npx`. Restart Claude Desktop to load it. (Do **not** add the raw URL as a
 custom connector — that's the path that can't reach localhost.)
 
-To get the skills (`sync-catalog-from-project-indexes`, `query-project-index`) loaded
+To get the skills (`lik-sync-catalog-from-project-indexes`, `lik-query-project-index`) loaded
 automatically, run **Claude Code** against the `ik-arch` folder from within Claude Desktop.
 **Claude Cowork** does **not** load the skills.
 
@@ -135,19 +135,19 @@ lik-mcp tools (`register_catalog_entry`, `lookup_catalog_entry`, `list_catalog_e
 
 ### Populate the Catalog
 
-The Catalog starts empty. Run the **`sync-catalog-from-project-indexes`** skill — it crawls
+The Catalog starts empty. Run the **`lik-sync-catalog-from-project-indexes`** skill — it crawls
 every Confluence page tagged `project-index` and upserts one Catalog row per page via
 `register_catalog_entry`. It's idempotent, so re-running just updates rows in place. It writes
 to whatever DB lik-mcp points at, so confirm the server is on `likdb_local` (not `likdb_test`)
 first. Expect a summary like `Synced N project-index pages … X inserted, Y updated`.
 
 > **Tip:** To limit a run for testing, tell the skill how many pages to process when you
-> invoke it — e.g. `sync-catalog-from-project-indexes` *"only process the latest 5
+> invoke it — e.g. `lik-sync-catalog-from-project-indexes` *"only process the latest 5
 > project-index pages"*. Re-running later picks up the rest.
 
 ### Query the Catalog
 
-With rows in place, run the **`query-project-index`** skill and pass a project question (e.g.
+With rows in place, run the **`lik-query-project-index`** skill and pass a project question (e.g.
 *"what has Nava done with Medicaid?"*). It escalates through exact lookup → list-and-scan →
 bounded Confluence search, **asking before it widens scope** at each step, then ranks the cited
 pages by their confirmation signals (`read_confirmations`) and offers to record your own
@@ -183,7 +183,7 @@ won't pick up edits. Either re-apply the schema in place (`scripts/init_db.py`, 
 deletes `likdb_local` and `likdb_test`):
 
 ```sh
-docker compose down -v && docker compose up -d
+docker compose down -v && docker compose up --build -d
 ```
 
 ### New MCP tools not showing up in Claude Desktop

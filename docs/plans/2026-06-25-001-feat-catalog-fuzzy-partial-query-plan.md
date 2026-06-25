@@ -12,7 +12,7 @@ origin: docs/brainstorms/2026-06-25-01-catalog-fuzzy-partial-query-requirements.
 
 Add a new `search_catalog_entries` MCP tool that does server-side partial + fuzzy
 matching on `subject` (via Postgres `pg_trgm`), returning a bounded, ranked candidate
-set. Wire it into `query-project-index` Level 1 as a fuzzy fallback after the exact
+set. Wire it into `lik-query-project-index` Level 1 as a fuzzy fallback after the exact
 lookup. Exact-match `lookup_catalog_entry` and the Level 2/3 escalation are unchanged.
 
 ---
@@ -34,7 +34,7 @@ to hold. See origin for full framing.
 - R3. Results are **bounded and ranked** (top-N with match scores), never the full table.
 - R4. An optional `category` filter narrows before matching.
 - R5. Exact-match `lookup_catalog_entry` behavior is unchanged.
-- R6. `query-project-index` Level 1 calls the new query on an exact miss (no widening
+- R6. `lik-query-project-index` Level 1 calls the new query on an exact miss (no widening
   prompt) and answers from a candidate hit; Level 2 and Level 3 unchanged.
 
 **Origin acceptance examples:** none defined in origin (requirements doc used Success
@@ -100,10 +100,10 @@ Criteria, traced above as R1–R6).
   candidate set before matching; it is not itself fuzzy-matched. (origin Open Questions)
   **Note:** `category` is an undefined free-text field (`text` nullable, no enum/CHECK;
   `v0.4/05-architecture.md:71` calls it a descriptive classification + ACL-mapping input).
-  The only current writer, `sync-catalog-from-project-indexes`, does **not** set it, so
+  The only current writer, `lik-sync-catalog-from-project-indexes`, does **not** set it, so
   every `entry_type="index"` row has `category = NULL`. The filter is therefore **inert
   for the skill's current use** — kept as a cheap, forward-looking capability for future
-  entry_types that populate category. Do not wire it into `query-project-index` expecting
+  entry_types that populate category. Do not wire it into `lik-query-project-index` expecting
   it to match anything today.
 - **No ACL filtering**: parity with existing `lookup`/`list`. Adding it here would diverge
   from current behavior and belongs in the separate query-time-ACL slice.
@@ -248,7 +248,7 @@ search_catalog_entries(db, entry_type, query, category=None, limit=10):
 
 ---
 
-- U4. **Wire the new tool into query-project-index Level 1**
+- U4. **Wire the new tool into lik-query-project-index Level 1**
 
 **Goal:** On an exact Level 1 miss, call `search_catalog_entries` (no widening prompt)
 before falling to Level 2.
@@ -258,7 +258,7 @@ before falling to Level 2.
 **Dependencies:** U3
 
 **Files:**
-- Modify: `.claude/skills/query-project-index/SKILL.md` (Level 1 section, currently lines 24-31)
+- Modify: `.claude/skills/lik-query-project-index/SKILL.md` (Level 1 section, currently lines 24-31)
 
 **Approach:**
 - Extend "Level 1 — exact Catalog lookup": on a miss, call `search_catalog_entries` with

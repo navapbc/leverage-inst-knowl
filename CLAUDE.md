@@ -5,6 +5,7 @@
 
 ## Coding
 
+* Prefix all skill names with `lik-` (e.g. `lik-query-project-index`). Applies to the skill directory under `.claude/skills/` and its `name:` frontmatter.
 * The software is being implemented based on the docs in the `v0.4` folder.
     - As code is being written ensure it aligns with the goals and intent of those docs.
 * Keep designs store-agnostic. A design pinned to a particular Data Source's (e.g. Confluence's) quirks would break on the next source. Code modifications must be general to different DSs.

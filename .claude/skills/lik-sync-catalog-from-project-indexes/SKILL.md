@@ -1,5 +1,5 @@
 ---
-name: sync-catalog-from-project-indexes
+name: lik-sync-catalog-from-project-indexes
 description: Catalog the project-index pages from Confluence into the Discovery Layer Catalog in Postgres (the lik-mcp service). Fetches every Confluence page tagged `project-index` and upserts one Catalog row per page via `register_catalog_entry`. Use whenever someone says "sync the project indexes", "refresh the project-index catalog", "catalog the project indexes into Postgres", or asks to (re)build Catalog rows from the Project Index Directory. This is a DL-creation skill — it writes to the Catalog, not to Confluence.
 ---
 
@@ -43,14 +43,18 @@ and `lastModified` comes back only as a relative string like `"about 5 hours ago
 [../../../limitations.md](../../../limitations.md)). So the content-state marker is a **hash
 of the page body**, computed per the shared recipe below.
 
-### Content-state marker recipe (shared with `query-project-index`)
+**Compute the content-state marker.** For each page, fetch its body and compute `source_state`
+per the Content-state marker recipe below. This is the **main** project-index page (this step's
+page) — not its Update History child. You may batch these fetches in parallel across all pages.
+
+### Content-state marker recipe (shared with `lik-query-project-index`)
 
 `source_state` is the SHA-256 hex digest of the page's markdown body:
 
 1. Fetch the body: `getConfluencePage(pageId, contentFormat: "markdown")`, take the `body` field **verbatim**.
 2. Write that exact string to a file (no added trailing newline, no normalization) and hash it: `shasum -a 256 FILE | cut -d' ' -f1` (or `sha256sum FILE | cut -d' ' -f1` — both yield the same digest for the same bytes).
 
-The `query-project-index` skill computes `source_state` the **identical** way, so a stored
+The `lik-query-project-index` skill computes `source_state` the **identical** way, so a stored
 marker and a live marker compare equal whenever the content is unchanged. Any change to this
 recipe must be mirrored in both skills or "edited since" will false-positive on every page.
 
@@ -83,10 +87,6 @@ Set `verification`, `verified_by`, and `verified_at` accordingly.
 You may batch the CQL lookups in parallel across all pages; fetch each page body only after
 its CQL returns a hit.
 
-**2c — Compute the content-state marker.** Fetch the **main** project-index page body
-(`getConfluencePage(<pageId>, contentFormat: "markdown")`, the page from Step 1 — not its
-Update History child) and compute `source_state` per the Content-state marker recipe above.
-
 ### Step 3 — Register one Catalog row per page
 
 For each page, call `register_catalog_entry` (the lik-mcp tool) with an `entry` shaped like:
@@ -96,11 +96,11 @@ For each page, call `register_catalog_entry` (the lik-mcp tool) with an `entry` 
 - `location`: the page `webUrl`
 - `store_kind`: `"confluence"`
 - `locator`: the Confluence page ID  *(so a consumer can `getConfluencePage` directly)*
-- `source_refs`: `[{ "id": "<pageId>", "source_state": "<SHA-256 body hash from Step 2c>" }]`  *(powers staleness checks; `source_state` is the page's opaque content-state marker — a body hash — compared by equality to detect "edited since")*
+- `source_refs`: `[{ "id": "<pageId>", "source_state": "<SHA-256 body hash from Step 1>" }]`  *(powers staleness checks; `source_state` is the page's opaque content-state marker — a body hash — compared by equality to detect "edited since")*
 - `verification`: `"human-verified"` or `"unverified"` — from Step 2
 - `verified_by`: the "Approved By" value from the Update History table, or null
 - `verified_at`: the "Date" value (ISO 8601 UTC), or null
-- `computed_by`: `"sync-catalog-from-project-indexes"`
+- `computed_by`: `"lik-sync-catalog-from-project-indexes"`
 - `row_provenance`: `"skill"`
 
 Leave the other fields at their defaults (`provenance=ai-generated`, `freshness=current`,

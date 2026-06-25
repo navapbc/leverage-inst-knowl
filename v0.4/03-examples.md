@@ -31,8 +31,8 @@
 
 * DS records, DL-creation skill, DL output: provided by Project Indexes
 * DL Confirmation signals: TODO
-* DL Catalog: adds Catalog entries via `sync-catalog-from-project-indexes`
-* Query skill: `query-project-index`
+* DL Catalog: adds Catalog entries via `lik-sync-catalog-from-project-indexes`
+* Query skill: `lik-query-project-index`
 
 ---
 
