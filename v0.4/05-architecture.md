@@ -19,7 +19,7 @@ The systems where knowledge is created, corrected, summarized, governed, and acc
 A **computed layer derived from DSs** — a *logical role, not a single store*. What makes something DL is **purpose, not location**: it exists to make DS knowledge faster to find and reuse, and never holds primary knowledge authored for its own sake. Each piece is a **DL output**, and by **where it lives and who backs it up** every output is one of three:
 - **A DS record** — most DL by volume: a summary, aggregation, index, categorization, prioritized pointer, retrieval hint, relationship map, dedup/canonical pointer, content-freshness/obsolescence signal, or propagated access-control hint, written into a DS and tagged with a `discovery-layer` marker. Still DL by role, but **a DS record for storage — the DS governs and backs it up** (so its durability is only as good as that DS's backup), with version-history revert as recovery. Born `ai-generated` and recomputable (rebuilt on demand); a person editing or verifying it makes that copy durable (`human-created`/`human-verified`).
 - **The Catalog** — a directory mapping `type + subject → location` so tools know where each output lives (§3). Recomputable, so it's rebuilt rather than backed up.
-- **Confirmation signals** — captured human trust that is no DS record and can't be derived from any DS. The **one DL output DL must retain deliberately** — non-recomputable, so it lives in DL's own service-fronted store, and **that store is what DL backs up** (backup/retention mechanics in <u>Storage</u>).
+- **Confirmation signals** — captured human trust that is no DS record and can't be derived from any DS. A *signed* signal: a person vouches a cited source was **right or wrong**, a negative vote carrying a reason (*bad retrieval* vs *wrong content*) and an optional free-text note (<u>Strategy</u> §3.1). The **one DL output DL must retain deliberately** — non-recomputable, so it lives in DL's own service-fronted store, and **that store is what DL backs up** (backup/retention mechanics in <u>Storage</u>).
 
 ### Tags that travel with a DL output
 Realized via whatever the store supports (a column, a label, a page property) — no bespoke system.
@@ -102,7 +102,7 @@ Durable updates → DSs
 - **DL population & refresh** — AI-assisted content via scheduled/manual skills that compute outputs, write each to its store via MCP, register locations in the Catalog, and run staleness checks on referenced DS content *and* their own pointers.
 - **Saved synthesis** — when a user persists a synthesized answer (<u>Strategy</u> Level 4), the write **splits**: the user authors the artifact under their own SSO, then a service account registers the Catalog pointer with the user as `created_by` and `row_provenance = 'human'`. Because it's a human-saved artifact rather than a skill's computed output, no skill re-derives it — recovery is revert.
 - **Query & retrieval** — AI tools query DSs and DL via MCP under a verified SSO token, guided by one of many topic-specialized query skills. A skill that knows where its topic lives points straight there, skipping the Catalog; otherwise the agent reads the Catalog, then follows pointers.
-- **Feedback & source updates** — users confirm whether a cited source was right or wrong (attributed, revertible); permanent updates always go to DSs.
+- **Feedback & source updates** — users vouch whether a cited source was right or wrong (a signed, attributed, revertible signal); a *wrong content* negative vote also routes to the §6 correction path. At query time a flagged source is demoted with its reason shown, never hidden. Permanent updates always go to DSs.
 
 ## 5. Update mechanisms
 
@@ -119,7 +119,7 @@ All updates propagate/assign ACL metadata and register location in the Catalog.
 - **Human-verified summaries** → a DS (DL may index/point to them).
 - **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it; provenance-marked, registered in the Catalog, written under a clear identity. Marked as `ai-generated`. Unverified until a human reviews it, becoming a `human-verified` DL output under that person's identity.
 - **Persisted synthesis** → a user-saved synthesis stored as a new `human-created` DL output, under the **user's own SSO**, born `human-created`; durable and not recomputable (<u>Strategy</u>, Level 4).
-- **Confirmations** → non-recomputable data; attributed; stored in the service-fronted store (via MCP), recovered by backup.
+- **Confirmations** → non-recomputable, signed (right/wrong) data; attributed; stored in the service-fronted store (via MCP), recovered by backup. A *wrong content* negative vote additionally drives a correction to the underlying DS record (the *new data*/*corrections* rows above), but the signal itself is never canonical knowledge.
 - **The Catalog** → DL topology, written by the skill service account only; reads stay open.
 - **DL writes** → only computed data, the Catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
 

@@ -2,6 +2,7 @@
 * The architecture is being drafted. Don't reference old concepts or explain why old concepts are removed.
 * Keep the architecture relatively simple. Question any changes that would complicate the architecture.
 * Minimize jargon since the audience may be non-technical.
+* Keep the design docs (`v0.4/`) free of implementation specifics — describe capabilities and semantics, not how they're realized. Especially exclude UI choices (input syntax, button vs. menu, exact wording), concrete schema (column names, types), and tool signatures; those belong in a requirements/plan doc or the code, not the architecture. A design pinned to one realization restricts implementation. (Requirements docs may state a product-level form, flagged as the planner's to finalize.)
 
 ## Coding
 
