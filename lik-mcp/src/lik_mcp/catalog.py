@@ -151,7 +151,7 @@ def search_catalog_entries(
     contains the query as a substring (ILIKE) OR the query is trigram-similar to some
     extent of the subject (`word_similarity` >= `min_similarity`, which catches typos and
     reordered words). `word_similarity` — not plain `similarity` — is used so a short query
-    isn't diluted by a long subject (e.g. "Atals" still matches "project: Atlas"). The
+    isn't diluted by a long subject (e.g. "Atals" still matches "Atlas Mapping Service"). The
     substring arm keeps partials that fall below the similarity floor. `category`, when
     given, is an exact-match pre-filter (it is not fuzzy-matched; note that index rows
     currently leave category NULL). An empty/whitespace query is a clean empty result (it

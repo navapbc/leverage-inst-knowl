@@ -13,11 +13,11 @@ async def test_tool_call_logs_request_caller_and_result(server, caplog):
     with caplog.at_level(logging.INFO, logger="lik_mcp.server"):
         await server.call_tool(
             "lookup_catalog_entry",
-            {"entry_type": "index", "subject": "project: Atlas", "token": "alice@navapbc.com"},
+            {"entry_type": "index", "subject": "Atlas", "token": "alice@navapbc.com"},
         )
 
     messages = [r.getMessage() for r in caplog.records]
-    assert any("tool=lookup_catalog_entry request" in m and "project: Atlas" in m for m in messages)
+    assert any("tool=lookup_catalog_entry request" in m and "Atlas" in m for m in messages)
     assert any("authorized caller=alice@navapbc.com" in m for m in messages)
     assert any("tool=lookup_catalog_entry result found=" in m for m in messages)
 

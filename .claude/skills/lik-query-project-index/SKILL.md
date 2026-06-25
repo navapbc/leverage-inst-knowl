@@ -24,7 +24,7 @@ If any tool call fails or a required tool is unavailable, **stop** — don't fal
 
 ## Level 1 — Catalog lookup (exact, then fuzzy)
 
-Named project → `lookup_catalog_entry` (`entry_type="index"`, `subject="project: <name>"`).
+Named project → `lookup_catalog_entry` (`entry_type="index"`, `subject="<name>"`).
 - **Hit:** `getConfluencePage` at the row's `locator`/`location`, read, answer → **Rank & present**. If the page
   resolves but lacks the detail → **Content gap**.
 - **Miss**, or the question names no single project: `search_catalog_entries` (`entry_type="index"`, `query`=key terms)

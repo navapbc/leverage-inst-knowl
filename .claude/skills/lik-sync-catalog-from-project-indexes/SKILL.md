@@ -86,7 +86,7 @@ only after its CQL returns a hit; apply the **Response integrity guard** to ever
 
 `register_catalog_entry` (lik-mcp) with an `entry`:
 - `entry_type`: `"index"`
-- `subject`: `"project: <title>"`  *(e.g. `"project: Atlas"`)*
+- `subject`: the page `title`, verbatim  *(e.g. `"Atlas"`)*
 - `location`: the page `webUrl`
 - `store_kind`: `"confluence"`
 - `locator`: the Confluence page ID

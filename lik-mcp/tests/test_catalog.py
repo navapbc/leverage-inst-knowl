@@ -14,7 +14,7 @@ from lik_mcp.catalog import (
 def _entry(**overrides) -> CatalogEntry:
     base = dict(
         entry_type="project-summary",
-        subject="project: Atlas",
+        subject="Atlas",
         location="https://wiki/atlas",
         store_kind="confluence",
         computed_by="summarizer@navapbc.com",
@@ -31,7 +31,7 @@ def test_reregister_upserts(db):
     second = register_catalog_entry(db, _entry(location="https://new"), updated_by="svc")
     assert second.status == "updated"
 
-    found = lookup_catalog_entry(db, "project-summary", "project: Atlas")
+    found = lookup_catalog_entry(db, "project-summary", "Atlas")
     assert found.found is True
     assert found.entry["location"] == "https://new"
 
@@ -49,15 +49,15 @@ def test_lookup_miss_returns_not_found(db):
 
 def test_list_returns_rows_for_one_type_ordered(db):
     """list_catalog_entries returns only the requested entry_type, ordered by subject."""
-    register_catalog_entry(db, _entry(entry_type="index", subject="project: Beta"), updated_by="svc")
-    register_catalog_entry(db, _entry(entry_type="index", subject="project: Alpha"), updated_by="svc")
+    register_catalog_entry(db, _entry(entry_type="index", subject="Beta"), updated_by="svc")
+    register_catalog_entry(db, _entry(entry_type="index", subject="Alpha"), updated_by="svc")
     register_catalog_entry(
-        db, _entry(entry_type="project-summary", subject="project: Gamma"), updated_by="svc"
+        db, _entry(entry_type="project-summary", subject="Gamma"), updated_by="svc"
     )
 
     result = list_catalog_entries(db, "index")
     assert result.count == 2
-    assert [e["subject"] for e in result.entries] == ["project: Alpha", "project: Beta"]
+    assert [e["subject"] for e in result.entries] == ["Alpha", "Beta"]
 
 
 def test_list_unknown_type_returns_empty(db):
@@ -120,43 +120,43 @@ def _seed_index(db, *subjects, **overrides):
 
 def test_search_partial_substring(db):
     """A substring of the subject finds the row even when it's not the exact key (R1)."""
-    _seed_index(db, "project: Atlas", "project: Borealis")
+    _seed_index(db, "Atlas", "Borealis")
 
     result = search_catalog_entries(db, "index", "Atl")
     subjects = [e["subject"] for e in result.entries]
-    assert "project: Atlas" in subjects
-    assert "project: Borealis" not in subjects
+    assert "Atlas" in subjects
+    assert "Borealis" not in subjects
 
 
 def test_search_fuzzy_typo(db):
     """A typo'd query still finds the row via trigram similarity (R2)."""
-    _seed_index(db, "project: Atlas", "project: Borealis")
+    _seed_index(db, "Atlas", "Borealis")
 
     result = search_catalog_entries(db, "index", "Atals")
-    assert "project: Atlas" in [e["subject"] for e in result.entries]
+    assert "Atlas" in [e["subject"] for e in result.entries]
 
 
 def test_search_reordered_words(db):
     """Reordered words match via trigram similarity, not substring (R2)."""
-    _seed_index(db, "project: Centers for Medicare", "project: Department of Labor")
+    _seed_index(db, "Centers for Medicare", "Department of Labor")
 
     result = search_catalog_entries(db, "index", "Medicare Centers")
-    assert "project: Centers for Medicare" in [e["subject"] for e in result.entries]
+    assert "Centers for Medicare" in [e["subject"] for e in result.entries]
 
 
 def test_search_ranked_by_similarity(db):
     """Closest match ranks first; every entry carries a similarity score (R3)."""
-    _seed_index(db, "project: Atlas", "project: Atlas Mapping Service")
+    _seed_index(db, "Atlas", "Atlas Mapping Service")
 
     result = search_catalog_entries(db, "index", "Atlas")
-    assert result.entries[0]["subject"] == "project: Atlas"  # exact-est match first
+    assert result.entries[0]["subject"] == "Atlas"  # exact-est match first
     scores = [e["score"] for e in result.entries]
     assert scores == sorted(scores, reverse=True)
 
 
 def test_search_limit_caps_results(db):
     """`limit` bounds the number of rows returned (R3)."""
-    _seed_index(db, *[f"project: Atlas {i}" for i in range(5)])
+    _seed_index(db, *[f"Atlas {i}" for i in range(5)])
 
     result = search_catalog_entries(db, "index", "Atlas", limit=2)
     assert result.count == 2
@@ -165,7 +165,7 @@ def test_search_limit_caps_results(db):
 
 def test_search_no_match_is_empty(db):
     """A query matching nothing is a clean empty result, never an error."""
-    _seed_index(db, "project: Atlas")
+    _seed_index(db, "Atlas")
 
     result = search_catalog_entries(db, "index", "zzzznomatch")
     assert result.count == 0
@@ -174,17 +174,17 @@ def test_search_no_match_is_empty(db):
 
 def test_search_category_prefilter(db):
     """An explicit category filters out otherwise-matching rows of other categories (R4)."""
-    _seed_index(db, "project: Atlas North", category="infra")
-    _seed_index(db, "project: Atlas South", category="research")
+    _seed_index(db, "Atlas North", category="infra")
+    _seed_index(db, "Atlas South", category="research")
 
     result = search_catalog_entries(db, "index", "Atlas", category="infra")
     subjects = [e["subject"] for e in result.entries]
-    assert subjects == ["project: Atlas North"]
+    assert subjects == ["Atlas North"]
 
 
 def test_search_empty_query_is_empty(db):
     """An empty or whitespace query must not degenerate into match-all."""
-    _seed_index(db, "project: Atlas", "project: Borealis")
+    _seed_index(db, "Atlas", "Borealis")
 
     for q in ("", "   "):
         result = search_catalog_entries(db, "index", q)
@@ -195,7 +195,7 @@ def test_search_empty_query_is_empty(db):
 def test_search_limit_clamped(db):
     """Degenerate limits neither error nor defeat the bound: 0/negative clamp up to >=1,
     oversized clamps down to the cap (50)."""
-    _seed_index(db, *[f"project: Atlas {i}" for i in range(3)])
+    _seed_index(db, *[f"Atlas {i}" for i in range(3)])
 
     # 0 and negative would otherwise return nothing / raise in Postgres.
     assert search_catalog_entries(db, "index", "Atlas", limit=0).count >= 1
@@ -206,16 +206,16 @@ def test_search_limit_clamped(db):
 
 def test_search_like_metacharacters_are_literal(db):
     """`%` in the query is matched literally, not as an ILIKE wildcard (no over-match)."""
-    _seed_index(db, "project: Atlas", "project: Borealis", "project: 50% target")
+    _seed_index(db, "Atlas", "Borealis", "50% target")
 
     result = search_catalog_entries(db, "index", "%")
     # Only the row containing a literal '%' matches; '%' must not match every row.
-    assert [e["subject"] for e in result.entries] == ["project: 50% target"]
+    assert [e["subject"] for e in result.entries] == ["50% target"]
 
 
 def test_search_min_similarity_threshold(db):
     """A high min_similarity excludes a fuzzy (non-substring) match that the default admits."""
-    _seed_index(db, "project: Atlas")
+    _seed_index(db, "Atlas")
 
     assert search_catalog_entries(db, "index", "Atals").count == 1  # default 0.3 admits
     assert search_catalog_entries(db, "index", "Atals", min_similarity=0.99).count == 0
@@ -223,9 +223,9 @@ def test_search_min_similarity_threshold(db):
 
 def test_search_scoped_to_entry_type(db):
     """Search never returns rows of another entry_type, even on a subject match."""
-    _seed_index(db, "project: Atlas")
+    _seed_index(db, "Atlas")
     register_catalog_entry(
-        db, _entry(entry_type="project-summary", subject="project: Atlas"), updated_by="svc"
+        db, _entry(entry_type="project-summary", subject="Atlas"), updated_by="svc"
     )
 
     result = search_catalog_entries(db, "index", "Atlas")
