@@ -81,7 +81,7 @@ Every output carries **one sharing state** — a specified Google Group, explici
 ### 2.4 DL output types
 Distilled prose, digests, indexes, prioritized pointers, retrieval hints, and content-freshness/obsolescence signals → written into a DS (such as a Confluence page), tagged `discovery-layer`, updated in place so each re-derivation revises the same page. Freshness and pointer metadata also surface as Catalog columns (<u>Architecture</u> §3).
 
-**Expected limitations.** Two open problems, each solvable independently: **no human trust signal** (DL ranks by what's *derivable* — freshness, provenance, co-occurrence — but nothing captures whether a person vouched for a source as *correct*); **no single entry point** (outputs scatter across stores, so every tool must hard-code topology or fan out — the Level 1 problem one layer up).
+**Expected limitations.** Two open problems, each solvable independently: **no human trust signal** (DL ranks by what's *derivable* — freshness, provenance, co-occurrence — but nothing captures whether a person vouched for a source as *right or wrong*); **no single entry point** (outputs scatter across stores, so every tool must hard-code topology or fan out — the Level 1 problem one layer up).
 
 ### After Level 2 — two independent extensions
 Level 3-Confirmations and Level 3-Catalog each address one limitation, with **no dependency on each other** — both require Level 2, neither requires the other. Build in whichever order the gap backlog favors.
