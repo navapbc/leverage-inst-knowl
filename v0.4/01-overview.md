@@ -8,7 +8,7 @@ A company's knowledge is scattered across many data sources — storage (Google 
 
 ## The idea
 
-Leave the knowledge where it already lives, in the **Data Sources** — they stay the single source of truth, and each keeps controlling who may see what. On top, add a **Discovery Layer**: material *derived* from those sources whose only job is to make knowledge fast to find and reuse — **without** copying everything into one place and **without** becoming a second, competing "source of truth."
+Leave the knowledge where it already lives, in the **Data Sources** — each stays authoritative for the knowledge it holds, and each keeps controlling who may see what. On top, add a **Discovery Layer**: material *derived* from those sources whose only job is to make knowledge fast to find and reuse — **without** copying everything into one place and **without** becoming a competing authority.
 
 Its outputs come in three kinds, sorted by where each lives and who keeps it safe:
 
@@ -31,7 +31,7 @@ Every design choice traces back to these.
 - **Loosely coupled** — keep the pieces independent so any one — a store, a source, a tool — can be swapped without rewriting the rest, and no single vendor becomes hard to leave.
 - **Intuitive** — lean on standards (e.g., MCP) and common patterns rather than bespoke mechanisms, so people and tools pick it up quickly.
 - **Flexible** — adaptable to a wide range of questions, data, and tools: many small, specialized skills instead of one rigid system.
-- **One source of truth** — authoritative knowledge always stays in its original data source. The Discovery Layer holds only computed copies, pointers, and signals — never a competing master record. (Two things are derived but not recomputable, the deliberate exceptions: people's confirmations, and saved answers. A saved answer goes stale because it's written once and not rebuilt, so it drifts as its sources change — but it lives *inside* a data source carrying the `discovery-layer` tag, so it's never mistaken as an original source; staleness flags it and, in time, a person folds its trust back into the sources by hand.)
+- **Knowledge stays authoritative where it lives** — each piece of knowledge stays authoritative in its original data source. The Discovery Layer holds only computed copies, pointers, and signals — never a competing master record. (Two things are derived but not recomputable, the deliberate exceptions: people's confirmations, and saved answers. A saved answer goes stale because it's written once and not rebuilt, so it drifts as its sources change — but it lives *inside* a data source carrying the `discovery-layer` tag, so it's never mistaken as an original source; staleness flags it and, in time, a person folds its trust back into the sources by hand.)
 - **Secure by default** — least privilege, deny when unsure, and access always enforced by the *original data source*, never by the Discovery Layer's own metadata. A wrong entry can misdirect a lookup but can never unlock a door.
 - **Build on existing sign-in** — access reuses the existing Google SSO (single sign-on) and its group permissions instead of standing up a new identity system. (Sources that don't already use Google groups need a one-time mapping — see <u>Architecture</u>.)
 - **Earn each step** — add each capability only once the previous one's limits prove it's needed; spend follows evidence, not ambition.

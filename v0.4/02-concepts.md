@@ -4,9 +4,9 @@
 
 ## The concepts and terminology
 
-1. **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed (Drive, Confluence, Jira, GitHub, Slack, Salesforce, Workday, …). These hold the **primary knowledge** and stay the **source of truth**: every lasting change is written here, and each system keeps controlling who may see what. An individual unit stored in a DS — a Confluence page, a Jira ticket, a Slack thread, a GitHub PR — is a **DS record**. Most DS records are primary knowledge; but a Discovery-Layer summary, index, or signal written into a DS is *also* a DS record (below) — stored and backed up by the DS like any other, yet marked as derived and never a source of truth.
+1. **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed (Drive, Confluence, Jira, GitHub, Slack, Salesforce, Workday, …). These hold the **primary knowledge** and stay **authoritative** for it: every lasting change is written here, and each system keeps controlling who may see what. An individual unit stored in a DS — a Confluence page, a Jira ticket, a Slack thread, a GitHub PR — is a **DS record**. Most DS records are primary knowledge; but a Discovery-Layer summary, index, or signal written into a DS is *also* a DS record (below) — stored and backed up by the DS like any other, yet marked as derived and never authoritative.
 
-2. **Discovery Layer (DL)** — *prepared material derived from the Data Sources* whose only job is to make knowledge **easy to find and reuse**, so tools don't re-search everything from scratch. Each piece is a **DL output**. It is **derived** material — never primary knowledge authored for its own sake, and never a second source of truth. (A quick test: remove the underlying records and a DL output has nothing left to describe.)
+2. **Discovery Layer (DL)** — *prepared material derived from the Data Sources* whose only job is to make knowledge **easy to find and reuse**, so tools don't re-search everything from scratch. Each piece is a **DL output**. It is **derived** material — never primary knowledge authored for its own sake, and never a competing authority. (A quick test: remove the underlying records and a DL output has nothing left to describe.)
 
    By **where it lives and who keeps it safe**, every DL output is one of three:
    - **A DS record** — the common case, and most of DL: a summary, index, pointer, or signal written into a Data Source (such as a Confluence page) and marked `discovery-layer`. Because it lives in a Data Source, **that source stores and backs it up** like any record, and reverting to an earlier version is its recovery. Most are rebuilt from the sources on demand; once a person edits or verifies one, the rebuild leaves that copy alone instead of regenerating it.
@@ -35,7 +35,7 @@ The Catalog and the Discovery Layer let an agent find an answer in increasingly 
 
 | LIK concept | Office building | Why it fits |
 | --- | --- | --- |
-| DS records | The individual offices, where the real work and records are kept | The source of truth; each office controls who it lets in. |
+| DS records | The individual offices, where the real work and records are kept | Authoritative for what they hold; each office controls who it lets in. |
 | DL output | Handouts and digests *about* what the offices do — at reception, on floor screens, in a kiosk | Derived so you don't visit every office; most can be regenerated anytime. |
 | Confirmation signals | Visitor feedback cards — "Suite 4B actually solved my problem" | People vouching an answer was good; kept on the card, not inside the office. |
 | Catalog | The lobby directory — topic → where its handout is posted | The board everyone checks first; points to *where the handout lives*, not into the offices. |

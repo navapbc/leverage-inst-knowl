@@ -13,7 +13,7 @@ Knowledge stays in the **Data Sources (DSs)**. A low-maintenance **Discovery Lay
 ## 2. Core components
 
 ### Data Sources (DSs)
-The systems where knowledge is created, corrected, summarized, governed, and accessed. **All permanent writes happen in a DS** — new knowledge, corrections, human-verified summaries — and DSs remain the source of truth.
+The systems where knowledge is created, corrected, summarized, governed, and accessed. **All permanent writes happen in a DS** — new knowledge, corrections, human-verified summaries — and each DS remains authoritative for what it holds.
 
 ### Discovery Layer (DL)
 A **computed layer derived from DSs** — a *logical role, not a single store*. What makes something DL is **purpose, not location**: it exists to make DS knowledge faster to find and reuse, and never holds primary knowledge authored for its own sake. Each piece is a **DL output**, and by **where it lives and who backs it up** every output is one of three:
@@ -88,7 +88,7 @@ A `location` can break: a DS page is deleted, a dataset is dropped, a doc is mov
 - **Skill-owned rows (`row_provenance = 'skill'`):** the owning skill re-derives — recompute the output, write it to its (possibly new) location, update the row. If the underlying source is itself gone (not merely moved), the output is no longer derivable, so the row is dropped or marked `obsolete` and consumers stop trusting it.
 - **Human-owned rows (`row_provenance = 'human'`):** can't be recomputed. The reconciliation pass flags the row `obsolete` and surfaces it to its owner; recovery is the same revert-based path as any human-authored output. A human row is never silently deleted.
 
-**Graceful degradation — a broken pointer never errors.** A consumer that follows a pointer to nothing treats it exactly like a missing row: a **cache miss**. It falls back to the Query skill's routing or a bounded fan-out and still returns an answer — a dangling pointer costs that one query some latency, never correctness. This is the point of the Catalog being a cache, not a system of record: the DSs stay the source of truth, so any stale or broken pointer is always recoverable by going to the source.
+**Graceful degradation — a broken pointer never errors.** A consumer that follows a pointer to nothing treats it exactly like a missing row: a **cache miss**. It falls back to the Query skill's routing or a bounded fan-out and still returns an answer — a dangling pointer costs that one query some latency, never correctness. This is the point of the Catalog being a cache, not a system of record: the DSs stay authoritative, so any stale or broken pointer is always recoverable by going to the source.
 
 ## 4. Data flows
 

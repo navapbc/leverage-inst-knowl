@@ -41,7 +41,7 @@ Commercial enterprise-search / AI-retrieval products already connect to these DS
 
 **Goal:** address Level 0's gaps by building our own agent that reads and writes knowledge in the systems where it already lives, governed by Google SSO.
 
-The DSs stay the source of truth. Nothing is copied or precomputed yet. Each DS is exposed through an **MCP service**, and the agent reads/writes through it.
+The DSs stay authoritative. Nothing is copied or precomputed yet. Each DS is exposed through an **MCP service**, and the agent reads/writes through it.
 
 ### 1.1 Single agent, read-only
 A local Claude Cowork-style agent connects to a few approved DSs via MCP and reads on the user's behalf. The agent only ever sees what the signed-in person can see — the DS applies its **native permissions** directly, with no separate enforcement layer. (Token verification and on-behalf-of exchange across each `agent → MCP → DS` hop: <u>Access Control</u>.) The agent doesn't just route to a single record — it can read across the records it's permitted to and **synthesize** an answer from many at once, whether they sit in one DS or several. A skill guides that synthesis; saving such an answer is exactly what Level 4 builds on.
@@ -118,7 +118,7 @@ A Query skill does a **targeted keyed lookup** on the cited pointer and lets acc
 **Choosing:** start with **A + staleness gating (B)**; add ranking effect (C) once volume is trustworthy; defer hard filters and audience weighting until the backlog demands them. **Trust advises, never gates** — a record the user is entitled to is never hidden, by low trust *or* by negative feedback; a demoted source is still returned, just lower and with its flag shown.
 
 ### 3.3 Signal lifecycle
-- **Backpropagate to the DS (with user validation).** Once a record accumulates enough confirmations, a user can promote that trust into the source itself (mark the page "verified," accept the ticket) under their own SSO; the matching DL signals become redundant and are archived. Never automatic — a write to the source of truth is far harder to undo than a DL revert.
+- **Backpropagate to the DS (with user validation).** Once a record accumulates enough confirmations, a user can promote that trust into the source itself (mark the page "verified," accept the ticket) under their own SSO; the matching DL signals become redundant and are archived. Never automatic — a write to the authoritative source is far harder to undo than a DL revert.
 - **Resolve a wrong-content flag.** When the user corrects the underlying DS record (the §1.2 path a *wrong content* vote offers), the source's content-state marker changes, so the flag is edited-since and stops applying; once corrected it's archived like a redundant confirmation. The negative signal thus drives a real fix rather than lingering forever.
 - **Age out on a moving window.** A signal — positive or negative — counts only while recent; past the window it's **archived, not deleted** — kept for audit, no longer weighed.
 
