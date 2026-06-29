@@ -65,7 +65,9 @@ def build_server(
 
     @mcp.tool(name="register_catalog_entry")
     def _register_catalog_entry(entry: CatalogEntry, token: str | None = None) -> RegisterResult:
-        """Register or update a Catalog row, keyed on (entry_type, subject). Service-only writer."""
+        """Register a Catalog row. A skill upserts its own row on (entry_type, subject,
+        computed_by); a human-owned row inserts a new pointer, so duplicates on a key
+        coexist as ranked rows. Service-only writer."""
         logger.info(
             "tool=register_catalog_entry request entry_type=%r subject=%r store_kind=%r computed_by=%r",
             entry.entry_type, entry.subject, entry.store_kind, entry.computed_by,
@@ -73,20 +75,22 @@ def build_server(
         identity = _authorize("register_catalog_entry", token)
         result = register_catalog_entry(db, entry, updated_by=identity.email)
         logger.info(
-            "tool=register_catalog_entry result status=%s entry_type=%r subject=%r",
-            result.status, result.entry_type, result.subject,
+            "tool=register_catalog_entry result status=%s id=%d entry_type=%r subject=%r",
+            result.status, result.id, result.entry_type, result.subject,
         )
         return result
 
     @mcp.tool(name="lookup_catalog_entry")
     def _lookup_catalog_entry(entry_type: str, subject: str, token: str | None = None) -> LookupResult:
-        """Resolve (entry_type, subject) -> location in one exact-match lookup. Miss = not found."""
+        """Resolve (entry_type, subject) -> all matching pointers, ranked best-first; the top
+        row is the default entry point. A key may return several (duplicates from independent
+        human saves). Empty result = a cache miss, never an error."""
         logger.info(
             "tool=lookup_catalog_entry request entry_type=%r subject=%r", entry_type, subject
         )
         _authorize("lookup_catalog_entry", token)
         result = lookup_catalog_entry(db, entry_type, subject)
-        logger.info("tool=lookup_catalog_entry result found=%s", result.found)
+        logger.info("tool=lookup_catalog_entry result count=%d", result.count)
         return result
 
     @mcp.tool(name="list_catalog_entries")

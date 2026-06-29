@@ -19,7 +19,7 @@ async def test_tool_call_logs_request_caller_and_result(server, caplog):
     messages = [r.getMessage() for r in caplog.records]
     assert any("tool=lookup_catalog_entry request" in m and "Atlas" in m for m in messages)
     assert any("authorized caller=alice@navapbc.com" in m for m in messages)
-    assert any("tool=lookup_catalog_entry result found=" in m for m in messages)
+    assert any("tool=lookup_catalog_entry result count=" in m for m in messages)
 
 
 async def test_logs_never_include_the_token(server, caplog):

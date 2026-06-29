@@ -51,13 +51,22 @@ class CatalogEntry(BaseModel):
 
 class RegisterResult(BaseModel):
     status: str  # "inserted" | "updated"
+    id: int  # the surrogate row handle (stable across re-derivation)
     entry_type: str
     subject: str
 
 
 class LookupResult(BaseModel):
-    found: bool
-    entry: Optional[dict] = None
+    """Ranked Catalog rows for one (entry_type, subject). A key may resolve to several
+    pointers — duplicates from independent human saves coexist (v0.4 §3, "Keys"). Rows come
+    back best-first on what the Catalog holds: `human-verified` over `unverified`, fresher
+    over staler, most-recently-updated as the tie-breaker. Confirmation-based boost/demotion
+    is the consumer's job (the Query skill reads confirmations live), not applied here. The
+    top row is the default entry point; a consumer that cares can weigh the rest. Empty = a
+    clean miss (cache miss), never an error."""
+
+    count: int
+    entries: list[dict] = Field(default_factory=list)
 
 
 class ListResult(BaseModel):
@@ -84,7 +93,7 @@ INSERT INTO catalog (
     %(last_computed_at)s, %(last_validated_at)s, %(access_groups)s, %(sensitivity)s,
     %(category)s, %(computed_by)s, %(row_provenance)s, %(updated_by)s
 )
-ON CONFLICT (entry_type, subject) DO UPDATE SET
+ON CONFLICT (entry_type, subject, computed_by) WHERE row_provenance = 'skill' DO UPDATE SET
     location = EXCLUDED.location, store_kind = EXCLUDED.store_kind, locator = EXCLUDED.locator,
     provenance = EXCLUDED.provenance, verification = EXCLUDED.verification,
     verified_by = EXCLUDED.verified_by, verified_at = EXCLUDED.verified_at,
@@ -94,7 +103,20 @@ ON CONFLICT (entry_type, subject) DO UPDATE SET
     category = EXCLUDED.category, computed_by = EXCLUDED.computed_by,
     row_provenance = EXCLUDED.row_provenance, updated_by = EXCLUDED.updated_by,
     updated_at = now()
-RETURNING (xmax::text::bigint = 0) AS inserted
+RETURNING id, (xmax::text::bigint = 0) AS inserted
+"""
+
+# A key may hold several rows; return them ranked best-first on what the Catalog itself
+# holds — human-verified first, then fresher, then most-recently-updated. Confirmation-based
+# boost/demotion is deliberately NOT applied here: the Query skill owns it, reading
+# confirmations live at present-time (v0.4 §3). Keeping lookup off the confirmations table
+# leaves it servable from the catalog row alone.
+_LOOKUP = """
+SELECT * FROM catalog
+WHERE entry_type = %s AND subject = %s
+ORDER BY (verification = 'human-verified') DESC,
+         CASE freshness WHEN 'current' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END,
+         updated_at DESC
 """
 
 
@@ -103,7 +125,10 @@ def _serialize(row: dict) -> dict:
 
 
 def register_catalog_entry(db: Database, entry: CatalogEntry, updated_by: str) -> RegisterResult:
-    """Upsert a Catalog row on (entry_type, subject) — re-registering a key updates in place."""
+    """Register a Catalog row. A skill row upserts on (entry_type, subject, computed_by) —
+    re-registering updates that skill's own row in place. A human row (row_provenance =
+    'human') is exempt from the arbiter, so every save inserts a new pointer and duplicates
+    on a key coexist as ranked rows; superseding one is a separate, deliberate write."""
     params = entry.model_dump()
     params["source_refs"] = Json([r.model_dump(mode="json") for r in entry.source_refs])
     params["updated_by"] = updated_by
@@ -112,21 +137,19 @@ def register_catalog_entry(db: Database, entry: CatalogEntry, updated_by: str) -
         conn.commit()
     return RegisterResult(
         status="inserted" if row["inserted"] else "updated",
+        id=row["id"],
         entry_type=entry.entry_type,
         subject=entry.subject,
     )
 
 
 def lookup_catalog_entry(db: Database, entry_type: str, subject: str) -> LookupResult:
-    """Exact-match lookup on the discovery keys. A miss is a clean not-found, never an error."""
+    """Resolve the discovery keys to all matching pointers, ranked best-first (see
+    LookupResult). A miss is a clean empty result, never an error."""
     with db.connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM catalog WHERE entry_type = %s AND subject = %s",
-            (entry_type, subject),
-        ).fetchone()
-    if row is None:
-        return LookupResult(found=False)
-    return LookupResult(found=True, entry=_serialize(row))
+        rows = conn.execute(_LOOKUP, (entry_type, subject)).fetchall()
+    entries = [_serialize(row) for row in rows]
+    return LookupResult(count=len(entries), entries=entries)
 
 
 def list_catalog_entries(db: Database, entry_type: str) -> ListResult:

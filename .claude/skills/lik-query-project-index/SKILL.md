@@ -24,10 +24,13 @@ If any tool call fails or a required tool is unavailable, **stop** — don't fal
 
 ## Level 1 — Catalog lookup (exact, then fuzzy)
 
-Named project → `lookup_catalog_entry` (`entry_type="index"`, `subject="<name>"`).
-- **Hit:** `getConfluencePage` at the row's `locator`/`location`, read, answer → **Rank & present**. If the page
-  resolves but lacks the detail → **Content gap**.
-- **Miss**, or the question names no single project: `search_catalog_entries` (`entry_type="index"`, `query`=key terms)
+Named project → `lookup_catalog_entry` (`entry_type="index"`, `subject="<name>"`) → matching pointers `entries`,
+**ranked best-first** (verified over unverified, then fresher). Confirmation-based boost/demotion is **not** in this
+order — this skill applies it in **Rank & present** after reading confirmations live.
+- **Hit** (`count ≥ 1`): follow the **top** entry's `locator`/`location` with `getConfluencePage`, read, answer →
+  **Rank & present**. The top row is the default; if several came back (independent saves on the same key), cite the
+  others only when they add detail. If the page resolves but lacks the detail → **Content gap**.
+- **Miss** (`count = 0`), or the question names no single project: `search_catalog_entries` (`entry_type="index"`, `query`=key terms)
   — catches partial names, typos, reordering.
   - **Candidate(s):** follow the top candidate's `locator`/`location`, read, answer → **Rank & present**.
   - **None:** → **Level 2**.

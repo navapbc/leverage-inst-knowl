@@ -24,27 +24,73 @@ def _entry(**overrides) -> CatalogEntry:
 
 
 def test_reregister_upserts(db):
-    """AE1 — re-registering the same key updates in place (one row, new values)."""
+    """AE1 — a skill re-registering its own key updates in place (one row, new values)."""
     first = register_catalog_entry(db, _entry(location="https://old"), updated_by="svc")
     assert first.status == "inserted"
 
     second = register_catalog_entry(db, _entry(location="https://new"), updated_by="svc")
     assert second.status == "updated"
+    assert second.id == first.id  # same row, re-derived in place
 
     found = lookup_catalog_entry(db, "project-summary", "Atlas")
-    assert found.found is True
-    assert found.entry["location"] == "https://new"
+    assert found.count == 1
+    assert found.entries[0]["location"] == "https://new"
 
     with db.connection() as conn:
         count = conn.execute("SELECT count(*) AS n FROM catalog").fetchone()["n"]
     assert count == 1
 
 
-def test_lookup_miss_returns_not_found(db):
-    """AE5 — a missing Catalog row is a clean not-found, not an exception."""
+def test_human_saves_coexist_as_duplicates(db):
+    """A key may resolve to several rows: independent human saves are exempt from the
+    skill upsert arbiter, so each inserts a new pointer rather than overwriting (v0.4 §3)."""
+    first = register_catalog_entry(
+        db,
+        _entry(location="https://alice", provenance="human-created", row_provenance="human"),
+        updated_by="alice",
+    )
+    second = register_catalog_entry(
+        db,
+        _entry(location="https://bob", provenance="human-created", row_provenance="human"),
+        updated_by="bob",
+    )
+    assert first.status == "inserted"
+    assert second.status == "inserted"
+    assert first.id != second.id
+
+    found = lookup_catalog_entry(db, "project-summary", "Atlas")
+    assert found.count == 2
+    assert {e["location"] for e in found.entries} == {"https://alice", "https://bob"}
+
+
+def test_lookup_ranks_verified_first(db):
+    """Ranking is load-bearing: human-verified outranks unverified so the top row is the
+    one a default consumer follows."""
+    register_catalog_entry(
+        db,
+        _entry(location="https://unverified", row_provenance="human"),
+        updated_by="alice",
+    )
+    register_catalog_entry(
+        db,
+        _entry(
+            location="https://verified",
+            row_provenance="human",
+            verification="human-verified",
+        ),
+        updated_by="bob",
+    )
+
+    found = lookup_catalog_entry(db, "project-summary", "Atlas")
+    assert found.count == 2
+    assert found.entries[0]["location"] == "https://verified"
+
+
+def test_lookup_miss_returns_empty(db):
+    """AE5 — a missing Catalog row is a clean empty result, not an exception."""
     result = lookup_catalog_entry(db, "no-such-type", "no-such-subject")
-    assert result.found is False
-    assert result.entry is None
+    assert result.count == 0
+    assert result.entries == []
 
 
 def test_list_returns_rows_for_one_type_ordered(db):

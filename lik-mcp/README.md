@@ -10,8 +10,8 @@ and [../docs/brainstorms/2026-06-24-01-catalog-confirmations-mcp-service-require
 
 ## Tools
 
-- `register_catalog_entry(entry)` — upsert a Catalog row on `(entry_type, subject)`.
-- `lookup_catalog_entry(entry_type, subject)` — one exact-match lookup; a miss is a clean not-found.
+- `register_catalog_entry(entry)` — register a Catalog row; a skill upserts its own row on `(entry_type, subject, computed_by)`, a human-owned row inserts a new pointer (duplicates on a key coexist).
+- `lookup_catalog_entry(entry_type, subject)` — resolve the key to all matching pointers, ranked best-first (the top row is the default); an empty result is a clean miss.
 - `list_catalog_entries(entry_type)` — every Catalog row for one `entry_type`, ordered by subject; bounded by the discovery key, not a free-form predicate.
 - `confirm_source(citation)` — record a confirmation; rejects unresolvable citations, one row per user per source (re-confirming updates the stored content-state marker).
 - `read_confirmations(citation, current_source_state=None)` — accumulated confirmations for one cited source, one row per user; pass the live marker to flag each row's `edited_since`.

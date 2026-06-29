@@ -8,7 +8,13 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- The Catalog: a directory mapping (entry_type, subject) -> where an output lives.
 -- Columns follow v0.4/05-architecture.md section 3.
+--
+-- A key may resolve to several rows: a lookup returns all matching pointers, ranked
+-- (section 3, "Keys"). A skill keeps exactly one row per (entry_type, subject, computed_by)
+-- — re-derived in place via the partial unique index below — so duplicates arise only from
+-- independent human saves, never skill churn. The surrogate id is the stable row handle.
 CREATE TABLE IF NOT EXISTS catalog (
+    id                bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     entry_type        text        NOT NULL,
     subject           text        NOT NULL,
     location          text        NOT NULL,
@@ -29,10 +35,17 @@ CREATE TABLE IF NOT EXISTS catalog (
     row_provenance    text        NOT NULL DEFAULT 'skill',
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    updated_by        text,
-    -- Discovery key + upsert target.
-    CONSTRAINT catalog_pkey PRIMARY KEY (entry_type, subject)
+    updated_by        text
 );
+
+-- A skill owns at most one row per (entry_type, subject) and re-derives it in place; this
+-- partial unique index is the upsert arbiter for skill rows. Human-saved rows (row_provenance
+-- = 'human') are exempt, so independent saves on the same key coexist as ranked duplicates.
+CREATE UNIQUE INDEX IF NOT EXISTS catalog_skill_key
+    ON catalog (entry_type, subject, computed_by) WHERE row_provenance = 'skill';
+
+-- Accelerate the (entry_type, subject) discovery lookup now that it is no longer the PK.
+CREATE INDEX IF NOT EXISTS catalog_discovery_key ON catalog (entry_type, subject);
 
 -- Index the ACL hint for later query-time filtering.
 CREATE INDEX IF NOT EXISTS catalog_access_groups_gin ON catalog USING GIN (access_groups);
