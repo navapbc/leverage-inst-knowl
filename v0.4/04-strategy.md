@@ -11,7 +11,7 @@ The levels, each detailed below:
 - **Level 2 — Discovery Layer (DL) outputs.** Precompute reusable results so the agent stops re-searching from scratch.
 - **Level 3-Confirmations.** Capture the human "this source was right" trust signal Level 2 can't compute.
 - **Level 3-Catalog.** One lookup to discover where any DL output lives.
-- **Level 4 — Flywheel.** Saved answers become new DL outputs, so coverage grows from the questions people actually ask.
+- **Level 4 — Flywheel.** Saved answers become new discoverable DS records, so coverage grows from the questions people actually ask.
 
 **Acronyms:** **MCP** (Model Context Protocol) — the service interface agents/apps use to read and write DSs (and later DL) under a verified user identity. **SSO** — single sign-on (Google SSO + Google Groups). Identity mechanics — verified tokens, on-behalf-of exchange — are in <u>Access Control</u>.
 
@@ -136,28 +136,28 @@ A broken pointer is never fatal: a consumer treats it as a **cache miss** and fa
 
 ---
 
-## Level 4 — Flywheel: saved answers become new DL outputs
+## Level 4 — Flywheel: saved answers become new discoverable DS records
 
 **Goal:** grow DL coverage from the questions people actually ask. When a Query skill synthesizes an answer (from many records, in one DS or several) that exists in no DL output yet, it offers to persist that synthesis as a new durable artifact — so the next person retrieves it instead of re-deriving it.
 
-The gap this closes: Level 2's skills must **guess** what to precompute, and Level 3-Confirmations only captures trust on outputs that *already exist*. Level 4 makes every saved novel synthesis a candidate DL output, so coverage grows **demand-driven**. Builds on Level 1 (the §1.3 Query skills and §1.2 write model). Level 3-Catalog is **optional but strongly recommended**: without it a saved synthesis still exists and is reachable by skill routing or bounded fan-out, but the Catalog is what makes it discoverable in one lookup. Does *not* depend on Level 3-Confirmations.
+The gap this closes: Level 2's skills must **guess** what to precompute, and Level 3-Confirmations only captures trust on outputs that *already exist*. Level 4 makes every saved novel synthesis a candidate for one-lookup discovery — a DS record promotable into DL by a Catalog pointer — so coverage grows **demand-driven**. Builds on Level 1 (the §1.3 Query skills and §1.2 write model). Level 3-Catalog is **optional but strongly recommended**: without it a saved synthesis still exists and is reachable by skill routing or bounded fan-out, but the Catalog is what makes it discoverable in one lookup. Does *not* depend on Level 3-Confirmations.
 
 ### 4.1 The save-to-create gesture
 When the skill synthesizes an answer matching no existing DL output, it offers to **create** it — *"Create a Confluence page / Google Doc from this answer?"* The skill knows whether it answered from an existing output or had to assemble one from scratch. The user can save the **whole synthesis or just the good section**. **Opt-in and user-driven** — the user vouches for both the content and the action; no silent writes.
 
 ### 4.2 What gets written, and how
-A **`human-created` DL output** — durable, not recomputable, attributed in version history — written under the **user's own SSO** into a DS-hosted store (a Confluence page or Google Doc). Unlike a DL-creation skill's output it carries **no** `discovery-layer` tag — that tag marks skill-produced derived material, and a saved answer is authored by a person. Access follows the **DL group-share model** — one tier, audience no broader than its most-restricted source — *not* §1.2 single-location inheritance, because a synthesis can draw on records with different restrictions and so blend tiers. (Access model: <u>Architecture</u> §4.)
+A **`human-created` DS record** — durable, not recomputable, attributed in version history — written under the **user's own SSO** into a DS-hosted store (a Confluence page or Google Doc). Unlike a DL-creation skill's output it carries **no** `discovery-layer` tag — that tag marks skill-produced derived material, and a saved answer is authored by a person — so it's a DS record, **not a DL record**. (DL's only contribution is the optional Catalog pointer below.) Access follows the **DL group-share model** — one tier, audience no broader than its most-restricted source — *not* §1.2 single-location inheritance, because a synthesis can draw on records with different restrictions and so blend tiers. (Access model: <u>Architecture</u> §4.)
 
 **Cataloging is a second, separate opt-in.** Saving the artifact does *not* register it. A saved synthesis exists and is reachable by skill routing or fan-out on its own; promoting it to **one-lookup discovery** is a distinct choice the user makes only when the answer earns a stable pointer — it answers a durable `(entry_type, subject)` key a non-producer would look up, not a one-off personal Q&A (the §3 qualification rules, <u>Architecture</u>). When the user opts to register, a service account writes a Catalog pointer with the user as `created_by` and `row_provenance = 'human'` (the same narrow-writer split confirmations use) — an **untagged, human-owned row**, *not* a `discovery-layer` marker. Default off, so the Catalog stays small and stable rather than accumulating every saved answer. (Write split: <u>Architecture</u> §4; what qualifies for registration: <u>Architecture</u> §3.)
 
 ### 4.3 The flywheel
 1. A user asks something with no DL answer; the skill fans out and synthesizes.
 2. The user saves the answer — and, if it earns a stable key, separately opts to register it.
-3. The synthesis is now a durable DL output. If registered, it's discoverable in one lookup; if not, it's still reachable by skill routing or fan-out — just not in one step.
+3. The synthesis is now a durable DS record. If registered, it's discoverable in one lookup; if not, it's still reachable by skill routing or fan-out — just not in one step.
 4. A later person retrieves a registered synthesis in one step instead of re-fanning out — and can confirm it, accruing trust.
 
-Usage surfaces answers worth saving; the reusable ones get registered and become one-lookup outputs; new outputs make answers faster; faster answers drive more usage. The cost of the separate opt-in is honest: an unregistered synthesis still costs the next person a fan-out — the one-lookup payoff lands only for answers worth promoting.
+Usage surfaces answers worth saving; the reusable ones get registered and become one-lookup answers; more registered answers make retrieval faster; faster answers drive more usage. The cost of the separate opt-in is honest: an unregistered synthesis still costs the next person a fan-out — the one-lookup payoff lands only for answers worth promoting.
 
-**Guardrails:** one sensitivity tier per artifact (default-deny in doubt); check the Catalog for an existing artifact on the same key and update in place rather than spawning near-duplicates; and because a saved synthesis isn't re-derived, it goes stale — §3.2 staleness flags it, and §3.3 backpropagation eventually moves its trust into the source DSs, after which the standalone synthesis can be archived.
+**Guardrails:** one sensitivity tier per artifact (default-deny in doubt); **near-duplicates on the same key are allowed** — a saved synthesis is a person's own DS record, so saving never overwrites a prior artifact. When two syntheses answer the same `(entry_type, subject)`, both stand and both can be registered: a Catalog lookup on that key returns **all matching pointers, ranked** (verified over unverified, fresher over staler, more-confirmed over less), and the **consumer (the Query skill or the user) weighs and reconciles them** — the top-ranked one is the default (<u>Architecture</u> §3). Registration never overwrites a prior human row; superseding one is a deliberate choice, never silent. Because a saved synthesis isn't re-derived, it goes stale — §3.2 staleness flags it, and §3.3 backpropagation eventually moves its trust into the source DSs. Archiving the standalone synthesis then follows the **same owner-surfaced, revert-based recovery as any human-authored record — never a silent delete.**
 
-**Expected limitation.** The flywheel only covers subjects that get **asked about** — a cold-start topic nobody queried has no DL output. So Level 4 complements Level 2's proactive precomputation rather than replacing it.
+**Expected limitation.** The flywheel only covers subjects that get **asked about** — a cold-start topic nobody queried has no saved answer. So Level 4 complements Level 2's proactive precomputation rather than replacing it.
