@@ -1,6 +1,6 @@
-<svg width="900" height="674" viewBox="0 0 900 674" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+<svg width="900" height="730" viewBox="0 0 900 730" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title>Data flows</title>
-  <desc>Diagram of the five data flows in the architecture: (1) Populate and refresh — a DL-creation skill reads Data Sources and writes computed outputs plus the Catalog; (2) Query and retrieval — a Query skill finds a known DL output directly or reads the Catalog and follows pointers; (3) Confirmations — users mark a cited source right or wrong, saved to a confirmation store; (4) Durable updates — all permanent new knowledge and corrections go to Data Sources; (5) Saved synthesis — a user writes a cross-source artifact under their own SSO, then a service account registers the Catalog pointer as a human-owned row. Everything reads and writes through MCP under a verified identity.</desc>
+  <desc>Diagram of the five data flows in the architecture. The Data Sources (authoritative) hold both the primary DS records and most of the Discovery Layer as DL records; the Discovery Layer's own store holds the Catalog and the Confirmation store. (1) Populate and refresh — a DL-creation skill reads Data Sources and writes DL records into them plus Catalog rows, all via MCP; (2) Query and retrieval — a Query skill finds a known DL record directly or reads the Catalog and follows pointers to the DL record in the Data Sources; (3) Confirmations — users mark a cited source right or wrong, kept and backed up by the Layer's own confirmation store; (4) Durable updates — all permanent new knowledge and corrections go to Data Sources; (5) Saved synthesis — a user writes a cross-source artifact (a DL record) under their own SSO, then a service account registers its Catalog pointer as a human-owned row. Everything reads and writes through MCP under a verified identity.</desc>
 
   <defs>
     <marker id="aGreen" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#2D8B57"/></marker>
@@ -8,143 +8,157 @@
     <marker id="aPurpleRev" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto-start-reverse"><path d="M7,0 L0,3.5 L7,7 Z" fill="#7D3C98"/></marker>
     <marker id="aMag" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#9B59B6"/></marker>
     <marker id="aNavy" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#1B4A6B"/></marker>
+    <marker id="aNavyRev" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto-start-reverse"><path d="M7,0 L0,3.5 L7,7 Z" fill="#1B4A6B"/></marker>
     <marker id="aBlue" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#2A7EAA"/></marker>
     <marker id="aBlueRev" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto-start-reverse"><path d="M7,0 L0,3.5 L7,7 Z" fill="#2A7EAA"/></marker>
     <marker id="aOrange" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#C0660E"/></marker>
   </defs>
 
   <!-- Background -->
-  <rect width="900" height="674" fill="#F5F7FA"/>
+  <rect width="900" height="730" fill="#F5F7FA"/>
 
   <!-- Title -->
-  <text x="450" y="32" text-anchor="middle" font-size="18" font-weight="700" fill="#1B4A6B">Data flows</text>
-  <text x="450" y="52" text-anchor="middle" font-size="11" font-style="italic" fill="#5A8BA8">Five flows move knowledge between Data Sources, the Discovery Layer, and the people and tools that use it.</text>
+  <text x="450" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#1B4A6B">Data flows</text>
+  <text x="450" y="50" text-anchor="middle" font-size="11" font-style="italic" fill="#5A8BA8">Five flows move knowledge between Data Sources, the Discovery Layer, and the people and tools that use it.</text>
 
   <!-- ===== USERS ===== -->
-  <rect x="70" y="70" width="440" height="62" rx="8" fill="#EAECEE" stroke="#A0A8B0" stroke-width="1.5"/>
-  <text x="290" y="97" text-anchor="middle" font-size="13" font-weight="700" fill="#2C3E50">Users · AI tools · apps</text>
-  <text x="290" y="115" text-anchor="middle" font-size="9.5" fill="#6B7785">ask questions · confirm sources · write new knowledge</text>
+  <rect x="70" y="66" width="430" height="56" rx="8" fill="#EAECEE" stroke="#A0A8B0" stroke-width="1.5"/>
+  <text x="285" y="90" text-anchor="middle" font-size="13" font-weight="700" fill="#2C3E50">Users · AI tools · apps</text>
+  <text x="285" y="108" text-anchor="middle" font-size="9.5" fill="#6B7785">ask questions · confirm sources · write new knowledge</text>
 
   <!-- ===== QUERY SKILL ===== -->
-  <rect x="540" y="70" width="320" height="62" rx="8" fill="#F4ECF7" stroke="#7D3C98" stroke-width="2"/>
-  <text x="700" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#5B2282">Query skill  <tspan font-size="9" font-weight="400" fill="#7D3C98">(one per topic)</tspan></text>
-  <text x="700" y="108" text-anchor="middle" font-size="9" fill="#7D3C98">steers reads under your own SSO identity</text>
-  <text x="700" y="122" text-anchor="middle" font-size="8.5" fill="#A569BD" font-style="italic">known output direct · else Catalog → pointers</text>
+  <rect x="540" y="66" width="320" height="56" rx="8" fill="#F4ECF7" stroke="#7D3C98" stroke-width="2"/>
+  <text x="700" y="86" text-anchor="middle" font-size="12" font-weight="700" fill="#5B2282">Query skill  <tspan font-size="9" font-weight="400" fill="#7D3C98">(one per topic)</tspan></text>
+  <text x="700" y="101" text-anchor="middle" font-size="9" fill="#7D3C98">steers reads under your own SSO identity</text>
+  <text x="700" y="114" text-anchor="middle" font-size="8.5" fill="#A569BD" font-style="italic">known record direct · else Catalog → pointers</text>
 
-  <!-- ===== DISCOVERY LAYER ===== -->
-  <rect x="70" y="160" width="440" height="252" rx="8" fill="#E8F3FA" stroke="#B0D0E8" stroke-width="1.5"/>
-  <text x="290" y="184" text-anchor="middle" font-size="13" font-weight="700" fill="#1B4A6B">Discovery Layer</text>
-  <text x="290" y="199" text-anchor="middle" font-size="9" font-style="italic" fill="#5A8BA8">computed · derived from Data Sources · spread across stores</text>
+  <!-- ===== DISCOVERY LAYER'S OWN STORE ===== -->
+  <rect x="70" y="150" width="430" height="120" rx="8" fill="#E8F3FA" stroke="#B0D0E8" stroke-width="1.5"/>
+  <text x="285" y="171" text-anchor="middle" font-size="13" font-weight="700" fill="#1B4A6B">Discovery Layer — its own store</text>
+  <text x="285" y="186" text-anchor="middle" font-size="9" font-style="italic" fill="#5A8BA8">computed · derived from the Data Sources · most of the Layer lives below, in the DSs</text>
 
   <!-- Catalog -->
-  <rect x="88" y="210" width="404" height="50" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
-  <text x="290" y="232" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Catalog — the entry point</text>
-  <text x="290" y="248" text-anchor="middle" font-size="9" fill="#2A7EAA">maps  type + subject  →  location of any DL output</text>
-
-  <!-- DL output stores -->
-  <rect x="88" y="272" width="404" height="58" rx="6" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
-  <text x="290" y="295" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">DL output stores</text>
-  <text x="290" y="312" text-anchor="middle" font-size="9" fill="#4A8A5A">indexes · summaries · retrieval hints · freshness signals</text>
+  <rect x="88" y="194" width="394" height="38" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
+  <text x="285" y="210" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Catalog — the entry point</text>
+  <text x="285" y="225" text-anchor="middle" font-size="8.5" fill="#2A7EAA">maps  type + subject  →  where each DL record lives</text>
 
   <!-- Confirmation store -->
-  <rect x="88" y="342" width="404" height="54" rx="6" fill="#FFFFFF" stroke="#9B59B6" stroke-width="1.5"/>
-  <text x="290" y="365" text-anchor="middle" font-size="11" font-weight="700" fill="#6C2A6A">Confirmation store</text>
-  <text x="290" y="381" text-anchor="middle" font-size="9" fill="#8E44AD">Confluence page (default) → integrity store at scale</text>
+  <rect x="88" y="238" width="394" height="28" rx="6" fill="#FFFFFF" stroke="#9B59B6" stroke-width="1.5"/>
+  <text x="285" y="256" text-anchor="middle" font-size="10" font-weight="700" fill="#6C2A6A">Confirmation store  <tspan font-size="8.5" font-weight="400" font-style="italic" fill="#8E44AD">— kept &amp; backed up by the Layer</tspan></text>
 
   <!-- ===== DL-CREATION SKILL ===== -->
-  <rect x="540" y="160" width="320" height="92" rx="8" fill="#E9F7EF" stroke="#2D8B57" stroke-width="2"/>
-  <text x="700" y="184" text-anchor="middle" font-size="12" font-weight="700" fill="#1A5E34">DL-creation skill  <tspan font-size="9" font-weight="400" fill="#2D8B57">(one per source/team)</tspan></text>
-  <text x="700" y="201" text-anchor="middle" font-size="9" fill="#2D8B57">reads sources · computes outputs</text>
-  <text x="700" y="216" text-anchor="middle" font-size="9" fill="#2D8B57">writes DL outputs + Catalog rows</text>
-  <text x="700" y="233" text-anchor="middle" font-size="8.5" fill="#52BE80" font-style="italic">runs staleness checks · service identity</text>
+  <rect x="540" y="150" width="320" height="92" rx="8" fill="#E9F7EF" stroke="#2D8B57" stroke-width="2"/>
+  <text x="700" y="173" text-anchor="middle" font-size="12" font-weight="700" fill="#1A5E34">DL-creation skill  <tspan font-size="9" font-weight="400" fill="#2D8B57">(one per source/team)</tspan></text>
+  <text x="700" y="190" text-anchor="middle" font-size="9" fill="#2D8B57">reads sources · computes outputs</text>
+  <text x="700" y="205" text-anchor="middle" font-size="9" fill="#2D8B57">writes DL records + Catalog rows</text>
+  <text x="700" y="222" text-anchor="middle" font-size="8.5" fill="#52BE80" font-style="italic">runs staleness checks · service identity</text>
 
   <!-- ===== MCP ===== -->
-  <rect x="14" y="440" width="846" height="50" rx="6" fill="#2A7EAA"/>
-  <text x="437" y="462" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">MCP — every read &amp; write flows through here under a verified identity</text>
-  <text x="437" y="479" text-anchor="middle" font-size="9" fill="#CBE7F7">each Data Source still enforces its own native permissions on every call</text>
+  <rect x="14" y="352" width="846" height="46" rx="6" fill="#2A7EAA"/>
+  <text x="437" y="373" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">MCP — every read &amp; write flows through here under a verified identity</text>
+  <text x="437" y="389" text-anchor="middle" font-size="9" fill="#CBE7F7">each Data Source still enforces its own native permissions on every call</text>
 
   <!-- ===== DATA SOURCES ===== -->
-  <rect x="14" y="506" width="846" height="62" rx="7" fill="#1B4A6B"/>
-  <text x="437" y="528" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Data Sources — source of truth</text>
-  <text x="437" y="545" text-anchor="middle" font-size="9.5" fill="#A8CCED">Confluence · Jira · GitHub · Slack · Google Drive · Salesforce · Workday</text>
-  <text x="437" y="559" text-anchor="middle" font-size="9" font-style="italic" fill="#7AABCE">all durable writes happen here</text>
+  <rect x="14" y="430" width="846" height="214" rx="7" fill="#1B4A6B"/>
+  <text x="437" y="453" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Data Sources — authoritative</text>
+  <text x="437" y="471" text-anchor="middle" font-size="9.5" fill="#A8CCED">Confluence · Jira · GitHub · Slack · Google Drive · Salesforce · Workday</text>
+  <text x="437" y="486" text-anchor="middle" font-size="9" font-style="italic" fill="#7AABCE">all durable writes happen here · each system controls who may see what</text>
+
+  <!-- DL records sub-box (most of the Discovery Layer, living in the Data Sources) -->
+  <rect x="36" y="500" width="520" height="128" rx="6" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
+  <rect x="36" y="500" width="118" height="128" rx="6" fill="#E9F7EF"/>
+  <text x="95" y="556" text-anchor="middle" font-size="10" font-weight="700" fill="#1E6B32">A DL record</text>
+  <text x="95" y="572" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">kept safe by</text>
+  <text x="95" y="583" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">the Data Source</text>
+  <text x="355" y="524" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">DL records — most of the Discovery Layer</text>
+  <text x="355" y="542" text-anchor="middle" font-size="9" fill="#4A8A5A">indexes · summaries · retrieval hints · freshness signals</text>
+  <text x="355" y="558" text-anchor="middle" font-size="9" fill="#4A8A5A">marked discovery-layer · derived, not authoritative</text>
+  <text x="355" y="574" text-anchor="middle" font-size="9" fill="#4A8A5A">the Data Source stores &amp; backs them up · rebuilt on demand</text>
+  <text x="355" y="594" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78AA82">recovered by re-derivation, not backup</text>
+
+  <!-- Primary DS records sub-box -->
+  <rect x="572" y="500" width="272" height="128" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
+  <text x="708" y="528" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Primary DS records</text>
+  <text x="708" y="547" text-anchor="middle" font-size="9" fill="#2A7EAA">the authoritative originals</text>
+  <text x="708" y="564" text-anchor="middle" font-size="9" fill="#2A7EAA">pages · tickets · threads · PRs · files</text>
+  <text x="708" y="584" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">every lasting change is written here</text>
 
   <!-- ===== STRUCTURAL CONNECTORS (neutral) ===== -->
-  <!-- DL box <-> MCP -->
-  <line x1="290" y1="412" x2="290" y2="440" stroke="#2A7EAA" stroke-width="1.5" marker-end="url(#aBlue)" marker-start="url(#aBlueRev)"/>
-  <text x="296" y="430" font-size="8" fill="#2A7EAA">via MCP</text>
-  <!-- MCP <-> DSs -->
-  <line x1="437" y1="490" x2="437" y2="506" stroke="#1B4A6B" stroke-width="2" marker-end="url(#aNavy)" marker-start="url(#aBlueRev)"/>
+  <!-- DL's own store <-> MCP -->
+  <line x1="300" y1="270" x2="300" y2="352" stroke="#2A7EAA" stroke-width="1.5" marker-end="url(#aBlue)" marker-start="url(#aBlueRev)"/>
+  <text x="308" y="316" font-size="8" fill="#2A7EAA">via MCP</text>
+  <!-- MCP <-> Data Sources -->
+  <line x1="437" y1="398" x2="437" y2="430" stroke="#1B4A6B" stroke-width="2" marker-end="url(#aNavy)" marker-start="url(#aNavyRev)"/>
 
   <!-- ===== FLOW 1: POPULATE & REFRESH (green) ===== -->
-  <!-- skill writes into DL -->
-  <line x1="540" y1="206" x2="496" y2="296" stroke="#2D8B57" stroke-width="2" marker-end="url(#aGreen)"/>
-  <text x="556" y="262" font-size="8.5" fill="#2D8B57">writes</text>
-  <!-- skill reads sources via MCP (dashed) -->
-  <line x1="745" y1="252" x2="745" y2="440" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#aGreen)"/>
-  <text x="752" y="350" font-size="8.5" fill="#2D8B57">reads sources</text>
-  <text x="752" y="361" font-size="8.5" fill="#2D8B57">via MCP</text>
+  <!-- DL-creation writes Catalog rows -->
+  <line x1="540" y1="200" x2="484" y2="210" stroke="#2D8B57" stroke-width="2" marker-end="url(#aGreen)"/>
+  <text x="512" y="196" text-anchor="middle" font-size="8" fill="#2D8B57">writes Catalog</text>
+  <!-- DL-creation reads sources & writes DL records via MCP (dashed) -->
+  <line x1="730" y1="242" x2="730" y2="352" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#aGreen)"/>
+  <text x="737" y="294" font-size="8.5" fill="#2D8B57">reads sources &amp;</text>
+  <text x="737" y="305" font-size="8.5" fill="#2D8B57">writes DL records</text>
+  <text x="737" y="316" font-size="8.5" fill="#2D8B57">· via MCP</text>
   <!-- badge 1 -->
-  <circle cx="540" cy="252" r="11" fill="#2D8B57"/>
-  <text x="540" y="256" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>
+  <circle cx="524" cy="214" r="11" fill="#2D8B57"/>
+  <text x="524" y="218" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>
 
   <!-- ===== FLOW 2: QUERY & RETRIEVAL (purple) ===== -->
   <!-- user asks / answers -->
-  <line x1="510" y1="96" x2="540" y2="96" stroke="#7D3C98" stroke-width="2" marker-end="url(#aPurple)" marker-start="url(#aPurpleRev)"/>
-  <text x="525" y="86" text-anchor="middle" font-size="8.5" fill="#7D3C98">ask / answer</text>
+  <line x1="500" y1="94" x2="540" y2="94" stroke="#7D3C98" stroke-width="2" marker-end="url(#aPurple)" marker-start="url(#aPurpleRev)"/>
+  <text x="520" y="84" text-anchor="middle" font-size="8.5" fill="#7D3C98">ask / answer</text>
   <!-- query skill -> catalog -->
-  <line x1="558" y1="132" x2="470" y2="210" stroke="#7D3C98" stroke-width="2" marker-end="url(#aPurple)"/>
-  <text x="540" y="172" text-anchor="middle" font-size="8.5" fill="#7D3C98">find where</text>
-  <text x="540" y="183" text-anchor="middle" font-size="8.5" fill="#7D3C98">it lives</text>
-  <!-- catalog -> output stores (follow pointer) -->
-  <line x1="360" y1="260" x2="360" y2="272" stroke="#7D3C98" stroke-width="1.5" marker-end="url(#aPurple)"/>
-  <text x="404" y="269" font-size="8" fill="#7D3C98">follow pointer</text>
+  <line x1="558" y1="122" x2="476" y2="194" stroke="#7D3C98" stroke-width="2" marker-end="url(#aPurple)"/>
+  <text x="508" y="158" text-anchor="middle" font-size="8.5" fill="#7D3C98">find where</text>
+  <text x="508" y="169" text-anchor="middle" font-size="8.5" fill="#7D3C98">it lives</text>
+  <!-- catalog -> DL record in Data Sources (follow pointer, via MCP) -->
+  <line x1="240" y1="232" x2="240" y2="500" stroke="#7D3C98" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#aPurple)"/>
+  <text x="248" y="312" font-size="8.5" fill="#7D3C98">follow pointer</text>
+  <text x="248" y="323" font-size="8.5" fill="#7D3C98">→ DL record (via MCP)</text>
   <!-- badge 2 -->
-  <circle cx="556" cy="150" r="11" fill="#7D3C98"/>
-  <text x="556" y="154" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">2</text>
+  <circle cx="558" cy="140" r="11" fill="#7D3C98"/>
+  <text x="558" y="144" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">2</text>
 
   <!-- ===== FLOW 3: CONFIRMATIONS (magenta) ===== -->
-  <path d="M70,124 L50,124 L50,369 L88,369" fill="none" stroke="#9B59B6" stroke-width="2" marker-end="url(#aMag)"/>
-  <text x="44" y="250" text-anchor="middle" font-size="8.5" fill="#9B59B6" transform="rotate(-90,44,250)">confirm source</text>
+  <path d="M70,112 L48,112 L48,252 L88,252" fill="none" stroke="#9B59B6" stroke-width="2" marker-end="url(#aMag)"/>
+  <text x="42" y="200" text-anchor="middle" font-size="8.5" fill="#9B59B6" transform="rotate(-90,42,200)">confirm source</text>
   <!-- badge 3 -->
-  <circle cx="50" cy="190" r="11" fill="#9B59B6"/>
-  <text x="50" y="194" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">3</text>
+  <circle cx="48" cy="160" r="11" fill="#9B59B6"/>
+  <text x="48" y="164" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">3</text>
 
   <!-- ===== FLOW 4: DURABLE UPDATES (navy) ===== -->
-  <path d="M70,110 L30,110 L30,503" fill="none" stroke="#1B4A6B" stroke-width="2" marker-end="url(#aNavy)"/>
-  <text x="24" y="320" text-anchor="middle" font-size="8.5" fill="#1B4A6B" transform="rotate(-90,24,320)">durable updates</text>
+  <path d="M70,100 L24,100 L24,430" fill="none" stroke="#1B4A6B" stroke-width="2" marker-end="url(#aNavy)"/>
+  <text x="18" y="300" text-anchor="middle" font-size="8.5" fill="#1B4A6B" transform="rotate(-90,18,300)">durable updates</text>
   <!-- badge 4 -->
-  <circle cx="30" cy="420" r="11" fill="#1B4A6B"/>
-  <text x="30" y="424" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">4</text>
+  <circle cx="24" cy="360" r="11" fill="#1B4A6B"/>
+  <text x="24" y="364" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">4</text>
 
   <!-- ===== FLOW 5: SAVED SYNTHESIS (orange) ===== -->
-  <!-- user writes cross-source artifact under own SSO, into DL output stores -->
-  <path d="M100,132 L100,145 L76,145 L76,300 L88,300" fill="none" stroke="#C0660E" stroke-width="2" marker-end="url(#aOrange)"/>
-  <text x="79" y="232" text-anchor="middle" font-size="7.5" fill="#C0660E" transform="rotate(-90,79,232)">writes artifact · own SSO</text>
-  <!-- service account registers the Catalog pointer (human-owned row) -->
-  <line x1="180" y1="272" x2="180" y2="261" stroke="#C0660E" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#aOrange)"/>
-  <text x="186" y="269" font-size="7.5" fill="#C0660E">service acct registers pointer</text>
+  <!-- user writes cross-source artifact (a DL record) under own SSO, into the Data Sources via MCP -->
+  <path d="M120,122 L120,136 L66,136 L66,500" fill="none" stroke="#C0660E" stroke-width="2" marker-end="url(#aOrange)"/>
+  <text x="60" y="300" text-anchor="middle" font-size="7.5" fill="#C0660E" transform="rotate(-90,60,300)">writes artifact (a DL record) · own SSO</text>
+  <!-- (service account registers the Catalog pointer — see legend item 5) -->
   <!-- badge 5 -->
-  <circle cx="76" cy="172" r="11" fill="#C0660E"/>
-  <text x="76" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">5</text>
+  <circle cx="66" cy="170" r="11" fill="#C0660E"/>
+  <text x="66" y="174" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">5</text>
 
   <!-- ===== LEGEND ===== -->
-  <line x1="40" y1="586" x2="860" y2="586" stroke="#D6E0E8" stroke-width="1"/>
+  <line x1="40" y1="658" x2="860" y2="658" stroke="#D6E0E8" stroke-width="1"/>
   <!-- 1 -->
-  <circle cx="48" cy="603" r="9" fill="#2D8B57"/><text x="48" y="607" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">1</text>
-  <text x="64" y="600" font-size="9.5" font-weight="700" fill="#1A5E34">Populate &amp; refresh</text>
-  <text x="64" y="613" font-size="9" fill="#5A8BA8">skill reads sources → computes outputs → writes to stores + Catalog</text>
+  <circle cx="48" cy="675" r="9" fill="#2D8B57"/><text x="48" y="679" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">1</text>
+  <text x="64" y="672" font-size="9.5" font-weight="700" fill="#1A5E34">Populate &amp; refresh</text>
+  <text x="64" y="685" font-size="9" fill="#5A8BA8">skill reads sources → computes → writes DL records + Catalog (via MCP)</text>
   <!-- 2 -->
-  <circle cx="468" cy="603" r="9" fill="#7D3C98"/><text x="468" y="607" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">2</text>
-  <text x="484" y="600" font-size="9.5" font-weight="700" fill="#5B2282">Query &amp; retrieval</text>
-  <text x="484" y="613" font-size="9" fill="#5A8BA8">known output direct, else read Catalog → follow pointers</text>
+  <circle cx="468" cy="675" r="9" fill="#7D3C98"/><text x="468" y="679" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">2</text>
+  <text x="484" y="672" font-size="9.5" font-weight="700" fill="#5B2282">Query &amp; retrieval</text>
+  <text x="484" y="685" font-size="9" fill="#5A8BA8">known record direct, else read Catalog → follow pointers</text>
   <!-- 3 -->
-  <circle cx="48" cy="629" r="9" fill="#9B59B6"/><text x="48" y="633" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">3</text>
-  <text x="64" y="633" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#6C2A6A">Confirmations</tspan>  users mark a source right/wrong; attributed, revertible</text>
+  <circle cx="48" cy="701" r="9" fill="#9B59B6"/><text x="48" y="705" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">3</text>
+  <text x="64" y="705" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#6C2A6A">Confirmations</tspan>  users mark a source right/wrong; attributed, revertible</text>
   <!-- 4 -->
-  <circle cx="468" cy="629" r="9" fill="#1B4A6B"/><text x="468" y="633" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">4</text>
-  <text x="484" y="633" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#1B4A6B">Durable updates</tspan>  all new knowledge &amp; corrections go to Data Sources</text>
+  <circle cx="468" cy="701" r="9" fill="#1B4A6B"/><text x="468" y="705" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">4</text>
+  <text x="484" y="705" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#1B4A6B">Durable updates</tspan>  all new knowledge &amp; corrections go to Data Sources</text>
   <!-- 5 -->
-  <circle cx="48" cy="657" r="9" fill="#C0660E"/><text x="48" y="661" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">5</text>
-  <text x="64" y="661" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#9B5410">Saved synthesis</tspan>  user writes a cross-source artifact (own SSO); service account registers the Catalog pointer as a human-owned row</text>
+  <circle cx="48" cy="722" r="9" fill="#C0660E"/><text x="48" y="726" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">5</text>
+  <text x="64" y="726" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#9B5410">Saved synthesis</tspan>  user writes a cross-source artifact (own SSO); service account registers its Catalog pointer as a human-owned row</text>
 </svg>

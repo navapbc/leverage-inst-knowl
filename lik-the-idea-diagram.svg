@@ -1,6 +1,6 @@
 <svg width="900" height="620" viewBox="0 0 900 620" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title>The idea</title>
-  <desc>The idea: leave knowledge in the Data Sources, which stay the single source of truth and control who may see what. On top, add a Discovery Layer — derived material whose only job is to make knowledge fast to find and reuse, without copying everything into one place and without becoming a second, competing source of truth. Its outputs come in three kinds, sorted by where each lives and who keeps it safe. Most of the Discovery Layer lives inside the Data Sources themselves as DS records (summaries, indexes, and pointers marked discovery-layer), which the source stores and backs up and which are rebuilt on demand. Two parts live in the Layer's own store: the Catalog — an index from topic to where its material lives, built only from the discovery-layer DS records, recomputable and needing no backup; and confirmation signals — people vouching the cited source was right or flagging it wrong, which can't be re-derived and are the one part the Discovery Layer must back up itself.</desc>
+  <desc>The idea: leave knowledge in the Data Sources, which each stay authoritative for what they hold and control who may see what. On top, add a Discovery Layer — derived material whose only job is to make knowledge fast to find and reuse, without copying everything into one place and without becoming a competing authority. Its outputs come in three kinds, sorted by where each lives and who keeps it safe. The Data Sources hold two kinds of DS record: primary DS records (primary knowledge — the authoritative originals) and DL records (discovery-layer records — summaries, indexes, and pointers, derived and not authoritative). Most of the Discovery Layer lives inside the Data Sources as these DL records, which the source stores and backs up and which are rebuilt on demand. Two parts live in the Layer's own store: the Catalog — an index from topic to where its material lives, built only from the DL records, recomputable and needing no backup; and confirmation signals — people vouching the cited source was right or flagging it wrong, which can't be re-derived and are the one part the Discovery Layer must back up itself.</desc>
 
   <defs>
     <marker id="aDark" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#1B4A6B"/></marker>
@@ -16,7 +16,7 @@
   <!-- ===== DISCOVERY LAYER'S OWN STORE (top) ===== -->
   <rect x="40" y="86" width="620" height="252" rx="8" fill="#E8F3FA" stroke="#B0D0E8" stroke-width="1.5"/>
   <text x="350" y="110" text-anchor="middle" font-size="14" font-weight="700" fill="#1B4A6B">Discovery Layer</text>
-  <text x="350" y="127" text-anchor="middle" font-size="9.5" font-style="italic" fill="#5A8BA8">derived material · only job: make knowledge fast to find &amp; reuse · never a second source of truth</text>
+  <text x="350" y="127" text-anchor="middle" font-size="9.5" font-style="italic" fill="#5A8BA8">derived material · only job: make knowledge fast to find &amp; reuse · never a competing authority</text>
   <text x="350" y="144" text-anchor="middle" font-size="9" font-weight="700" fill="#5A8BA8">Two parts live in the Layer's own store (most of it lives below, in the Data Sources):</text>
 
   <!-- Catalog -->
@@ -26,7 +26,7 @@
   <text x="124" y="202" text-anchor="middle" font-size="9" font-weight="700" fill="#1B4A6B">— no backup</text>
   <text x="412" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="#1B4A6B">The Catalog  —  where to start</text>
   <text x="412" y="193" text-anchor="middle" font-size="9" fill="#2A7EAA">index: topic → where its material lives · one lookup, then follow the pointer</text>
-  <text x="412" y="208" text-anchor="middle" font-size="9" fill="#2A7EAA">built only from the <tspan font-family="monospace" fill="#1B4A6B">discovery-layer</tspan> DS records — the coarse, cross-system view</text>
+  <text x="412" y="208" text-anchor="middle" font-size="9" fill="#2A7EAA">built only from the discovery-layer DS records — the coarse, cross-system view</text>
   <text x="412" y="225" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">without it: search every system to learn what exists &amp; where</text>
 
   <!-- Confirmation signals -->
@@ -45,29 +45,34 @@
   <text x="777" y="202" text-anchor="middle" font-size="9.5" fill="#B03A2E">copying everything</text>
   <text x="777" y="216" text-anchor="middle" font-size="9.5" fill="#B03A2E">into one place</text>
   <line x1="706" y1="229" x2="848" y2="229" stroke="#E6B0AA" stroke-width="1"/>
-  <text x="777" y="250" text-anchor="middle" font-size="9.5" fill="#B03A2E">a second, competing</text>
-  <text x="777" y="264" text-anchor="middle" font-size="9.5" fill="#B03A2E">"source of truth"</text>
+  <text x="777" y="250" text-anchor="middle" font-size="9.5" fill="#B03A2E">a competing</text>
+  <text x="777" y="264" text-anchor="middle" font-size="9.5" fill="#B03A2E">authority</text>
 
-  <!-- built-from connector: DS records (below) -> Discovery Layer store (Catalog) -->
+  <!-- built-from connector: DL records (below) -> Discovery Layer store (Catalog) -->
   <line x1="250" y1="402" x2="250" y2="338" stroke="#1B4A6B" stroke-width="1.5" marker-end="url(#aDark)"/>
   <text x="262" y="362" font-size="9" fill="#1B4A6B">the Catalog is built</text>
-  <text x="262" y="374" font-size="9" fill="#1B4A6B">from these DS records</text>
+  <text x="262" y="374" font-size="9" fill="#1B4A6B">from the DL records</text>
 
   <!-- ===== DATA SOURCES (bottom) ===== -->
   <rect x="40" y="402" width="830" height="196" rx="7" fill="#1B4A6B"/>
-  <text x="455" y="427" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Data Sources  —  the single source of truth</text>
-  <text x="455" y="446" text-anchor="middle" font-size="9.5" fill="#A8CCED">Drive · Confluence · Jira · GitHub · Slack · Salesforce · Workday</text>
-  <text x="455" y="462" text-anchor="middle" font-size="9" font-style="italic" fill="#7AABCE">every lasting change is written here · each system controls who may see what</text>
+  <text x="455" y="425" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Data Sources</text>
+  <text x="455" y="443" text-anchor="middle" font-size="9.5" fill="#A8CCED">Drive · Confluence · Jira · GitHub · Slack · Salesforce · Workday</text>
+  <text x="455" y="459" text-anchor="middle" font-size="9" font-style="italic" fill="#7AABCE">each system controls who may see what · holds two kinds of DS record:</text>
 
-  <!-- DS-record sub-box: most of the Discovery Layer lives inside the Data Sources -->
-  <rect x="60" y="476" width="790" height="110" rx="6" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
-  <rect x="60" y="476" width="130" height="110" rx="6" fill="#E9F7EF"/>
-  <text x="125" y="518" text-anchor="middle" font-size="10" font-weight="700" fill="#1E6B32">A DS record</text>
-  <text x="125" y="535" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">kept safe by</text>
-  <text x="125" y="546" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">the Data Source</text>
-  <text x="520" y="500" text-anchor="middle" font-size="12" font-weight="700" fill="#1E6B32">Most of the Discovery Layer lives here  —  DS records (marked <tspan font-family="monospace" fill="#1E6B32">discovery-layer</tspan>)</text>
-  <text x="520" y="521" text-anchor="middle" font-size="9" fill="#4A8A5A">summaries · indexes · pointers, derived by Discovery-Layer skills and written into a Data Source</text>
-  <text x="520" y="537" text-anchor="middle" font-size="9" fill="#4A8A5A">the source stores &amp; backs them up like any record · rebuilt from the sources on demand</text>
-  <text x="520" y="557" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78AA82">without this prepared material, every tool re-searches the full sources from scratch on each question</text>
+  <!-- DL records: discovery-layer DS records, derived (most of the Discovery Layer) -->
+  <rect x="58" y="472" width="392" height="112" rx="6" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
+  <text x="254" y="494" text-anchor="middle" font-size="12" font-weight="700" fill="#1E6B32">DL records  —  most of the Discovery Layer</text>
+  <text x="254" y="512" text-anchor="middle" font-size="9" fill="#4A8A5A">summaries · indexes · pointers · marked discovery-layer</text>
+  <text x="254" y="530" text-anchor="middle" font-size="9" font-weight="700" fill="#C0660E">derived — NOT authoritative</text>
+  <text x="254" y="547" text-anchor="middle" font-size="9" fill="#4A8A5A">the Data Source stores &amp; backs them up · rebuilt on demand</text>
+  <text x="254" y="568" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78AA82">without them, every tool re-searches the full sources from scratch</text>
+
+  <!-- Primary DS records: primary knowledge, authoritative -->
+  <rect x="466" y="472" width="386" height="112" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
+  <text x="659" y="496" text-anchor="middle" font-size="12" font-weight="700" fill="#1B4A6B">Primary DS records</text>
+  <text x="659" y="514" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2A7EAA">primary knowledge — authoritative</text>
+  <text x="659" y="531" text-anchor="middle" font-size="9" fill="#2A7EAA">every lasting change is written here</text>
+  <text x="659" y="547" text-anchor="middle" font-size="9" fill="#2A7EAA">pages · tickets · threads · PRs · files</text>
+  <text x="659" y="568" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">the originals everything else describes</text>
 
 </svg>
