@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/lik_ui/__init__.py
+src/lik_ui/__main__.py
+src/lik_ui/app.py
+src/lik_ui/settings.py
+src/lik_ui.egg-info/PKG-INFO
+src/lik_ui.egg-info/SOURCES.txt
+src/lik_ui.egg-info/dependency_links.txt
+src/lik_ui.egg-info/requires.txt
+src/lik_ui.egg-info/top_level.txt
+tests/test_settings.py

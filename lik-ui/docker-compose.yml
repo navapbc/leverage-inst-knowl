@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:18.4
+    environment:
+      POSTGRES_DB: likuidb_local
+      POSTGRES_USER: lik
+      POSTGRES_PASSWORD: lik
+    ports:
+      - "5433:5432"  # lik-mcp uses 5432 locally; keep them distinct for side-by-side
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - likuidata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lik -d likuidb_local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  lik-ui:
+    build: .
+    environment:
+      LIK_UI_ENV: local
+      LIK_UI_DB_HOST: db
+      LIK_UI_DB_PORT: 5432
+      LIK_UI_DB_NAME: likuidb_local
+      LIK_UI_HTTP_ALLOWED_HOSTS: "localhost,localhost:*,127.0.0.1,127.0.0.1:*,host.docker.internal,host.docker.internal:*"
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  likuidata:
