@@ -28,12 +28,17 @@ uv run python scripts/smoke.py surface
 uv run python scripts/smoke.py all
 ```
 
-Stage 2 was already run once during implementation and used to correct `chat.py`: the
-send/stream path is `sessions.events.send(session_id, events=[{type: "user.message", ...}])`
-then `sessions.events.stream(session_id)` — NOT a `sessions.stream(input=...)` call.
-Re-run it after any SDK upgrade to catch surface drift. Stage 4 confirms the remaining
-open item: the live event ordering and which event marks a turn complete (`end_turn` vs
-`session.status_idle`), which `send_and_stream` breaks on.
+Stages 2–4 were run during implementation and used to correct `chat.py`:
+
+- The send/stream path is `sessions.events.send(session_id, events=[{type: "user.message",
+  content: [{type: "text", text: ...}]}])` then `sessions.events.stream(session_id)` — NOT a
+  `sessions.stream(input=...)` call.
+- A turn terminates with a `session.status_idle` event (confirmed live). `session.error`
+  events for unconnected MCP servers stream first, and the agent still answers.
+
+Re-run `surface` after any SDK upgrade to catch drift. What remains for a full live pass is
+only the browser OAuth legs below (Stage 4 ran with an empty vault, so tool *use* — the
+`agent.mcp_tool_use` event — has not been exercised end to end yet).
 
 ## Manual part (browser OAuth legs)
 

@@ -36,9 +36,10 @@ class AnthropicSessionsClient:
     Event names/shapes were pinned from the installed SDK (see scripts/smoke.py surface):
     a turn is sent via ``sessions.events.send`` with a ``user.message`` event, and the
     reply streams via ``sessions.events.stream``. The event ``type`` discriminates the
-    union (``agent.message``, ``agent.mcp_tool_use``, ``session.error``, ``end_turn``,
-    ``session.status_*``). Terminal/ordering behavior is the last thing to confirm on a
-    live run (plan deferred question)."""
+    union (``agent.message``, ``agent.mcp_tool_use``, ``session.error``, ``session.status_*``).
+    Confirmed on a live run: the turn terminates with ``session.status_idle`` (the earlier
+    ``session.thread_status_idle`` and ``span.*`` events are ignored); ``session.error`` for
+    an unconnected MCP server streams first and the agent still answers."""
 
     def __init__(self, api_key: str):
         import anthropic
