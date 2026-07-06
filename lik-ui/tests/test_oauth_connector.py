@@ -166,6 +166,24 @@ def test_authorization_url_carries_pkce_resource_and_offline():
     assert q["access_type"] == ["offline"]  # Google path for a refresh token
 
 
+def test_authorization_url_omits_offline_access_when_as_lacks_it():
+    # Google-style AS: no offline_access in scopes_supported -> don't request it (Google
+    # rejects the scope), but still send access_type=offline for the refresh token.
+    from urllib.parse import parse_qs, urlsplit
+
+    google_like = Discovery(
+        issuer=ISSUER,
+        authorization_endpoint=f"{ISSUER}/authorize",
+        token_endpoint=f"{ISSUER}/token",
+        scopes_supported=["openid", "email", "profile"],  # no offline_access
+    )
+    conn = OAuthConnector(None, {}, REDIRECT)
+    url = conn.authorization_url(google_like, _CREDS, state="st", code_challenge="ch", mcp_url=MCP_URL)
+    q = parse_qs(urlsplit(url).query)
+    assert "offline_access" not in q["scope"][0]
+    assert q["access_type"] == ["offline"]
+
+
 async def test_exchange_code_posts_and_returns_tokens(store):
     handler, calls = build_handler()
     conn = _connector(store, handler)

@@ -256,9 +256,12 @@ class OAuthConnector:
         challenge = base64.urlsafe_b64encode(digest).decode().rstrip("=")
         return verifier, challenge
 
-    def _scope_string(self, creds: ClientCredentials) -> str:
+    def _scope_string(self, creds: ClientCredentials, discovery: Discovery) -> str:
         scopes = list(creds.scopes)
-        if creds.offline and "offline_access" not in scopes:
+        # `offline_access` is the standard OAuth 2.1 scope for a refresh token, but only
+        # some authorization servers accept it (Google rejects it and uses access_type
+        # instead). Add it only when the AS advertises it in scopes_supported.
+        if creds.offline and "offline_access" in (discovery.scopes_supported or []) and "offline_access" not in scopes:
             scopes.append("offline_access")
         return " ".join(scopes)
 
@@ -272,7 +275,7 @@ class OAuthConnector:
             "state": state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
-            "scope": self._scope_string(creds),
+            "scope": self._scope_string(creds, discovery),
             # RFC 8707: bind the token to this specific MCP server.
             "resource": mcp_url,
         }
@@ -317,7 +320,7 @@ class OAuthConnector:
         return {
             "token_endpoint": discovery.token_endpoint,
             "client_id": creds.client_id,
-            "scope": token_response.get("scope", self._scope_string(creds)),
+            "scope": token_response.get("scope", self._scope_string(creds, discovery)),
             "refresh_token": refresh_token,
             "token_endpoint_auth": auth,
         }
