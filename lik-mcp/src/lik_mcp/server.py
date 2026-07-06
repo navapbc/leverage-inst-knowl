@@ -36,6 +36,7 @@ def build_server(
     resolver: CitationResolver,
     host: str = "127.0.0.1",
     port: int = 8000,
+    allowed_hosts: list[str] | None = None,
 ) -> FastMCP:
     """Construct the MCP service. Dependencies are injected so tests can substitute a
     stub verifier / resolver and a test database. host/port apply only to the
@@ -44,11 +45,12 @@ def build_server(
 
     # The HTTP transport must bind 0.0.0.0 inside a container to be reachable through a
     # published port, so loopback-binding can't be the DNS-rebinding guard. Restrict the
-    # accepted Host header to loopback instead (the host side publishes 127.0.0.1 only).
-    # Harmless under stdio (no HTTP middleware runs). A real deploy must widen this.
+    # accepted Host header instead. Callers pass the allowed list (from settings, so a
+    # deploy widens it without a code change); default to loopback-only when unset.
+    # Harmless under stdio (no HTTP middleware runs).
     transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"],
+        allowed_hosts=allowed_hosts or ["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"],
     )
     mcp = FastMCP("lik-mcp", host=host, port=port, transport_security=transport_security)
 

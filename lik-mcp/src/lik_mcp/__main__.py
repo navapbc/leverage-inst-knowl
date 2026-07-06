@@ -14,7 +14,12 @@ def make_server(settings: Settings | None = None) -> FastMCP:
     # real deployment (incl. a cloud `dev` environment).
     verifier = StubVerifier() if settings.env in {"local", "test"} else FailClosedVerifier()
     return build_server(
-        db, verifier, ShapeResolver(), host=settings.http_host, port=settings.http_port
+        db,
+        verifier,
+        ShapeResolver(),
+        host=settings.http_host,
+        port=settings.http_port,
+        allowed_hosts=settings.allowed_hosts,
     )
 
 

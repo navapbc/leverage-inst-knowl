@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     http_host: str = "127.0.0.1"
     http_port: int = 8000
 
+    # Host headers the streamable-http transport accepts (DNS-rebinding guard). The bind
+    # is 0.0.0.0 in-container, so this — not the bind — is the actual guard. Comma-
+    # separated; entries ending in ":*" match any port. Default is loopback-only; a deploy
+    # widens it via env (e.g. the local container adds 0.0.0.0:* since clients point there).
+    http_allowed_hosts: str = "localhost,localhost:*,127.0.0.1,127.0.0.1:*"
+
+    @property
+    def allowed_hosts(self) -> list[str]:
+        return [h.strip() for h in self.http_allowed_hosts.split(",") if h.strip()]
+
     @property
     def conninfo(self) -> str:
         return (
