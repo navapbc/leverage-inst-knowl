@@ -33,8 +33,12 @@ class SessionsClient(Protocol):
 class AnthropicSessionsClient:
     """Real ``SessionsClient`` backed by the Anthropic SDK's Managed Agents sessions API.
 
-    The event normalization here is best-effort against the documented event stream and is
-    the piece to confirm against the live API (plan deferred question)."""
+    Event names/shapes were pinned from the installed SDK (see scripts/smoke.py surface):
+    a turn is sent via ``sessions.events.send`` with a ``user.message`` event, and the
+    reply streams via ``sessions.events.stream``. The event ``type`` discriminates the
+    union (``agent.message``, ``agent.mcp_tool_use``, ``session.error``, ``end_turn``,
+    ``session.status_*``). Terminal/ordering behavior is the last thing to confirm on a
+    live run (plan deferred question)."""
 
     def __init__(self, api_key: str):
         import anthropic
@@ -48,19 +52,32 @@ class AnthropicSessionsClient:
         return session.id
 
     def send_and_stream(self, session_id: str, message: str) -> Iterator[dict]:
-        with self._client.beta.sessions.stream(session_id=session_id, input=message) as stream:
-            for event in stream:
-                etype = getattr(event, "type", "")
-                if "error" in etype:
-                    yield {
-                        "type": "error",
-                        "error_type": getattr(event, "error_type", etype),
-                        "mcp_server_name": getattr(event, "mcp_server_name", None),
-                    }
-                elif "tool" in etype:
-                    yield {"type": "tool_use", "name": getattr(event, "name", ""), "server": getattr(event, "mcp_server_name", None)}
-                elif text := getattr(event, "text", None):
+        events = self._client.beta.sessions.events
+        events.send(
+            session_id,
+            events=[{"type": "user.message", "content": [{"type": "text", "text": message}]}],
+        )
+        for event in events.stream(session_id):
+            etype = getattr(event, "type", "")
+            if etype == "agent.message":
+                text = "".join(getattr(b, "text", "") for b in getattr(event, "content", []) or [])
+                if text:
                     yield {"type": "text", "text": text}
+            elif etype == "event_delta":  # incremental text (only if deltas were requested)
+                block = getattr(getattr(event, "delta", None), "content", None)
+                if text := getattr(block, "text", None):
+                    yield {"type": "text", "text": text}
+            elif etype == "agent.mcp_tool_use":
+                yield {"type": "tool_use", "name": getattr(event, "name", ""), "server": getattr(event, "mcp_server_name", None)}
+            elif etype == "session.error":
+                err = getattr(event, "error", None)
+                yield {
+                    "type": "error",
+                    "error_type": getattr(err, "type", "session.error"),
+                    "mcp_server_name": getattr(err, "mcp_server_name", None),
+                }
+            elif etype == "end_turn" or etype.startswith(("session.status_idle", "session.status_terminated")):
+                break  # the turn is complete
         yield {"type": "done"}
 
 
