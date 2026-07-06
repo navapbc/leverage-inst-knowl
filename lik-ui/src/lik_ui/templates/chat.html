@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Chat · lik-ui{% endblock %}
+{% block content %}
+  <p><a href="/">← Agents</a> ·
+     <a href="/connections?agent_id={{ conversation.agent_id | urlencode }}">Connections</a></p>
+
+  <h1>Chat</h1>
+
+  {% if conversations %}
+    <details>
+      <summary>Conversations ({{ conversations | length }})</summary>
+      <ul>
+        {% for c in conversations %}
+          <li><a href="/chat/{{ c.id }}">{{ c.title or ("Conversation " ~ c.id) }}</a></li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
+  <div id="transcript"
+       data-conversation-id="{{ conversation.id }}"
+       data-agent-id="{{ conversation.agent_id }}"></div>
+
+  <form id="composer">
+    <input id="message" name="message" autocomplete="off" placeholder="Ask the agent…" style="width:75%">
+    <button class="btn" type="submit">Send</button>
+  </form>
+
+  <script src="/static/chat.js"></script>
+{% endblock %}

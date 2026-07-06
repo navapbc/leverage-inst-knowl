@@ -9,6 +9,7 @@ import uvicorn
 from .agents import build_agents_client
 from .app import build_app
 from .app_auth import GoogleOidcClient
+from .chat import build_sessions_client
 from .db import Database, Store
 from .oauth_connector import OAuthConnector
 from .settings import Settings
@@ -32,6 +33,7 @@ def build_production_app(settings: Settings):
         redirect_uri=f"{settings.app_base_url}/connections/callback",
     )
     agents_client = build_agents_client(settings)
+    sessions_client = build_sessions_client(settings)
     return build_app(
         settings,
         store=store,
@@ -39,6 +41,7 @@ def build_production_app(settings: Settings):
         vault_client=vault_client,
         connector=connector,
         agents_client=agents_client,
+        sessions_client=sessions_client,
     )
 
 

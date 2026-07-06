@@ -31,9 +31,10 @@ def build_app(
     vault_client=None,
     connector=None,
     agents_client=None,
+    sessions_client=None,
 ) -> FastAPI:
-    """Build the FastAPI app. Collaborators (store, OIDC client, vault client, connector,
-    agents client) are injected so tests can substitute fakes; ``__main__`` wires real ones."""
+    """Build the FastAPI app. Collaborators are injected so tests can substitute fakes;
+    ``__main__`` wires the real ones."""
     settings = settings or Settings()
     settings.require_production_config()
 
@@ -44,6 +45,7 @@ def build_app(
     app.state.vault_client = vault_client
     app.state.connector = connector
     app.state.agents_client = agents_client
+    app.state.sessions_client = sessions_client
 
     # Session cookie holds the signed app identity + transient OAuth flow state. Outside
     # local/test the secret is required (enforced by require_production_config above); the
@@ -66,10 +68,12 @@ def build_app(
     # acyclic — these modules import `templates` from this module.
     from .agents import register_agent_routes
     from .app_auth import register_auth_routes
+    from .chat import register_chat_routes
     from .oauth_connector import register_connection_routes
 
     register_auth_routes(app)
     register_connection_routes(app)
     register_agent_routes(app)
+    register_chat_routes(app)
 
     return app
