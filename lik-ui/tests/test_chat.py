@@ -66,6 +66,24 @@ def test_normalize_mcp_tool_result_flattens_content_and_pairs_id():
     }
 
 
+def test_normalize_context_compacted():
+    ev = SimpleNamespace(type="agent.thread_context_compacted", id="c_1")
+    assert AnthropicSessionsClient._normalize(ev) == {"type": "compacted"}
+
+
+def test_normalize_model_request_end_carries_token_usage():
+    ev = SimpleNamespace(
+        type="span.model_request_end",
+        model_usage=SimpleNamespace(
+            input_tokens=100, output_tokens=20,
+            cache_read_input_tokens=5, cache_creation_input_tokens=3,
+        ),
+    )
+    assert AnthropicSessionsClient._normalize(ev) == {
+        "type": "usage", "input": 100, "output": 20, "cache_read": 5, "cache_creation": 3,
+    }
+
+
 def test_new_chat_creates_session_with_vault_and_redirects(db):
     sc = FakeSessionsClient()
     client = TestClient(_app(db, sc), follow_redirects=False)

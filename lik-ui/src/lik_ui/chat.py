@@ -57,8 +57,9 @@ class AnthropicSessionsClient:
     reply streams via ``sessions.events.stream``. The event ``type`` discriminates the
     union (``agent.message``, ``agent.mcp_tool_use``, ``session.error``, ``session.status_*``).
     Confirmed on a live run: the turn terminates with ``session.status_idle`` (the earlier
-    ``session.thread_status_idle`` and ``span.*`` events are ignored); ``session.error`` for
-    an unconnected MCP server streams first and the agent still answers."""
+    ``session.thread_status_idle`` and most ``span.*`` events are ignored, except
+    ``span.model_request_end`` which carries token usage); ``session.error`` for an
+    unconnected MCP server streams first and the agent still answers."""
 
     def __init__(self, api_key: str):
         import anthropic
@@ -111,6 +112,19 @@ class AnthropicSessionsClient:
                 "type": "error",
                 "error_type": getattr(err, "type", "session.error"),
                 "mcp_server_name": getattr(err, "mcp_server_name", None),
+            }
+        if etype == "agent.thread_context_compacted":
+            return {"type": "compacted"}
+        if etype == "span.model_request_end":
+            usage = getattr(event, "model_usage", None)
+            if usage is None:
+                return None
+            return {
+                "type": "usage",
+                "input": getattr(usage, "input_tokens", 0),
+                "output": getattr(usage, "output_tokens", 0),
+                "cache_read": getattr(usage, "cache_read_input_tokens", 0),
+                "cache_creation": getattr(usage, "cache_creation_input_tokens", 0),
             }
         return None
 

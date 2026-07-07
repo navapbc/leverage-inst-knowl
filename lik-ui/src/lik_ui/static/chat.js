@@ -62,6 +62,30 @@
     }
   }
 
+  // Marks where the session summarized older turns, so a sparse replayed history isn't
+  // mistaken for the whole conversation.
+  function compactedDivider() {
+    bubble("compacted", "— earlier context compacted —");
+  }
+
+  // Running token total across every model request in the session (history + live),
+  // shown once as a footer below the transcript and updated in place.
+  const usage = { input: 0, output: 0, cache_read: 0, cache_creation: 0 };
+  let usageEl = null;
+  function addUsage(event) {
+    usage.input += event.input || 0;
+    usage.output += event.output || 0;
+    usage.cache_read += event.cache_read || 0;
+    usage.cache_creation += event.cache_creation || 0;
+    if (!usageEl) {
+      usageEl = document.createElement("div");
+      usageEl.className = "usage";
+      transcript.parentNode.appendChild(usageEl);
+    }
+    usageEl.textContent = "Tokens — in " + usage.input + " · out " + usage.output +
+      " · cache read " + usage.cache_read + " · cache write " + usage.cache_creation;
+  }
+
   function errorBubble(event) {
     const b = bubble("error", "Connection issue" + (event.mcp_server_name ? " with " + event.mcp_server_name : "") + ". Reconnect that source and retry.");
     const link = document.createElement("a");
@@ -88,6 +112,10 @@
             toolBubble(event);
           } else if (event.type === "tool_result") {
             toolResultBubble(event);
+          } else if (event.type === "compacted") {
+            compactedDivider();
+          } else if (event.type === "usage") {
+            addUsage(event);
           } else if (event.type === "error") {
             errorBubble(event);
           }
@@ -117,6 +145,10 @@
         toolBubble(event);
       } else if (event.type === "tool_result") {
         toolResultBubble(event);
+      } else if (event.type === "compacted") {
+        compactedDivider();
+      } else if (event.type === "usage") {
+        addUsage(event);
       } else if (event.type === "error") {
         errorBubble(event);
       } else if (event.type === "done") {
