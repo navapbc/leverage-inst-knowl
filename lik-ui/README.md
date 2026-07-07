@@ -52,6 +52,15 @@ one call, but the agent definition (system prompt, model, declared servers) chan
 If the agent list grows, cache these results (e.g. a short TTL) rather than fetching per
 request.
 
+## TODO: show full skill instructions (SKILL.md)
+
+The connections page can show each skill's name and description, but not its full instructions
+(SKILL.md). The SDK exposes the content via `beta.skills.versions.download` (a zip archive), but
+that endpoint returns 403 "Downloading skill content is not supported with this credential type"
+for the credential lik-ui currently uses. Surfacing SKILL.md needs a credential with skill-download
+permission (likely a standard org API key rather than the managed-agent credential). Until then,
+`describe_skill` returns name and description only.
+
 ## Configuration
 
 All config is `LIK_UI_`-prefixed; see `.env.example`. Outside `local`/`test`, the app

@@ -1,7 +1,5 @@
 """Agent selection and required-connection resolution."""
 
-import io
-import zipfile
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -34,12 +32,7 @@ class FakeAgentsClient:
                 "model": self.model, "skills": self.skills}
 
     def describe_skill(self, skill_id, version):
-        return {
-            "name": f"Skill {skill_id}",
-            "description": f"Does {skill_id} things (v{version}).",
-            "doc": f"# {skill_id}\n\nFull SKILL.md for {skill_id} at v{version}.",
-            "doc_note": "",
-        }
+        return {"name": f"Skill {skill_id}", "description": f"Does {skill_id} things (v{version})."}
 
 
 def test_resolve_marks_connected_and_missing():
@@ -53,17 +46,9 @@ def test_resolve_zero_declared_returns_empty():
     assert resolve_connections([], set()) == []
 
 
-def _zip_with_skill_md(text):
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("lik-query-project-index/SKILL.md", text)
-    return buf.getvalue()
-
-
-def test_describe_skill_resolves_latest_and_extracts_skill_md():
-    """The real client resolves a non-numeric version to latest_version, then pulls SKILL.md
-    out of the downloaded zip archive."""
-    zip_bytes = _zip_with_skill_md("# Query Project Index\n\nDetailed instructions here.")
+def test_describe_skill_resolves_latest_version():
+    """A skill pinned to "latest" is resolved to the concrete latest_version before the
+    version lookup that carries name/description."""
     fake_sdk = SimpleNamespace(
         beta=SimpleNamespace(
             skills=SimpleNamespace(
@@ -72,7 +57,6 @@ def test_describe_skill_resolves_latest_and_extracts_skill_md():
                     retrieve=lambda version, *, skill_id: SimpleNamespace(
                         name="Query Project Index", description="Short blurb."
                     ),
-                    download=lambda version, *, skill_id: SimpleNamespace(read=lambda: zip_bytes),
                 ),
             )
         )
@@ -81,37 +65,7 @@ def test_describe_skill_resolves_latest_and_extracts_skill_md():
     client._client = fake_sdk
 
     out = client.describe_skill("lik-query-project-index", "latest")
-    assert out["name"] == "Query Project Index"
-    assert out["description"] == "Short blurb."
-    assert "Detailed instructions here." in out["doc"]
-    assert out["doc_note"] == ""
-
-
-def test_describe_skill_degrades_when_download_denied():
-    """If the credential can't download skill content, name/description still return and the
-    doc_note explains why the full SKILL.md is missing."""
-    def _denied(version, *, skill_id):
-        raise RuntimeError("Downloading skill content is not supported with this credential type.")
-
-    fake_sdk = SimpleNamespace(
-        beta=SimpleNamespace(
-            skills=SimpleNamespace(
-                versions=SimpleNamespace(
-                    retrieve=lambda version, *, skill_id: SimpleNamespace(
-                        name="Query Project Index", description="Short blurb."
-                    ),
-                    download=_denied,
-                ),
-            )
-        )
-    )
-    client = AnthropicAgentsClient.__new__(AnthropicAgentsClient)
-    client._client = fake_sdk
-
-    out = client.describe_skill("lik-query-project-index", "1759178010641129")
-    assert out["name"] == "Query Project Index"
-    assert out["doc"] == ""
-    assert "unavailable" in out["doc_note"].lower()
+    assert out == {"name": "Query Project Index", "description": "Short blurb."}
 
 
 def _app(db, agents_client, vc):
@@ -164,7 +118,6 @@ def test_skill_details_endpoint_returns_name_and_description(db):
     body = r.json()
     assert body["name"] == "Skill lik-query-project-index"
     assert "v3" in body["description"]
-    assert "Full SKILL.md" in body["doc"]  # full instructions, not just the description
 
 
 def test_skill_details_requires_login(db):

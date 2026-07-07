@@ -55,9 +55,6 @@ details.skills .skill-details-btn { padding: .1rem .5rem; font-size: .8rem; marg
 details.skills .skill-details { margin: .35rem 0 .5rem; padding: .5rem .7rem; background: #fff;
   border: 1px solid var(--line); border-radius: 6px; font-size: .85rem; }
 details.skills .skill-details p { margin: .3rem 0 0; }
-details.skills .skill-doc { margin: .5rem 0 0; padding: .6rem .8rem; background: #f7f7f7;
-  border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere;
-  font-size: .8rem; max-height: 24rem; overflow-y: auto; }
 
 /* Chat transcript bubbles: shared .card base with a per-role tint. */
 .card.user { background: #f0f6ff; border-color: #cfe0f5; }
