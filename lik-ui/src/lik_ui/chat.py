@@ -29,6 +29,12 @@ class SessionsClient(Protocol):
         {"type": "error", "error_type": ..., "mcp_server_name": ...}, {"type": "done"}."""
         ...
 
+    def list_events(self, session_id: str) -> Iterator[dict]:
+        """Yield the session's prior events in chronological order, using the same
+        normalized vocabulary as ``send_and_stream`` plus {"type": "user", "text": ...}
+        for the user's own turns (which the live stream never echoes back)."""
+        ...
+
 
 class AnthropicSessionsClient:
     """Real ``SessionsClient`` backed by the Anthropic SDK's Managed Agents sessions API.
@@ -52,6 +58,36 @@ class AnthropicSessionsClient:
         )
         return session.id
 
+    @staticmethod
+    def _normalize(event, *, include_user: bool = False) -> dict | None:
+        """Map one SDK event to the UI's normalized vocabulary, or None to drop it.
+        ``include_user`` surfaces the user's own turns — wanted when replaying history,
+        but not on the live stream (the browser adds the user bubble locally on submit)."""
+        etype = getattr(event, "type", "")
+        if etype == "user.message":
+            if not include_user:
+                return None
+            text = "".join(getattr(b, "text", "") for b in getattr(event, "content", []) or [])
+            return {"type": "user", "text": text} if text else None
+        if etype == "agent.message":
+            text = "".join(getattr(b, "text", "") for b in getattr(event, "content", []) or [])
+            return {"type": "text", "text": text} if text else None
+        if etype == "event_delta":  # incremental text (only if deltas were requested)
+            block = getattr(getattr(event, "delta", None), "content", None)
+            if text := getattr(block, "text", None):
+                return {"type": "text", "text": text}
+            return None
+        if etype == "agent.mcp_tool_use":
+            return {"type": "tool_use", "name": getattr(event, "name", ""), "server": getattr(event, "mcp_server_name", None)}
+        if etype == "session.error":
+            err = getattr(event, "error", None)
+            return {
+                "type": "error",
+                "error_type": getattr(err, "type", "session.error"),
+                "mcp_server_name": getattr(err, "mcp_server_name", None),
+            }
+        return None
+
     def send_and_stream(self, session_id: str, message: str) -> Iterator[dict]:
         events = self._client.beta.sessions.events
         events.send(
@@ -60,26 +96,16 @@ class AnthropicSessionsClient:
         )
         for event in events.stream(session_id):
             etype = getattr(event, "type", "")
-            if etype == "agent.message":
-                text = "".join(getattr(b, "text", "") for b in getattr(event, "content", []) or [])
-                if text:
-                    yield {"type": "text", "text": text}
-            elif etype == "event_delta":  # incremental text (only if deltas were requested)
-                block = getattr(getattr(event, "delta", None), "content", None)
-                if text := getattr(block, "text", None):
-                    yield {"type": "text", "text": text}
-            elif etype == "agent.mcp_tool_use":
-                yield {"type": "tool_use", "name": getattr(event, "name", ""), "server": getattr(event, "mcp_server_name", None)}
-            elif etype == "session.error":
-                err = getattr(event, "error", None)
-                yield {
-                    "type": "error",
-                    "error_type": getattr(err, "type", "session.error"),
-                    "mcp_server_name": getattr(err, "mcp_server_name", None),
-                }
-            elif etype == "end_turn" or etype.startswith(("session.status_idle", "session.status_terminated")):
+            if etype == "end_turn" or etype.startswith(("session.status_idle", "session.status_terminated")):
                 break  # the turn is complete
+            if normalized := self._normalize(event):
+                yield normalized
         yield {"type": "done"}
+
+    def list_events(self, session_id: str) -> Iterator[dict]:
+        for event in self._client.beta.sessions.events.list(session_id, order="asc"):
+            if normalized := self._normalize(event, include_user=True):
+                yield normalized
 
 
 def build_sessions_client(settings: Settings) -> SessionsClient | None:
@@ -90,7 +116,7 @@ def build_sessions_client(settings: Settings) -> SessionsClient | None:
 
 def register_chat_routes(app) -> None:
     from fastapi import Request
-    from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+    from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
     from .app import templates
     from .app_auth import require_user
@@ -123,6 +149,26 @@ def register_chat_routes(app) -> None:
         return templates.TemplateResponse(
             request, "chat.html", {"conversation": conv, "conversations": conversations}
         )
+
+    @app.get("/chat/{conversation_id}/history")
+    def chat_history(request: Request, conversation_id: int):
+        """Prior events for the conversation's session, replayed when the page opens.
+        Empty in stub mode (no sessions client) so the transcript just starts blank."""
+        user = require_user(request)
+        conv = request.app.state.store.get_conversation(conversation_id, user["id"])
+        if not conv:
+            return JSONResponse({"detail": "Conversation not found."}, status_code=404)
+
+        sessions_client: SessionsClient | None = request.app.state.sessions_client
+        if sessions_client is None:
+            return JSONResponse([])
+        try:
+            events = list(sessions_client.list_events(conv["session_id"]))
+        except Exception as exc:  # noqa: BLE001 - a history-fetch failure shouldn't block chatting
+            return JSONResponse(
+                {"detail": f"Could not load history: {exc}"}, status_code=502
+            )
+        return JSONResponse(events)
 
     @app.get("/chat/{conversation_id}/stream")
     def chat_stream(request: Request, conversation_id: int, message: str):

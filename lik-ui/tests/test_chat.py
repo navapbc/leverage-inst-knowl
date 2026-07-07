@@ -10,10 +10,11 @@ from tests.test_oauth_connector import RecordingVaultClient
 
 
 class FakeSessionsClient:
-    def __init__(self, events=None, raises=False):
+    def __init__(self, events=None, raises=False, history=None):
         self.created = []
         self.events = events if events is not None else [{"type": "text", "text": "Hello"}, {"type": "done"}]
         self.raises = raises
+        self.history = history or []
 
     def create_session(self, agent_id, environment_id, vault_ids):
         self.created.append((agent_id, environment_id, tuple(vault_ids)))
@@ -24,6 +25,9 @@ class FakeSessionsClient:
             raise RuntimeError("stream boom")
         for e in self.events:
             yield e
+
+    def list_events(self, session_id):
+        yield from self.history
 
 
 def _app(db, sessions_client, vc=None):
@@ -98,6 +102,42 @@ def test_stream_emits_terminal_error_when_client_raises(db):
     assert r.status_code == 200
     assert "stream_failed" in r.text
     assert '"type": "done"' in r.text
+
+
+def test_history_replays_prior_events(db):
+    sc = FakeSessionsClient(
+        history=[
+            {"type": "user", "text": "hello"},
+            {"type": "tool_use", "name": "search", "server": "atlassian"},
+            {"type": "text", "text": "Hi there"},
+        ]
+    )
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    conv_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    r = client.get(f"/chat/{conv_id}/history")
+    assert r.status_code == 200
+    body = r.json()
+    assert [e["type"] for e in body] == ["user", "tool_use", "text"]
+    assert body[0]["text"] == "hello"
+
+
+def test_history_empty_in_stub_mode(db):
+    client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
+    _login(client)
+    conv_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    # Stub mode: no sessions client -> empty history, transcript just starts blank.
+    app = build_app(
+        Settings(env="test", default_agent_id="agent_1", default_environment_id="env_1"),
+        store=Store(db), app_oidc=FakeOidc({"email": "alice@navapbc.com", "email_verified": True}),
+        vault_client=RecordingVaultClient(), sessions_client=None,
+    )
+    stub_client = TestClient(app, follow_redirects=False)
+    _login(stub_client)
+    r = stub_client.get(f"/chat/{conv_id}/history")
+    assert r.status_code == 200
+    assert r.json() == []
 
 
 def test_new_chat_unknown_agent_404(db):

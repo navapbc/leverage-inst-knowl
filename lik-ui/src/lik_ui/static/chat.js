@@ -25,6 +25,42 @@
     }
   }
 
+  function toolBubble(event) {
+    bubble("tool", "⚙ using " + (event.server ? event.server + " · " : "") + event.name);
+  }
+
+  function errorBubble(event) {
+    const b = bubble("error", "Connection issue" + (event.mcp_server_name ? " with " + event.mcp_server_name : "") + ". Reconnect that source and retry.");
+    const link = document.createElement("a");
+    link.href = "/connections?agent_id=" + encodeURIComponent(agentId);
+    link.textContent = " Fix connections";
+    b.appendChild(link);
+  }
+
+  // Replay prior events into the transcript before the composer is used. Each history
+  // event is its own bubble (consecutive assistant messages aren't merged — the merge
+  // in the live stream is only to accumulate a single reply's text deltas).
+  function loadHistory() {
+    return fetch("/chat/" + conversationId + "/history")
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (events) {
+        if (!Array.isArray(events)) return;
+        events.forEach(function (event) {
+          if (event.type === "user") {
+            bubble("user", "You: " + event.text);
+          } else if (event.type === "text") {
+            const el = bubble("assistant", "");
+            renderMarkdown(el, event.text);
+          } else if (event.type === "tool_use") {
+            toolBubble(event);
+          } else if (event.type === "error") {
+            errorBubble(event);
+          }
+        });
+      })
+      .catch(function () { /* history is best-effort; a blank transcript is fine */ });
+  }
+
   composer.addEventListener("submit", function (e) {
     e.preventDefault();
     const message = input.value.trim();
@@ -43,13 +79,9 @@
         assistant._raw += event.text;
         renderMarkdown(assistant, assistant._raw);
       } else if (event.type === "tool_use") {
-        bubble("tool", "⚙ using " + (event.server ? event.server + " · " : "") + event.name);
+        toolBubble(event);
       } else if (event.type === "error") {
-        const b = bubble("error", "Connection issue" + (event.mcp_server_name ? " with " + event.mcp_server_name : "") + ". Reconnect that source and retry.");
-        const link = document.createElement("a");
-        link.href = "/connections?agent_id=" + encodeURIComponent(agentId);
-        link.textContent = " Fix connections";
-        b.appendChild(link);
+        errorBubble(event);
       } else if (event.type === "done") {
         source.close();
       }
@@ -59,4 +91,6 @@
       source.close();
     };
   });
+
+  loadHistory();
 })();
