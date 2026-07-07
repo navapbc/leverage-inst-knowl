@@ -33,7 +33,9 @@ def _blocks_to_text(blocks) -> str:
 
 
 class SessionsClient(Protocol):
-    def create_session(self, agent_id: str, environment_id: str, vault_ids: list[str]) -> str:
+    def create_session(
+        self, agent_id: str, environment_id: str, vault_ids: list[str], title: str
+    ) -> str:
         """Create a session and return its id."""
         ...
 
@@ -67,9 +69,11 @@ class AnthropicSessionsClient:
 
         self._client = anthropic.Anthropic(api_key=api_key)
 
-    def create_session(self, agent_id: str, environment_id: str, vault_ids: list[str]) -> str:
+    def create_session(
+        self, agent_id: str, environment_id: str, vault_ids: list[str], title: str
+    ) -> str:
         session = self._client.beta.sessions.create(
-            agent=agent_id, environment_id=environment_id, vault_ids=vault_ids
+            agent=agent_id, environment_id=environment_id, vault_ids=vault_ids, title=title
         )
         return session.id
 
@@ -170,16 +174,16 @@ def register_chat_routes(app) -> None:
         if not agent:
             return HTMLResponse("Unknown agent.", status_code=404)
 
-        try:
-            vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
-            session_id = request.app.state.sessions_client.create_session(
-                agent.agent_id, agent.environment_id, [vault_id]
-            )
-        except Exception as exc:  # noqa: BLE001 - surface session/vault failures as a page, not a 500
-            return HTMLResponse(f"Could not start a session: {exc}", status_code=502)
         # Fall back to the agent name plus a timestamp when the user leaves the title blank,
         # so every session is named (matches the placeholder shown next to "Start chatting").
         title = title.strip() or f"{agent.label} · {datetime.now():%b %d, %Y %H:%M}"
+        try:
+            vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
+            session_id = request.app.state.sessions_client.create_session(
+                agent.agent_id, agent.environment_id, [vault_id], title
+            )
+        except Exception as exc:  # noqa: BLE001 - surface session/vault failures as a page, not a 500
+            return HTMLResponse(f"Could not start a session: {exc}", status_code=502)
         request.app.state.store.create_session(user["id"], agent.agent_id, session_id, title)
         return RedirectResponse(f"/chat/{session_id}", status_code=303)
 

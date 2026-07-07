@@ -75,5 +75,11 @@ def register_agent_routes(app) -> None:
         return templates.TemplateResponse(
             request,
             "connections.html",
-            {"user": user, "agent": agent, "connections": conns, "system_prompt": described["system"]},
+            {
+                "user": user,
+                "agent": agent,
+                "connections": conns,
+                "all_connected": all(c["connected"] for c in conns),
+                "system_prompt": described["system"],
+            },
         )

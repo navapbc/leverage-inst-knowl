@@ -19,8 +19,8 @@ class FakeSessionsClient:
         self.raises = raises
         self.history = history or []
 
-    def create_session(self, agent_id, environment_id, vault_ids):
-        self.created.append((agent_id, environment_id, tuple(vault_ids)))
+    def create_session(self, agent_id, environment_id, vault_ids, title):
+        self.created.append((agent_id, environment_id, tuple(vault_ids), title))
         return f"sess_{len(self.created)}"
 
     def send_and_stream(self, session_id, message):
@@ -92,7 +92,10 @@ def test_new_chat_creates_session_with_vault_and_redirects(db):
     r = client.get("/chat?agent_id=agent_1")
     assert r.status_code == 303
     assert r.headers["location"].startswith("/chat/")
-    assert sc.created == [("agent_1", "env_1", ("vlt_1",))]  # session bound to the user's vault
+    assert len(sc.created) == 1
+    agent_id, environment_id, vaults, title = sc.created[0]
+    assert (agent_id, environment_id, vaults) == ("agent_1", "env_1", ("vlt_1",))  # bound to the user's vault
+    assert title  # every session is created with a non-empty title
 
 
 def test_new_chat_uses_provided_title(db):
@@ -102,6 +105,7 @@ def test_new_chat_uses_provided_title(db):
     client.get("/chat?agent_id=agent_1&title=My+research")
     # The title the user typed is what the sessions list shows.
     assert "My research" in client.get("/sessions").text
+    assert sc.created[0][3] == "My research"  # and it's passed to the SDK so the server copy matches
 
 
 def test_new_chat_defaults_title_when_blank(db):
