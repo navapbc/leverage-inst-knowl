@@ -33,6 +33,7 @@
            {% if not all_connected %}disabled{% endif %}>
     <button class="btn" type="submit" {% if not all_connected %}disabled{% endif %}>Start chatting</button>
   </form>
+  <div><a href="/sessions">or continue existing chat sessions</a></div>
   {% if not all_connected %}
     <p class="status-missing">Connect every source above before starting a chat.</p>
   {% endif %}
