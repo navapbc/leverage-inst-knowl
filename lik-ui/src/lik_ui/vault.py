@@ -75,7 +75,11 @@ class AnthropicVaultClient:
             # The URL is the credential's immutable key, so it is omitted from the update auth.
             auth: dict = {"type": "mcp_oauth", "access_token": access_token, "expires_at": expires_at}
             if refresh:
-                auth["refresh"] = refresh
+                # client_id and token_endpoint are fixed at create time; the update endpoint
+                # rejects them, so send only the mutable fields of the refresh block.
+                auth["refresh"] = {
+                    k: v for k, v in refresh.items() if k not in ("client_id", "token_endpoint")
+                }
             credential = self._client.beta.vaults.credentials.update(
                 existing_id, vault_id=vault_id, display_name=display_name, auth=auth
             )

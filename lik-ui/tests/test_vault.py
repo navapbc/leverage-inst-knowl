@@ -124,6 +124,40 @@ def test_reconnect_updates_existing_credential_for_same_url():
     assert urls == [url]  # exactly one credential remains for the URL
 
 
+def test_reconnect_refresh_block_omits_immutable_fields():
+    """On update, client_id/token_endpoint are fixed at create time and rejected by the API,
+    so the reconnect refresh block must send only the mutable fields."""
+    client, creds = _vault_client_with_fake_sdk()
+    url = "https://mcp.example.com/sse"
+    full_refresh = {
+        "token_endpoint": "https://auth.example.com/token",
+        "client_id": "cid-123",
+        "refresh_token": "rt-1",
+        "token_endpoint_auth": {"type": "none"},
+        "scope": "read",
+    }
+
+    seen = {}
+    orig_update = creds.update
+
+    def spy_update(credential_id, *, vault_id, display_name, auth):
+        seen["auth"] = auth
+        return orig_update(credential_id, vault_id=vault_id, display_name=display_name, auth=auth)
+
+    creds.update = spy_update
+
+    client.put_mcp_oauth_credential(
+        "vlt_1", mcp_server_url=url, access_token="at", expires_at="2099-01-01T00:00:00+00:00",
+        refresh=None, display_name="lik-mcp",
+    )
+    client.put_mcp_oauth_credential(
+        "vlt_1", mcp_server_url=url, access_token="at2", expires_at="2099-01-01T00:00:00+00:00",
+        refresh=full_refresh, display_name="lik-mcp",
+    )
+
+    assert set(seen["auth"]["refresh"]) == {"refresh_token", "token_endpoint_auth", "scope"}
+
+
 def test_deposit_leaves_other_urls_untouched():
     """Replacing one URL's credential must not disturb credentials for other URLs."""
     client, creds = _vault_client_with_fake_sdk()
