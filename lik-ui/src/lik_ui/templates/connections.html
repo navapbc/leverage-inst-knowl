@@ -2,9 +2,16 @@
 {% block title %}Connections · lik-ui{% endblock %}
 {% block content %}
   <h1>Connections</h1>
-  <p>Agent: <strong>{{ agent.label }}</strong> · <a href="/">change</a></p>
-  <p>Connect the sources this agent needs. Connected sources are used on your behalf.</p>
+  <p>Agent: <strong>{{ agent.label }}</strong></p>
 
+  {% if system_prompt %}
+    <details class="system-prompt">
+      <summary>System prompt</summary>
+      <pre>{{ system_prompt }}</pre>
+    </details>
+  {% endif %}
+
+  <p>Connect the sources this agent needs. Connected sources are used on your behalf.</p>
   {% for c in connections %}
     <div class="card">
       <strong>{{ c.name }}</strong>
@@ -19,5 +26,20 @@
     </div>
   {% endfor %}
 
-  <p><a class="btn" href="/chat?agent_id={{ agent.agent_id | urlencode }}">Start chatting</a></p>
+  <form class="start-chat" method="get" action="/chat">
+    <input type="hidden" name="agent_id" value="{{ agent.agent_id }}">
+    <input id="session-title" name="title" autocomplete="off" placeholder="{{ agent.label }}">
+    <button class="btn" type="submit">Start chatting</button>
+  </form>
+  <script>
+    // Prefill the session title with the agent name plus the current local time so a session
+    // gets a meaningful name by default. The user can edit it before starting; if cleared,
+    // the server applies the same agent-name-plus-timestamp default.
+    (function () {
+      var el = document.getElementById("session-title");
+      if (el && !el.value) {
+        el.value = {{ agent.label | tojson }} + " · " + new Date().toLocaleString();
+      }
+    })();
+  </script>
 {% endblock %}

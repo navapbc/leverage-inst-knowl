@@ -177,6 +177,16 @@ def register_auth_routes(app: FastAPI) -> None:
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
         user = require_user(request)
-        return templates.TemplateResponse(
-            request, "agents.html", {"user": user, "agents": request.app.state.settings.agents}
-        )
+        agents_client = request.app.state.agents_client
+        agents = []
+        for a in request.app.state.settings.agents:
+            info = {"label": a.label, "agent_id": a.agent_id, "environment_id": a.environment_id,
+                    "system": None, "model": None}
+            if agents_client is not None:
+                try:
+                    described = agents_client.describe(a.agent_id)
+                    info["system"], info["model"] = described["system"], described["model"]
+                except Exception:  # noqa: BLE001 - a details lookup failure shouldn't blank the picker
+                    pass
+            agents.append(info)
+        return templates.TemplateResponse(request, "agents.html", {"user": user, "agents": agents})

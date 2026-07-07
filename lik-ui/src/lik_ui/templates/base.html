@@ -8,8 +8,53 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+  {% if user %}
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-account">
+      <div class="sidebar-email">{{ user.email }}</div>
+      <a href="/logout">Sign out</a>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/">Agents</a>
+      <a href="/sessions">Sessions</a>
+    </nav>
+  </aside>
+  <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+  {% endif %}
   <main>
     {% block content %}{% endblock %}
   </main>
+  {% if user %}
+  <script>
+    // Draggable divider that resizes the sidebar; the chosen width is remembered per browser.
+    (function () {
+      var sidebar = document.getElementById('sidebar');
+      var resizer = document.getElementById('resizer');
+      if (!sidebar || !resizer) return;
+      var KEY = 'lik-ui:sidebar-width';
+      var saved = parseInt(localStorage.getItem(KEY), 10);
+      if (saved) sidebar.style.width = saved + 'px';
+      var startX, startW;
+      function onMove(e) {
+        var w = Math.min(480, Math.max(160, startW + (e.clientX - startX)));
+        sidebar.style.width = w + 'px';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.userSelect = '';
+        localStorage.setItem(KEY, parseInt(sidebar.style.width, 10));
+      }
+      resizer.addEventListener('mousedown', function (e) {
+        startX = e.clientX;
+        startW = sidebar.offsetWidth;
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        e.preventDefault();
+      });
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>

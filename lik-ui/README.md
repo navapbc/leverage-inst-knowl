@@ -44,6 +44,14 @@ LIK_UI_DB_PORT=5433 uv run pytest   # compose publishes Postgres on 5433
 The suite refuses to run unless `LIK_UI_DB_NAME` ends in `_test` (it truncates tables),
 and it targets the compose default database `likuidb_test`.
 
+## TODO: cache agent `describe` results
+
+The home (agent picker) and connections pages call `AgentsClient.describe(agent_id)` on
+every load — one Anthropic SDK `retrieve` per configured agent. With a single agent that's
+one call, but the agent definition (system prompt, model, declared servers) changes rarely.
+If the agent list grows, cache these results (e.g. a short TTL) rather than fetching per
+request.
+
 ## Configuration
 
 All config is `LIK_UI_`-prefixed; see `.env.example`. Outside `local`/`test`, the app

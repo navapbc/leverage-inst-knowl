@@ -95,6 +95,23 @@ def test_new_chat_creates_session_with_vault_and_redirects(db):
     assert sc.created == [("agent_1", "env_1", ("vlt_1",))]  # session bound to the user's vault
 
 
+def test_new_chat_uses_provided_title(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1&title=My+research")
+    # The title the user typed is what the sessions list shows.
+    assert "My research" in client.get("/sessions").text
+
+
+def test_new_chat_defaults_title_when_blank(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1")  # no title -> agent name + timestamp default
+    assert "Discovery Layer Agent" in client.get("/sessions").text
+
+
 def test_resume_does_not_create_a_new_session(db):
     sc = FakeSessionsClient()
     client = TestClient(_app(db, sc), follow_redirects=False)
@@ -102,7 +119,7 @@ def test_resume_does_not_create_a_new_session(db):
     loc = client.get("/chat?agent_id=agent_1").headers["location"]
     assert len(sc.created) == 1
 
-    page = client.get(loc)  # reopen the conversation
+    page = client.get(loc)  # reopen the session
     assert page.status_code == 200
     assert len(sc.created) == 1  # reused, no new session
 
@@ -111,9 +128,9 @@ def test_stream_renders_text_then_done(db):
     sc = FakeSessionsClient(events=[{"type": "text", "text": "Hi there"}, {"type": "done"}])
     client = TestClient(_app(db, sc), follow_redirects=False)
     _login(client)
-    conv_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
 
-    r = client.get(f"/chat/{conv_id}/stream?message=hello")
+    r = client.get(f"/chat/{session_id}/stream?message=hello")
     assert r.status_code == 200
     assert "text/event-stream" in r.headers["content-type"]
     assert '"type": "text"' in r.text
@@ -127,9 +144,9 @@ def test_stream_surfaces_mcp_auth_error(db):
     )
     client = TestClient(_app(db, sc), follow_redirects=False)
     _login(client)
-    conv_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
 
-    r = client.get(f"/chat/{conv_id}/stream?message=go")
+    r = client.get(f"/chat/{session_id}/stream?message=go")
     assert "mcp_authentication_failed_error" in r.text
     assert "atlassian" in r.text
 
@@ -138,9 +155,9 @@ def test_stream_emits_terminal_error_when_client_raises(db):
     sc = FakeSessionsClient(raises=True)
     client = TestClient(_app(db, sc), follow_redirects=False)
     _login(client)
-    conv_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
 
-    r = client.get(f"/chat/{conv_id}/stream?message=go")
+    r = client.get(f"/chat/{session_id}/stream?message=go")
     assert r.status_code == 200
     assert "stream_failed" in r.text
     assert '"type": "done"' in r.text
@@ -156,9 +173,9 @@ def test_history_replays_prior_events(db):
     )
     client = TestClient(_app(db, sc), follow_redirects=False)
     _login(client)
-    conv_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
 
-    r = client.get(f"/chat/{conv_id}/history")
+    r = client.get(f"/chat/{session_id}/history")
     assert r.status_code == 200
     body = r.json()
     assert [e["type"] for e in body] == ["user", "tool_use", "text"]
@@ -168,7 +185,7 @@ def test_history_replays_prior_events(db):
 def test_history_empty_in_stub_mode(db):
     client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
     _login(client)
-    conv_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
     # Stub mode: no sessions client -> empty history, transcript just starts blank.
     app = build_app(
         Settings(env="test", default_agent_id="agent_1", default_environment_id="env_1"),
@@ -177,7 +194,7 @@ def test_history_empty_in_stub_mode(db):
     )
     stub_client = TestClient(app, follow_redirects=False)
     _login(stub_client)
-    r = stub_client.get(f"/chat/{conv_id}/history")
+    r = stub_client.get(f"/chat/{session_id}/history")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -188,10 +205,10 @@ def test_new_chat_unknown_agent_404(db):
     assert client.get("/chat?agent_id=nope").status_code == 404
 
 
-def test_chat_page_not_found_for_other_users_conversation(db):
+def test_chat_page_not_found_for_other_users_session(db):
     client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
     _login(client)
-    assert client.get("/chat/999999").status_code == 404
+    assert client.get("/chat/nonexistent").status_code == 404
 
 
 def test_chat_requires_login(db):

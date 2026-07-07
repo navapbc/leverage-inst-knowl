@@ -18,15 +18,15 @@ def test_user_vault_mapping_roundtrips_and_is_unique(store):
     assert store.get_user_vault(user["id"]) == "vlt_2"
 
 
-def test_conversations_are_scoped_to_their_user(store):
+def test_sessions_are_scoped_to_their_user(store):
     a = store.upsert_user("a@navapbc.com")
     b = store.upsert_user("b@navapbc.com")
-    conv = store.create_conversation(a["id"], "agent_1", "sess_1", title="First")
-    assert [c["id"] for c in store.list_conversations(a["id"])] == [conv["id"]]
-    assert store.list_conversations(b["id"]) == []
-    # b cannot open a's conversation
-    assert store.get_conversation(conv["id"], b["id"]) is None
-    assert store.get_conversation(conv["id"], a["id"])["session_id"] == "sess_1"
+    sess = store.create_session(a["id"], "agent_1", "sess_1", title="First")
+    assert [s["session_id"] for s in store.list_sessions(a["id"])] == [sess["session_id"]]
+    assert store.list_sessions(b["id"]) == []
+    # b cannot open a's session
+    assert store.get_session(sess["session_id"], b["id"]) is None
+    assert store.get_session(sess["session_id"], a["id"])["session_id"] == "sess_1"
 
 
 def test_dcr_registration_absent_then_stored_and_reused(store):

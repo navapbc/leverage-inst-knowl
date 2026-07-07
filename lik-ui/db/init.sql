@@ -17,16 +17,16 @@ CREATE TABLE IF NOT EXISTS user_vaults (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- One managed session per conversation; a user resumes by reopening a stored session_id.
-CREATE TABLE IF NOT EXISTS conversations (
-    id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+-- One managed session per row, keyed by the Managed Agents session id; a user resumes
+-- by reopening a stored session_id.
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id  text        PRIMARY KEY,
     user_id     bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     agent_id    text        NOT NULL,
-    session_id  text        NOT NULL,
     title       text,
     created_at  timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS conversations_user_idx ON conversations (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id, created_at DESC);
 
 -- App-level dynamic client registrations, keyed by the authorization server's issuer.
 -- Registered once against a DCR-capable AS (e.g. Atlassian) and reused across users.

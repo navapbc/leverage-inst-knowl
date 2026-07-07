@@ -4,7 +4,7 @@
   const transcript = document.getElementById("transcript");
   const composer = document.getElementById("composer");
   const input = document.getElementById("message");
-  const conversationId = transcript.dataset.conversationId;
+  const sessionId = transcript.dataset.sessionId;
   const agentId = transcript.dataset.agentId;
 
   function bubble(cls, text) {
@@ -74,7 +74,7 @@
   }
 
   // Marks where the session summarized older turns, so a sparse replayed history isn't
-  // mistaken for the whole conversation.
+  // mistaken for the whole session.
   function compactedDivider() {
     bubble("compacted", "— earlier context compacted —");
   }
@@ -109,7 +109,7 @@
   // event is its own bubble (consecutive assistant messages aren't merged — the merge
   // in the live stream is only to accumulate a single reply's text deltas).
   function loadHistory() {
-    return fetch("/chat/" + conversationId + "/history")
+    return fetch("/chat/" + sessionId + "/history")
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (events) {
         if (!Array.isArray(events)) return;
@@ -143,7 +143,7 @@
     input.value = "";
 
     let assistant = null;
-    const url = "/chat/" + conversationId + "/stream?message=" + encodeURIComponent(message);
+    const url = "/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message);
     const source = new EventSource(url);
 
     source.onmessage = function (ev) {

@@ -1,14 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Choose an agent · lik-ui{% endblock %}
 {% block content %}
-  <h1>lik-ui</h1>
-  <p>Signed in as <strong>{{ user.email }}</strong>. <a href="/logout">Sign out</a></p>
-
-  <h2>Choose an agent</h2>
+  <h1>Choose an agent</h1>
   {% for a in agents %}
     <div class="card">
       <strong>{{ a.label }}</strong>
       <a class="btn" href="/connections?agent_id={{ a.agent_id | urlencode }}">Select</a>
+      <details>
+        <summary>Details</summary>
+        <dl>
+          <dt>Agent ID</dt><dd>{{ a.agent_id }}</dd>
+          <dt>Environment ID</dt><dd>{{ a.environment_id }}</dd>
+          {% if a.model %}<dt>Model</dt><dd>{{ a.model }}</dd>{% endif %}
+        </dl>
+        {% if a.system %}
+          <div class="prompt-label">System prompt</div>
+          <pre>{{ a.system }}</pre>
+        {% endif %}
+      </details>
     </div>
   {% else %}
     <p>No agents are configured. Set <code>LIK_UI_DEFAULT_AGENT_ID</code> and

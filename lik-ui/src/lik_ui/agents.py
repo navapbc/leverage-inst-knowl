@@ -13,8 +13,9 @@ from .vault import VaultClient, ensure_user_vault
 
 
 class AgentsClient(Protocol):
-    def declared_servers(self, agent_id: str) -> list[dict]:
-        """Return the agent's declared MCP servers as ``[{"name", "url"}, ...]``."""
+    def describe(self, agent_id: str) -> dict:
+        """Return the agent's details in a single lookup:
+        ``{"servers": [{"name", "url"}, ...], "system": str | None, "model": str | None}``."""
         ...
 
 
@@ -26,9 +27,13 @@ class AnthropicAgentsClient:
 
         self._client = anthropic.Anthropic(api_key=api_key)
 
-    def declared_servers(self, agent_id: str) -> list[dict]:
+    def describe(self, agent_id: str) -> dict:
         agent = self._client.beta.agents.retrieve(agent_id)
-        return [{"name": s.name, "url": s.url} for s in (agent.mcp_servers or [])]
+        return {
+            "servers": [{"name": s.name, "url": s.url} for s in (agent.mcp_servers or [])],
+            "system": agent.system,
+            "model": getattr(agent.model, "id", None),
+        }
 
 
 def build_agents_client(settings: Settings) -> AgentsClient | None:
@@ -37,14 +42,10 @@ def build_agents_client(settings: Settings) -> AgentsClient | None:
     return AnthropicAgentsClient(settings.anthropic_api_key)
 
 
-def resolve_connections(
-    agents_client: AgentsClient, vault_client: VaultClient | None, agent_id: str, vault_id: str
-) -> list[dict]:
+def resolve_connections(servers: list[dict], connected_urls: set[str]) -> list[dict]:
     """For each server the agent declares, mark whether the user's vault already has a
     matching credential (exact URL match, as the platform requires)."""
-    declared = agents_client.declared_servers(agent_id)
-    connected = vault_client.list_credential_urls(vault_id) if vault_client else set()
-    return [{"name": d["name"], "url": d["url"], "connected": d["url"] in connected} for d in declared]
+    return [{"name": d["name"], "url": d["url"], "connected": d["url"] in connected_urls} for d in servers]
 
 
 def register_agent_routes(app) -> None:
@@ -64,10 +65,15 @@ def register_agent_routes(app) -> None:
 
         try:
             vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
-            conns = resolve_connections(
-                request.app.state.agents_client, request.app.state.vault_client, agent_id, vault_id
-            )
+            vault_client: VaultClient | None = request.app.state.vault_client
+            described = request.app.state.agents_client.describe(agent_id)
+            connected = vault_client.list_credential_urls(vault_id) if vault_client else set()
+            conns = resolve_connections(described["servers"], connected)
         except Exception as exc:  # noqa: BLE001 - surface SDK/agent/vault errors as a page, not a 500
             return HTMLResponse(f"Could not load the agent's required connections: {exc}", status_code=502)
 
-        return templates.TemplateResponse(request, "connections.html", {"agent": agent, "connections": conns})
+        return templates.TemplateResponse(
+            request,
+            "connections.html",
+            {"user": user, "agent": agent, "connections": conns, "system_prompt": described["system"]},
+        )

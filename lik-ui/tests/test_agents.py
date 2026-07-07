@@ -14,28 +14,27 @@ ATL = {"name": "atlassian", "url": "https://mcp.atlassian.com/v1/sse"}
 
 
 class FakeAgentsClient:
-    def __init__(self, servers, *, raises=False):
+    def __init__(self, servers, *, raises=False, system="You are a helpful agent.", model="claude-opus-4-8"):
         self.servers = servers
         self.raises = raises
+        self.system = system
+        self.model = model
 
-    def declared_servers(self, agent_id):
+    def describe(self, agent_id):
         if self.raises:
             raise RuntimeError("agent retrieval failed")
-        return self.servers
+        return {"servers": self.servers, "system": self.system, "model": self.model}
 
 
 def test_resolve_marks_connected_and_missing():
-    vc = RecordingVaultClient()
-    vc.credentials.append({"mcp_server_url": LIK["url"]})  # lik-mcp connected
-    conns = resolve_connections(FakeAgentsClient([LIK, ATL]), vc, "agent_1", "vlt_1")
+    conns = resolve_connections([LIK, ATL], {LIK["url"]})  # lik-mcp connected
     by = {c["name"]: c for c in conns}
     assert by["lik-mcp"]["connected"] is True
     assert by["atlassian"]["connected"] is False
 
 
 def test_resolve_zero_declared_returns_empty():
-    conns = resolve_connections(FakeAgentsClient([]), RecordingVaultClient(), "agent_1", "vlt_1")
-    assert conns == []
+    assert resolve_connections([], set()) == []
 
 
 def _app(db, agents_client, vc):
@@ -58,6 +57,7 @@ def test_connections_page_reflects_vault_state_and_flips_on_connect(db):
     assert r.status_code == 200
     assert "lik-mcp" in r.text
     assert "Not connected" in r.text
+    assert "You are a helpful agent." in r.text  # agent system prompt is shown
 
     # Simulate a completed connect by adding the credential; status flips to connected.
     vc.credentials.append({"mcp_server_url": LIK["url"]})

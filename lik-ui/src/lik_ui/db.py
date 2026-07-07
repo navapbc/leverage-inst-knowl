@@ -1,4 +1,4 @@
-"""Postgres access for lik-ui's own store: users, the user->vault mapping, conversations
+"""Postgres access for lik-ui's own store: users, the user->vault mapping, sessions
 (one managed session each), and app-level DCR client registrations.
 
 ``Database`` owns the connection pool (mirrors lik-mcp); ``Store`` holds the domain
@@ -76,39 +76,40 @@ class Store:
             ).fetchone()
             return row["vault_id"] if row else None
 
-    # --- conversations ---------------------------------------------------------
-    def create_conversation(self, user_id: int, agent_id: str, session_id: str, title: str | None = None) -> dict:
+    # --- sessions --------------------------------------------------------------
+    def create_session(self, user_id: int, agent_id: str, session_id: str, title: str | None = None) -> dict:
+        """Persist a session record keyed by the Managed Agents ``session_id``."""
         with self.db.connection() as conn:
             row = conn.execute(
                 """
-                INSERT INTO conversations (user_id, agent_id, session_id, title)
+                INSERT INTO sessions (session_id, user_id, agent_id, title)
                 VALUES (%s, %s, %s, %s)
-                RETURNING id, user_id, agent_id, session_id, title, created_at
+                RETURNING session_id, user_id, agent_id, title, created_at
                 """,
-                (user_id, agent_id, session_id, title),
+                (session_id, user_id, agent_id, title),
             ).fetchone()
             conn.commit()
             return row
 
-    def list_conversations(self, user_id: int) -> list[dict]:
+    def list_sessions(self, user_id: int) -> list[dict]:
         with self.db.connection() as conn:
             return conn.execute(
                 """
-                SELECT id, user_id, agent_id, session_id, title, created_at
-                FROM conversations WHERE user_id = %s ORDER BY created_at DESC
+                SELECT session_id, user_id, agent_id, title, created_at
+                FROM sessions WHERE user_id = %s ORDER BY created_at DESC
                 """,
                 (user_id,),
             ).fetchall()
 
-    def get_conversation(self, conversation_id: int, user_id: int) -> dict | None:
-        """Scoped to the owning user so one user can't open another's conversation."""
+    def get_session(self, session_id: str, user_id: int) -> dict | None:
+        """Scoped to the owning user so one user can't open another's session."""
         with self.db.connection() as conn:
             return conn.execute(
                 """
-                SELECT id, user_id, agent_id, session_id, title, created_at
-                FROM conversations WHERE id = %s AND user_id = %s
+                SELECT session_id, user_id, agent_id, title, created_at
+                FROM sessions WHERE session_id = %s AND user_id = %s
                 """,
-                (conversation_id, user_id),
+                (session_id, user_id),
             ).fetchone()
 
     # --- DCR registrations -----------------------------------------------------

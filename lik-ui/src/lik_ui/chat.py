@@ -1,7 +1,7 @@
 """Chat: create or resume a Managed Agents session and stream its events to the browser.
 
-A conversation is backed by one managed session (stored session id); reopening a
-conversation resumes that session rather than creating a new one. MCP tool calls are
+A session is the Managed Agents session, persisted by its session id; reopening a
+session resumes it rather than creating a new one. MCP tool calls are
 auto-approved on the agent definition, so no approval UI is rendered here — the stream
 just surfaces assistant text, tool activity, and connection errors.
 
@@ -12,6 +12,7 @@ event mapping is validated at live integration (see the plan's deferred question
 
 import json
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Protocol
 
 from .settings import Settings
@@ -162,7 +163,7 @@ def register_chat_routes(app) -> None:
     from .app_auth import require_user
 
     @app.get("/chat")
-    async def new_chat(request: Request, agent_id: str):
+    async def new_chat(request: Request, agent_id: str, title: str = ""):
         user = require_user(request)
         settings: Settings = request.app.state.settings
         agent = next((a for a in settings.agents if a.agent_id == agent_id), None)
@@ -176,52 +177,60 @@ def register_chat_routes(app) -> None:
             )
         except Exception as exc:  # noqa: BLE001 - surface session/vault failures as a page, not a 500
             return HTMLResponse(f"Could not start a session: {exc}", status_code=502)
-        conv = request.app.state.store.create_conversation(user["id"], agent.agent_id, session_id)
-        return RedirectResponse(f"/chat/{conv['id']}", status_code=303)
+        # Fall back to the agent name plus a timestamp when the user leaves the title blank,
+        # so every session is named (matches the placeholder shown next to "Start chatting").
+        title = title.strip() or f"{agent.label} · {datetime.now():%b %d, %Y %H:%M}"
+        request.app.state.store.create_session(user["id"], agent.agent_id, session_id, title)
+        return RedirectResponse(f"/chat/{session_id}", status_code=303)
 
-    @app.get("/chat/{conversation_id}", response_class=HTMLResponse)
-    async def chat_page(request: Request, conversation_id: int):
+    @app.get("/sessions", response_class=HTMLResponse)
+    async def sessions_page(request: Request):
         user = require_user(request)
-        conv = request.app.state.store.get_conversation(conversation_id, user["id"])
-        if not conv:
-            return HTMLResponse("Conversation not found.", status_code=404)
-        conversations = request.app.state.store.list_conversations(user["id"])
+        sessions = request.app.state.store.list_sessions(user["id"])
         return templates.TemplateResponse(
-            request, "chat.html", {"conversation": conv, "conversations": conversations}
+            request, "sessions.html", {"user": user, "sessions": sessions}
         )
 
-    @app.get("/chat/{conversation_id}/history")
-    def chat_history(request: Request, conversation_id: int):
-        """Prior events for the conversation's session, replayed when the page opens.
+    @app.get("/chat/{session_id}", response_class=HTMLResponse)
+    async def chat_page(request: Request, session_id: str):
+        user = require_user(request)
+        session = request.app.state.store.get_session(session_id, user["id"])
+        if not session:
+            return HTMLResponse("Session not found.", status_code=404)
+        return templates.TemplateResponse(request, "chat.html", {"user": user, "session": session})
+
+    @app.get("/chat/{session_id}/history")
+    def chat_history(request: Request, session_id: str):
+        """Prior events for the session, replayed when the page opens.
         Empty in stub mode (no sessions client) so the transcript just starts blank."""
         user = require_user(request)
-        conv = request.app.state.store.get_conversation(conversation_id, user["id"])
-        if not conv:
-            return JSONResponse({"detail": "Conversation not found."}, status_code=404)
+        session = request.app.state.store.get_session(session_id, user["id"])
+        if not session:
+            return JSONResponse({"detail": "Session not found."}, status_code=404)
 
         sessions_client: SessionsClient | None = request.app.state.sessions_client
         if sessions_client is None:
             return JSONResponse([])
         try:
-            events = list(sessions_client.list_events(conv["session_id"]))
+            events = list(sessions_client.list_events(session["session_id"]))
         except Exception as exc:  # noqa: BLE001 - a history-fetch failure shouldn't block chatting
             return JSONResponse(
                 {"detail": f"Could not load history: {exc}"}, status_code=502
             )
         return JSONResponse(events)
 
-    @app.get("/chat/{conversation_id}/stream")
-    def chat_stream(request: Request, conversation_id: int, message: str):
+    @app.get("/chat/{session_id}/stream")
+    def chat_stream(request: Request, session_id: str, message: str):
         user = require_user(request)
-        conv = request.app.state.store.get_conversation(conversation_id, user["id"])
-        if not conv:
-            return HTMLResponse("Conversation not found.", status_code=404)
+        session = request.app.state.store.get_session(session_id, user["id"])
+        if not session:
+            return HTMLResponse("Session not found.", status_code=404)
 
         sessions_client: SessionsClient = request.app.state.sessions_client
 
         def event_stream():
             try:
-                for event in sessions_client.send_and_stream(conv["session_id"], message):
+                for event in sessions_client.send_and_stream(session["session_id"], message):
                     yield f"data: {json.dumps(event)}\n\n"
             except Exception as exc:  # noqa: BLE001 - stream a terminal error, don't 500 mid-stream
                 yield f"data: {json.dumps({'type': 'error', 'error_type': 'stream_failed', 'detail': str(exc)})}\n\n"
