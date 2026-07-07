@@ -30,7 +30,7 @@ services:
       LIK_DB_NAME: likdb_local    # persistent DB, survives the test suite's TRUNCATE
       # Clients reach the published port via 0.0.0.0:8000 or host.docker.internal, so
       # accept those Host headers too.
-      LIK_HTTP_ALLOWED_HOSTS: "localhost,localhost:*,127.0.0.1,127.0.0.1:*,0.0.0.0,0.0.0.0:*,host.docker.internal,host.docker.internal:*"
+      LIK_HTTP_ALLOWED_HOSTS: "localhost,localhost:*,127.0.0.1,127.0.0.1:*,0.0.0.0,0.0.0.0:*,host.docker.internal,host.docker.internal:*,3cbe-172-56-93-235.ngrok-free.app"
     ports:
       - "127.0.0.1:8000:8000"     # the 0.0.0.0 in-container bind is published to host loopback only
     depends_on:

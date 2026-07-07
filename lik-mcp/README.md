@@ -167,6 +167,49 @@ LIK_DB_HOST=prod-db LIK_DB_SSLMODE=require uv run python scripts/init_db.py
 Schema only — never drops or truncates. Grant the app role membership in the
 `*_writer` / `dl_reader` roles per your governed-writer policy.
 
+## Deploy as a Docker container
+
+The same `Dockerfile` that backs local testing is the deploy artifact — one image, its
+behavior set entirely by environment variables at run time. Its defaults are already
+deploy-shaped: the long-lived HTTP transport, a bind on all interfaces
+(`LIK_HTTP_HOST=0.0.0.0`) so the published port is reachable, and `LIK_ENV=prod`, which
+fails closed until real auth is configured. The `docker compose` setup above only overrides
+those for loopback-only local use; a deploy keeps the defaults and supplies its own config.
+
+Build the image:
+
+```sh
+docker build -t lik-mcp .
+```
+
+**1. Initialize the database first.** The image's entrypoint only creates the local
+`likdb_test` / `likdb_local` databases. Point at your real database and apply the schema
+once before serving — see [Initialize a deployed database](#initialize-a-deployed-database)
+above.
+
+**2. Run the container with a deploy config.** Any `LIK_ENV` other than `local`/`test`
+turns on real Google token verification, and the server refuses to start unless the OAuth
+variables are set. Supply, at minimum:
+
+| Variable | Purpose |
+| --- | --- |
+| `LIK_ENV` | Anything but `local`/`test` (e.g. `dev`, `prod`) — enables real auth. |
+| `LIK_DB_HOST`, `LIK_DB_NAME`, `LIK_DB_USER`, `LIK_DB_PASSWORD`, `LIK_DB_SSLMODE` | Where the real database lives; use `require` SSL for a remote DB. |
+| `LIK_OAUTH_CLIENT_ID` | The Google OAuth client id incoming tokens must be minted for (their `aud`). |
+| `LIK_RESOURCE_SERVER_URL` | This server's own public URL, including the `/mcp` path. |
+| `LIK_HTTP_ALLOWED_HOSTS` | Must include the public host clients reach it by. The bind is `0.0.0.0`, so this list — not the bind — is the DNS-rebinding guard. |
+
+```sh
+source .env
+export LIK_DB_HOST LIK_DB_NAME LIK_DB_SSLMODE LIK_DB_USER LIK_DB_PASSWORD LIK_OAUTH_CLIENT_ID LIK_RESOURCE_SERVER_URL LIK_HTTP_ALLOWED_HOSTS
+docker run -p 8000:8000 -e LIK_DB_HOST -e LIK_DB_NAME -e LIK_DB_SSLMODE -e LIK_DB_USER -e LIK_DB_PASSWORD -e LIK_OAUTH_CLIENT_ID -e LIK_RESOURCE_SERVER_URL -e LIK_HTTP_ALLOWED_HOSTS lik-mcp
+```
+
+Terminate TLS at whatever fronts the container (load balancer, reverse proxy, or tunnel);
+the server itself speaks plain HTTP on 8000. The untracked `docker-compose.override.yml` is
+a working reference for this shape — it exposes the local build through an ngrok tunnel with
+real Google auth on, and shows exactly which keys change from the local config.
+
 ## Help
 
 ### Update the containers after code or schema changes
@@ -192,16 +235,16 @@ docker compose down -v && docker compose up --build -d
 
 ## TODO
 
-A local/test harness with throwaway data, not a production service. Until real serving
-(verified identities, enforced access) lands:
+A local/test harness with throwaway data, not yet a production service. Real Google token
+verification is wired (`LIK_ENV` outside `local`/`test`), but enforced access has not
+landed — so do not load real or restricted data yet:
 
 **Current limits (do not treat these as done):**
 
-- **Prod is inert.** With `LIK_ENV=prod` the fail-closed verifier rejects *every*
-  tool call. The service runs but answers nobody until real OIDC lands.
-- **Identity is not verified.** In `local`/`test` the stub treats the token as the
-  caller's email, so `confirmed_by` / `updated_by` are effectively self-asserted.
-  Confirmations accumulated this way are not real trust.
+- **Identity is only verified on a real deploy.** In `local`/`test` the stub treats the
+  token as the caller's email, so `confirmed_by` / `updated_by` are effectively
+  self-asserted and confirmations accumulated this way are not real trust. A deploy
+  (`LIK_ENV=dev`/`prod` with the OAuth vars set) verifies a real Google token per request.
 - **No access control.** There is no Group → Postgres-role RLS yet; reads return
   rows with **no `access_groups` filtering**. Do **not** load real or restricted
   data into any instance.
@@ -212,7 +255,6 @@ A local/test harness with throwaway data, not a production service. Until real s
 
 **Deferred work that lifts the limits (see the plan's scope boundaries):**
 
-- Real Google OIDC token verification (replaces the stub verifier).
 - Google-Group → Postgres-role RLS bridge (enforces `access_groups` on reads).
 - Real per-store citation resolution (behind the existing `CitationResolver` seam).
 - Governed-writer controls: keyless/rotated credentials, least privilege, audit logging.
