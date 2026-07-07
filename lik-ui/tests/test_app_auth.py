@@ -12,9 +12,10 @@ from tests.test_vault import FakeVaultClient
 
 
 class FakeOidc:
-    def __init__(self, userinfo: dict):
-        self.userinfo = userinfo
+    def __init__(self, claims: dict):
+        self.claims = claims
         self.exchanged = False
+        self.last_nonce = ""
 
     async def authorization_url(self, state: str, nonce: str) -> str:
         return f"https://accounts.example/authorize?state={state}&nonce={nonce}"
@@ -23,8 +24,9 @@ class FakeOidc:
         self.exchanged = True
         return {"access_token": "at-123", "id_token": "it-123"}
 
-    async def fetch_userinfo(self, access_token: str) -> dict:
-        return self.userinfo
+    async def verify_id_token(self, id_token: str, nonce: str) -> dict:
+        self.last_nonce = nonce
+        return self.claims
 
 
 def _client(db, userinfo):

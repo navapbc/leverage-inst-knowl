@@ -11,7 +11,7 @@
       <summary>Conversations ({{ conversations | length }})</summary>
       <ul>
         {% for c in conversations %}
-          <li><a href="/chat/{{ c.id }}">{{ c.title or ("Conversation " ~ c.id) }}</a></li>
+          <li><a href="/chat/{{ c.id }}" title="Session {{ c.session_id }}">{{ c.title or ("Conversation " ~ c.id) }}</a></li>
         {% endfor %}
       </ul>
     </details>

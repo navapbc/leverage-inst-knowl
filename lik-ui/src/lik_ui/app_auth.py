@@ -2,14 +2,16 @@
 
 This is deliberately separate from the per-source data connections (the OAuth connector).
 Login requests only ``openid email`` and yields the user's verified email, which is the
-app identity. It does NOT request data or offline scopes; the lik-mcp *data* connection is
-a distinct flow with its own (reused) client id.
+app identity. Identity is read from the OIDC ID token, whose signature, audience, issuer,
+and nonce are verified before it is trusted — there is no separate userinfo call. It does
+NOT request data or offline scopes; the lik-mcp *data* connection is a distinct flow with
+its own (reused) client id.
 
 Endpoints (authorization-server endpoints are read from Google's OIDC discovery document,
 never hardcoded):
   GET /login          landing page with a "Sign in with Google" action
   GET /auth/login     start the OIDC flow (store state+nonce, redirect to Google)
-  GET /auth/callback  validate state, exchange code, verify email, upsert user + vault
+  GET /auth/callback  validate state, exchange code, verify ID token, upsert user + vault
   GET /logout         clear the session
   GET /               home; requires a logged-in user (placeholder until U6)
 
@@ -19,6 +21,7 @@ No tokens, codes, or cookies are logged.
 import secrets
 
 import httpx
+import jwt
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -44,8 +47,8 @@ def require_user(request: Request) -> dict:
 
 
 class GoogleOidcClient:
-    """Identity-only OIDC client for app login. Endpoints come from Google's discovery
-    document; the access token is used once to read the verified email from userinfo."""
+    """Identity-only OIDC client for app login. Endpoints and signing keys come from
+    Google's discovery document; identity is read from the verified ID token."""
 
     def __init__(self, client_id: str, client_secret: str, discovery_url: str, redirect_uri: str):
         self.client_id = client_id
@@ -53,6 +56,7 @@ class GoogleOidcClient:
         self.discovery_url = discovery_url
         self.redirect_uri = redirect_uri
         self._metadata: dict | None = None
+        self._jwks_client: jwt.PyJWKClient | None = None
 
     async def metadata(self) -> dict:
         if self._metadata is None:
@@ -92,15 +96,24 @@ class GoogleOidcClient:
             resp.raise_for_status()
             return resp.json()
 
-    async def fetch_userinfo(self, access_token: str) -> dict:
+    async def verify_id_token(self, id_token: str, nonce: str) -> dict:
+        """Verify the ID token's signature (against Google's published keys), audience,
+        issuer, and expiry, then confirm the nonce matches the one we sent. Returns the
+        trusted claims. Raises ``jwt.InvalidTokenError`` on any failure."""
         meta = await self.metadata()
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                meta["userinfo_endpoint"],
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            resp.raise_for_status()
-            return resp.json()
+        if self._jwks_client is None:
+            self._jwks_client = jwt.PyJWKClient(meta["jwks_uri"])
+        signing_key = self._jwks_client.get_signing_key_from_jwt(id_token)
+        claims = jwt.decode(
+            id_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=self.client_id,
+            issuer=meta["issuer"],
+        )
+        if not secrets.compare_digest(claims.get("nonce", ""), nonce):
+            raise jwt.InvalidTokenError("nonce mismatch")
+        return claims
 
 
 def _email_verified(userinfo: dict) -> bool:
@@ -141,15 +154,15 @@ def register_auth_routes(app: FastAPI) -> None:
         oidc: GoogleOidcClient = request.app.state.app_oidc
         try:
             tokens = await oidc.exchange_code(code)
-            userinfo = await oidc.fetch_userinfo(tokens["access_token"])
-        except (httpx.HTTPError, KeyError) as exc:
+            claims = await oidc.verify_id_token(tokens["id_token"], saved.get("nonce", ""))
+        except (httpx.HTTPError, KeyError, jwt.InvalidTokenError) as exc:
             return HTMLResponse(f"Login failed: {exc}", status_code=400)
-        if not _email_verified(userinfo) or not userinfo.get("email"):
+        if not _email_verified(claims) or not claims.get("email"):
             return HTMLResponse("Google account has no verified email.", status_code=403)
 
         store: Store = request.app.state.store
         vault_client: VaultClient = request.app.state.vault_client
-        user = store.upsert_user(userinfo["email"])
+        user = store.upsert_user(claims["email"])
         ensure_user_vault(store, vault_client, user)
 
         request.session.pop("oauth_login", None)
