@@ -11,3 +11,22 @@ a { color: var(--accent); }
 .status-connected { color: #2f855a; }
 .status-missing { color: #c05621; }
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin: .75rem 0; background: #fff; }
+
+/* Chat transcript bubbles: shared .card base with a per-role tint. */
+.card.user { background: #f0f6ff; border-color: #cfe0f5; }
+.card.assistant { background: #fff; }
+.card.tool { background: #f7f7f5; border-color: #e6e6e0; color: var(--muted);
+  font-size: .9rem; padding: .6rem .8rem; }
+.card.error { background: #fff5ef; border-color: #f0c9ad; color: #c05621; }
+/* Collapsible tool arguments / results. */
+.card.tool details { margin-top: .4rem; }
+.card.tool summary { cursor: pointer; color: var(--accent); }
+.card.tool pre { margin: .4rem 0 0; padding: .5rem; background: #fff; border: 1px solid var(--line);
+  border-radius: 6px; overflow-x: auto; white-space: pre-wrap; font-size: .82rem; }
+
+/* Context-compaction divider: a quiet centered marker, not a card. */
+.card.compacted { border: none; background: none; text-align: center; color: var(--muted);
+  font-size: .85rem; padding: .25rem; margin: .5rem 0; }
+
+/* Running token total, shown once below the transcript. */
+.usage { color: var(--muted); font-size: .8rem; margin: .5rem 0 0; text-align: right; }
