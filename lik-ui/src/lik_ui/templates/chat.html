@@ -6,6 +6,11 @@
 
   <h1>Chat Session</h1>
 
+  <div id="chat-controls">
+    <label><input type="checkbox" id="toggle-tools"> Show tool use</label>
+    <label><input type="checkbox" id="toggle-mcp"> Show MCP tool use</label>
+  </div>
+
   <div id="transcript"
        data-session-id="{{ session.session_id }}"
        data-agent-id="{{ session.agent_id }}"></div>

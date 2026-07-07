@@ -61,6 +61,12 @@ details.system-prompt pre { margin: .5rem 0 0; padding: .6rem .8rem; background:
   border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem;
   max-height: 24rem; overflow-y: auto; }
 
+/* Tool-visibility toggles: hide tool bubbles by kind based on the container's class. */
+#chat-controls { display: flex; gap: 1rem; margin: .5rem 0; color: var(--muted); font-size: .9rem; }
+#chat-controls label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+#transcript.hide-builtin-tools .card.tool.builtin { display: none; }
+#transcript.hide-mcp-tools .card.tool.mcp { display: none; }
+
 /* Queued/waiting indicator shown between submit and the turn's first event. */
 .card.pending { background: none; border: none; color: var(--muted); font-size: .9rem;
   padding: .25rem; font-style: italic; }

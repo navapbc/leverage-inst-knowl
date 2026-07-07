@@ -25,6 +25,19 @@
     }
   }
 
+  // Tool-visibility toggles. Default unchecked -> tools hidden; the container carries the
+  // hide-* classes and the CSS keys off the per-bubble kind, so bubbles added later (live
+  // stream or history) inherit the current state without re-checking each one.
+  const toggleTools = document.getElementById("toggle-tools");
+  const toggleMcp = document.getElementById("toggle-mcp");
+  function applyToolVisibility() {
+    transcript.classList.toggle("hide-builtin-tools", !toggleTools.checked);
+    transcript.classList.toggle("hide-mcp-tools", !toggleMcp.checked);
+  }
+  toggleTools.addEventListener("change", applyToolVisibility);
+  toggleMcp.addEventListener("change", applyToolVisibility);
+  applyToolVisibility();
+
   // Maps a tool_use id to its rendered bubble so a later tool_result can nest under its call.
   const toolCalls = {};
 
@@ -40,7 +53,10 @@
   }
 
   function toolBubble(event) {
-    const b = bubble("tool", "⚙ using " + (event.server ? event.server + " · " : "") + event.name);
+    // Tag the bubble so the "Show tool use" / "Show MCP tool use" checkboxes can hide it by
+    // kind. MCP tools carry a server; built-in agent tools don't.
+    const kind = event.server ? "mcp" : "builtin";
+    const b = bubble("tool " + kind, "⚙ using " + (event.server ? event.server + " · " : "") + event.name);
     // Show the tool-call arguments in a collapsible block so the transcript stays scannable
     // but the detail is one click away. Omitted when there are no arguments.
     if (event.input && Object.keys(event.input).length) {
