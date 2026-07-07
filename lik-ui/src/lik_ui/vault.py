@@ -74,10 +74,22 @@ class AnthropicVaultClient:
         }
         if refresh:
             auth["refresh"] = refresh
+        # Replace, not just create: the platform allows only one credential per MCP server
+        # URL and rejects a duplicate create with 409. On reconnect the user has just
+        # obtained a fresh token, so drop any existing credential for this exact URL before
+        # depositing the new one.
+        self._delete_existing_credential(vault_id, mcp_server_url)
         credential = self._client.beta.vaults.credentials.create(
             vault_id=vault_id, display_name=display_name, auth=auth
         )
         return credential.id
+
+    def _delete_existing_credential(self, vault_id: str, mcp_server_url: str) -> None:
+        """Delete the credential (if any) already keyed to this exact MCP server URL."""
+        for cred in self._client.beta.vaults.credentials.list(vault_id=vault_id):
+            url = getattr(getattr(cred, "auth", None), "mcp_server_url", None)
+            if url == mcp_server_url:
+                self._client.beta.vaults.credentials.delete(cred.id, vault_id=vault_id)
 
     def list_credential_urls(self, vault_id: str) -> set[str]:
         urls: set[str] = set()
