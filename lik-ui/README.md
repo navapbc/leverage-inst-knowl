@@ -34,6 +34,22 @@ Or the whole stack in containers:
 docker compose up
 ```
 
+## Deploy against a managed Postgres
+
+The app never creates its own schema, and there's no migration step on startup. When you
+deploy against an external/managed Postgres (not the compose one), the Docker entrypoint's
+`db/init.sql` hook does not run — apply the schema by hand once before first boot:
+
+```
+psql "host=$LIK_UI_DB_HOST port=$LIK_UI_DB_PORT dbname=$LIK_UI_DB_NAME \
+  user=$LIK_UI_DB_USER password=$LIK_UI_DB_PASSWORD sslmode=$LIK_UI_DB_SSLMODE" \
+  -f db/init.sql
+```
+
+Use the same `LIK_UI_DB_*` values the app runs with (see `.env.example`); this is the exact
+connection string `settings.conninfo` builds. `db/init.sql` is idempotent
+(`CREATE TABLE IF NOT EXISTS`), so re-running it is safe.
+
 ## Test
 
 ```
