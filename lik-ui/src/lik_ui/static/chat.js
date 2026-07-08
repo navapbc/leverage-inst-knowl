@@ -121,14 +121,29 @@
     b.appendChild(link);
   }
 
+  // Wipe the rendered transcript back to empty so it can be re-rendered from an
+  // authoritative source. Clears the per-turn/tool/usage bookkeeping too, but leaves the
+  // container's tool-visibility classes alone (they aren't children of #transcript).
+  function resetTranscript() {
+    transcript.replaceChildren();
+    for (const id in toolCalls) delete toolCalls[id];
+    usage.input = usage.output = usage.cache_read = usage.cache_creation = 0;
+    if (usageEl) { usageEl.remove(); usageEl = null; }
+  }
+
   // Replay prior events into the transcript before the composer is used. Each history
   // event is its own bubble (consecutive assistant messages aren't merged — the merge
   // in the live stream is only to accumulate a single reply's text deltas).
+  //
+  // Doubles as the reconcile path: history is the source of truth for what the session
+  // actually recorded, so re-running this after a turn recovers a reply the live stream
+  // missed (e.g. it subscribed after a fast turn already ended) without a manual refresh.
   function loadHistory() {
     return fetch("/chat/" + sessionId + "/history")
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (events) {
         if (!Array.isArray(events)) return;
+        resetTranscript();
         events.forEach(function (event) {
           if (event.type === "user") {
             bubble("user", "You: " + event.text);
@@ -167,6 +182,10 @@
     }
 
     let assistant = null;
+    // Did the live stream render anything for this turn? If not, the reply was persisted but
+    // the stream missed it (fast turn, dropped connection) — reconcile from history so it
+    // still appears without a manual refresh.
+    let produced = false;
     const url = "/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message);
     const source = new EventSource(url);
 
@@ -179,27 +198,37 @@
       }
       clearPending();
       if (event.type === "text") {
+        produced = true;
         if (!assistant) { assistant = bubble("assistant", ""); assistant._raw = ""; }
         assistant._raw += event.text;
         renderMarkdown(assistant, assistant._raw);
       } else if (event.type === "tool_use") {
+        produced = true;
         toolBubble(event);
       } else if (event.type === "tool_result") {
+        produced = true;
         toolResultBubble(event);
       } else if (event.type === "compacted") {
+        produced = true;
         compactedDivider();
       } else if (event.type === "usage") {
+        produced = true;
         addUsage(event);
       } else if (event.type === "error") {
+        produced = true;
         errorBubble(event);
       } else if (event.type === "done") {
         source.close();
+        if (!produced) loadHistory();  // stream ended without output -> pull the persisted reply
       }
     };
 
     source.onerror = function () {
       clearPending();
       source.close();
+      // The connection dropped mid-turn; the agent keeps running server-side. Pull whatever
+      // was recorded so a completed reply isn't stranded behind a refresh.
+      loadHistory();
     };
   });
 
