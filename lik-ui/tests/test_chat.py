@@ -38,10 +38,17 @@ class FakeSessionsClient:
 
 
 class FakeAgentsClient:
-    """Minimal agents client so the untitled-chat default can read the agent's label."""
+    """Minimal agents client so the untitled-chat default can read the agent's label and the
+    chat page can list the agent's declared servers for the auto-approve checklist."""
 
     def describe(self, agent_id):
-        return {"name": "Discovery Layer Agent", "servers": [], "system": None, "model": None}
+        return {
+            "name": "Discovery Layer Agent",
+            "servers": [{"name": "atlassian", "url": "https://a/"},
+                        {"name": "github", "url": "https://g/"}],
+            "system": None,
+            "model": None,
+        }
 
 
 def _app(db, sessions_client, vc=None):
@@ -164,6 +171,19 @@ def test_new_chat_defaults_title_when_blank(db):
     _login(client)
     client.get("/chat?agent_id=agent_1")  # no title -> agent name + timestamp default
     assert "Discovery Layer Agent" in client.get("/sessions").text
+
+
+def test_chat_page_lists_declared_servers_for_auto_approve(db):
+    # The chat page renders a per-server auto-approve checkbox for each MCP server the agent
+    # declares, so the user can trust specific sources for the session.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    loc = client.get("/chat?agent_id=agent_1").headers["location"]
+
+    page = client.get(loc).text
+    assert 'class="auto-server" value="atlassian"' in page
+    assert 'class="auto-server" value="github"' in page
 
 
 def test_resume_does_not_create_a_new_session(db):

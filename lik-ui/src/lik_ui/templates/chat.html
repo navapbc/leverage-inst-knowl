@@ -8,8 +8,15 @@
   <div id="chat-controls">
     <label><input type="checkbox" id="toggle-tools"> Show tool use</label>
     <label><input type="checkbox" id="toggle-mcp"> Show MCP tool use</label>
-    <label><input type="checkbox" id="toggle-auto"> Auto-approve tool calls (this session)</label>
   </div>
+  {% if servers %}
+    <div id="auto-approve">
+      <span class="auto-approve-label">Auto-approve tool calls this session from:</span>
+      {% for srv in servers %}
+        <label><input type="checkbox" class="auto-server" value="{{ srv }}"> {{ srv }}</label>
+      {% endfor %}
+    </div>
+  {% endif %}
   <hr/>
 
   <div id="transcript"

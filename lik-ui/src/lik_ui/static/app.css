@@ -77,14 +77,24 @@ details.skills .skill-details p { margin: .3rem 0 0; }
 #chat-controls label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
 #transcript.hide-builtin-tools .card.tool.builtin { display: none; }
 #transcript.hide-mcp-tools .card.tool.mcp { display: none; }
-/* A call awaiting the user's approval stays visible even when its kind is toggled off —
-   you can't approve what you can't see. */
-#transcript.hide-builtin-tools .card.tool.builtin.awaiting,
-#transcript.hide-mcp-tools .card.tool.mcp.awaiting { display: block; }
+/* A gated (permission-checked) call stays visible even when its kind is toggled off — you
+   can't approve what you can't see, and the approved/denied outcome stays on the record. */
+#transcript.hide-builtin-tools .card.tool.builtin.gated,
+#transcript.hide-mcp-tools .card.tool.mcp.gated { display: block; }
 /* Approve/Deny prompt on a paused tool call. */
 .card.tool.awaiting { color: var(--fg); border-color: var(--accent); }
 .card.tool .tool-actions { display: flex; gap: .5rem; margin-top: .5rem; }
 .card.tool .tool-actions .btn { padding: .3rem .8rem; font-size: .85rem; }
+/* Outcome tag left on a gated call after it's approved / auto-approved / denied. */
+.card.tool .tool-decision { margin-top: .5rem; font-size: .85rem; font-weight: 600; }
+.card.tool .tool-decision.ok { color: #2f855a; }
+.card.tool .tool-decision.no { color: #c05621; }
+
+/* Per-server auto-approve checklist. */
+#auto-approve { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: center;
+  margin: .25rem 0 .5rem; color: var(--muted); font-size: .9rem; }
+#auto-approve label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+#auto-approve .auto-approve-label { cursor: default; }
 
 /* Queued/waiting indicator shown between submit and the turn's first event. */
 .card.pending { background: none; border: none; color: var(--muted); font-size: .9rem;

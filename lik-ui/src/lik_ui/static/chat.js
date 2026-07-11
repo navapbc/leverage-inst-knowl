@@ -38,19 +38,33 @@
   toggleMcp.addEventListener("change", applyToolVisibility);
   applyToolVisibility();
 
-  // Auto-approve toggle. When on, every tool call that would prompt is approved automatically
-  // for the rest of this session — the agent still gates each call server-side, so this just
-  // answers each pause with "allow" via the same /confirm path a manual click uses. Scoped to
-  // the browser session (sessionStorage keyed by session id) so a refresh keeps the choice.
-  const toggleAuto = document.getElementById("toggle-auto");
-  const autoKey = "lik-auto-approve:" + sessionId;
-  toggleAuto.checked = sessionStorage.getItem(autoKey) === "1";
-  function autoApprove() { return toggleAuto.checked; }
-  toggleAuto.addEventListener("change", function () {
-    sessionStorage.setItem(autoKey, toggleAuto.checked ? "1" : "");
-    // Turning it on clears anything already waiting for approval right now.
-    if (toggleAuto.checked) autoApproveIds(pendingCallIds());
+  // Per-server auto-approve. Each checked server's gated ("ask") tool calls are approved
+  // automatically for the rest of this session; unchecked servers still prompt. The agent
+  // gates every call server-side regardless — this just answers the pause with "allow" via
+  // the same /confirm path a manual click uses. The trusted set persists in sessionStorage
+  // (keyed by session id) so a refresh keeps the choices.
+  const autoServersKey = "lik-auto-servers:" + sessionId;
+  const autoServers = new Set(JSON.parse(sessionStorage.getItem(autoServersKey) || "[]"));
+  function isAutoServer(server) { return autoServers.has(server); }
+  Array.prototype.forEach.call(document.querySelectorAll(".auto-server"), function (cb) {
+    cb.checked = autoServers.has(cb.value);
+    cb.addEventListener("change", function () {
+      if (cb.checked) autoServers.add(cb.value); else autoServers.delete(cb.value);
+      sessionStorage.setItem(autoServersKey, JSON.stringify(Array.from(autoServers)));
+      // Trusting a server now clears anything from it already waiting for approval.
+      if (cb.checked) autoApproveNext(pendingCallIds());
+    });
   });
+
+  // Remembered decisions ({toolUseId: {result, auto, server}}), persisted so the on-screen
+  // "Approved / Auto-approved / Denied" tags survive a page refresh (history replay can't
+  // otherwise tell an approved gated call apart from an auto-approved one).
+  const decisionsKey = "lik-decisions:" + sessionId;
+  const decisions = JSON.parse(sessionStorage.getItem(decisionsKey) || "{}");
+  function recordDecision(id, result, auto, server) {
+    decisions[id] = { result: result, auto: auto, server: server };
+    sessionStorage.setItem(decisionsKey, JSON.stringify(decisions));
+  }
 
   // Maps a tool_use id to its rendered bubble so a later tool_result can nest under its call.
   const toolCalls = {};
@@ -62,19 +76,50 @@
     });
   }
 
-  // Approve the first still-pending call among `ids`. One at a time: the resumed turn
-  // re-prompts for any remaining blocked calls and that pause routes back here, so a chain of
-  // pending calls clears without stacking concurrent streams. The prompt is consumed first so
-  // it can't also be answered by a manual click.
-  function autoApproveIds(ids) {
+  // Approve the first still-pending call among `ids` whose server is trusted. One at a time:
+  // the resumed turn re-prompts for any remaining blocked calls and that pause routes back
+  // here, so a chain clears without stacking concurrent streams. Calls from untrusted servers
+  // are left with their manual prompt.
+  function autoApproveNext(ids) {
     const id = (ids || []).find(function (x) {
       const c = toolCalls[x];
-      return c && c.querySelector(".tool-actions");
+      return c && c.querySelector(".tool-actions") && isAutoServer(c._server);
     });
     if (!id) return;
     const call = toolCalls[id];
-    call.querySelector(".tool-actions").remove();
+    recordDecision(id, "allow", true, call._server);
+    stampDecision(call, "allow", true, call._server);
     confirmTool(id, "allow", call._sessionThreadId);
+  }
+
+  // True if any of `ids` is a call from an untrusted server still awaiting a manual decision.
+  function anyManualPending(ids) {
+    return (ids || []).some(function (x) {
+      const c = toolCalls[x];
+      return c && c.querySelector(".tool-actions") && !isAutoServer(c._server);
+    });
+  }
+
+  // Replace a gated call's prompt with a decision tag (idempotent). Removes the awaiting flag
+  // so the bubble obeys the tool-visibility toggles again once it's been decided.
+  function stampDecision(call, result, auto, server) {
+    call.classList.remove("awaiting");
+    const actions = call.querySelector(".tool-actions");
+    if (actions) actions.remove();
+    if (call.querySelector(".tool-decision")) return;
+    const tag = document.createElement("div");
+    tag.className = "tool-decision " + (result === "allow" ? "ok" : "no");
+    tag.textContent = result === "allow"
+      ? (auto ? "✓ Auto-approved · " + server : "✓ Approved")
+      : "✕ Denied";
+    call.appendChild(tag);
+  }
+
+  // Enable/disable every visible Approve/Deny button — used to keep a manual click from
+  // opening a second confirm stream while one is already resuming a turn.
+  function setPromptsEnabled(on) {
+    Array.prototype.forEach.call(transcript.querySelectorAll(".tool-actions button"),
+      function (b) { b.disabled = !on; });
   }
 
   function collapsible(summaryText, body) {
@@ -101,22 +146,30 @@
       b.appendChild(collapsible("arguments", JSON.stringify(event.input, null, 2)));
     }
     if (event.id) toolCalls[event.id] = b;
-    // "ask" means the call is paused for the user's approval. Offer Approve/Deny inline and
-    // force the bubble visible ("awaiting") even if its kind is toggled off — you can't
-    // approve what you can't see. The row is cleared once the call resolves (see
-    // toolResultBubble). A missing id means we couldn't route an answer, so no prompt.
+    // "ask" means the call is paused for the user's approval. A missing id means we couldn't
+    // route an answer, so no prompt is shown.
     if (event.permission === "ask" && event.id) {
-      b.classList.add("awaiting");
-      b._sessionThreadId = event.session_thread_id;  // echoed back on approval; see autoApproveIds
-      b.appendChild(confirmActions(event.id, event.session_thread_id));
+      // "gated" keeps the bubble visible through the tool-visibility toggles for its whole
+      // life — both while awaiting a decision (you can't approve what you can't see) and after,
+      // so the approved/denied trail stays on screen. "awaiting" adds the pending highlight.
+      b.classList.add("gated");
+      b._server = event.server;  // matched against the trusted-server set (null for built-ins)
+      b._sessionThreadId = event.session_thread_id;  // echoed back on approval; see confirmTool
+      const prior = decisions[event.id];
+      if (prior) {
+        stampDecision(b, prior.result, prior.auto, prior.server);  // refresh replay
+      } else {
+        b.classList.add("awaiting");
+        b.appendChild(confirmActions(b, event));
+      }
     }
     return b;
   }
 
-  // The Approve/Deny prompt appended to a paused tool call. Clicking sends the decision and
-  // streams the resumed turn back into the transcript; the tool's result then nests under this
-  // same bubble. Buttons disable on click so a decision can't be sent twice.
-  function confirmActions(toolUseId, sessionThreadId) {
+  // The Approve/Deny prompt appended to a paused tool call. Clicking records and stamps the
+  // decision, then streams the resumed turn back in; the tool's result nests under this same
+  // bubble. Buttons disable on click so a decision can't be sent twice.
+  function confirmActions(call, event) {
     const row = document.createElement("div");
     row.className = "tool-actions";
     const mk = function (label, cls, result) {
@@ -124,8 +177,9 @@
       btn.className = "btn " + cls;
       btn.textContent = label;
       btn.addEventListener("click", function () {
-        row.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
-        confirmTool(toolUseId, result, sessionThreadId);
+        recordDecision(event.id, result, false, event.server);
+        stampDecision(call, result, false, event.server);
+        confirmTool(event.id, result, event.session_thread_id);
       });
       return btn;
     };
@@ -151,11 +205,16 @@
     const body = event.content ? prettyJson(event.content) : "(empty)";
     const call = event.tool_use_id && toolCalls[event.tool_use_id];
     if (call) {
-      // A result means the call is resolved: drop any lingering Approve/Deny prompt and the
-      // forced-visible flag so it obeys the tool-visibility toggles again.
-      const actions = call.querySelector(".tool-actions");
-      if (actions) actions.remove();
-      call.classList.remove("awaiting");
+      // A result means the call is resolved. If it was a gated call still showing a prompt
+      // (e.g. approved in another browser session, so no local decision was recorded), tag it
+      // approved; otherwise just drop the awaiting flag so it obeys the toggles again.
+      if (call.classList.contains("awaiting") && !call.querySelector(".tool-decision")) {
+        stampDecision(call, "allow", false, call._server);
+      } else {
+        const actions = call.querySelector(".tool-actions");
+        if (actions) actions.remove();
+        call.classList.remove("awaiting");
+      }
       call.appendChild(collapsible(label, body));
     } else {
       bubble("tool" + (event.is_error ? " error" : ""), "⚙ " + label)
@@ -240,11 +299,11 @@
       .catch(function () { /* history is best-effort; a blank transcript is fine */ });
   }
 
-  // Reload persisted history, then (if auto-approve is on) clear any call left waiting — e.g.
-  // a pause that predates a page refresh, which history replays with its prompt intact.
+  // Reload persisted history, then clear any trusted-server call left waiting — e.g. a pause
+  // that predates a page refresh, which history replays with its prompt intact.
   function reconcile() {
     return loadHistory().then(function () {
-      if (autoApprove()) autoApproveIds(pendingCallIds());
+      autoApproveNext(pendingCallIds());
     });
   }
 
@@ -267,6 +326,10 @@
     // the stream missed it (dropped connection) — reconcile from history so it still appears
     // without a manual refresh.
     let produced = false;
+    // Disable any visible Approve/Deny prompts while this turn streams, so a manual click
+    // can't open a second confirm stream on the same session (which would duplicate output).
+    // Re-enabled when the turn ends or pauses.
+    setPromptsEnabled(false);
     const source = new EventSource(url);
 
     source.onmessage = function (ev) {
@@ -299,25 +362,25 @@
         produced = true;
         errorBubble(event);
       } else if (event.type === "awaiting_confirmation") {
-        // The turn paused on one or more tool calls needing approval. The Approve/Deny prompts
-        // are already rendered on those tool bubbles (via toolBubble); leave a standing hint
-        // and close the stream — a decision reopens it via confirmTool. If the pausing tool_use
-        // wasn't seen live (e.g. we subscribed late), pull it from history so its prompt shows.
+        // The turn paused on one or more tool calls needing approval. Close the stream (a
+        // decision reopens it via confirmTool) and re-enable prompts. Auto-approve any blocked
+        // call from a trusted server; if a call from an untrusted server is left, leave its
+        // Approve/Deny prompt and a standing hint. If the pausing tool_use wasn't seen live
+        // (e.g. we subscribed late), pull it from history first so its prompt/decision shows.
         source.close();
-        if (autoApprove()) {
-          // Approve without prompting; if the pausing call wasn't seen live, pull it first.
-          endActivity();
-          if (produced) autoApproveIds(event.event_ids);
-          else reconcile();
-          return;
+        endActivity();
+        setPromptsEnabled(true);
+        if (!produced) { reconcile(); return; }
+        autoApproveNext(event.event_ids);
+        if (anyManualPending(event.event_ids)) {
+          activity = bubble("pending", "⏸ Waiting for your approval on the tool call above.");
+          keepActivityLast();
         }
-        if (!produced) { endActivity(); loadHistory(); return; }
-        setActivity("⏸ Waiting for your approval on the tool call above.");
-        keepActivityLast();
         return;
       } else if (event.type === "done") {
         endActivity();
         source.close();
+        setPromptsEnabled(true);
         // A completed turn has nothing paused, so no auto-approve here — just recover a reply
         // the stream may have missed. (awaiting_confirmation, not done, signals a pause.)
         if (!produced) loadHistory();
@@ -329,6 +392,7 @@
     source.onerror = function () {
       endActivity();
       source.close();
+      setPromptsEnabled(true);
       // The connection dropped mid-turn; the agent keeps running server-side. Pull whatever
       // was recorded so a completed reply isn't stranded behind a refresh.
       reconcile();

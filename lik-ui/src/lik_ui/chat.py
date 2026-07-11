@@ -293,17 +293,23 @@ def register_chat_routes(app) -> None:
         session = request.app.state.store.get_session(session_id, user["id"])
         if not session:
             return HTMLResponse("Session not found.", status_code=404)
-        # Show the agent's display name; the label comes from the agent's own definition via
-        # the SDK, falling back to its id when unavailable.
+        # Show the agent's display name and its declared MCP servers; both come from the
+        # agent's own definition via the SDK. The server names drive the per-server
+        # auto-approve checklist and match the mcp_server_name on tool-use events. Fall back
+        # to the agent id / no servers when the lookup is unavailable.
         agent_label = session["agent_id"]
+        servers: list[str] = []
         agents_client = request.app.state.agents_client
         if agents_client is not None:
             try:
-                agent_label = agents_client.describe(session["agent_id"])["name"] or session["agent_id"]
+                described = agents_client.describe(session["agent_id"])
+                agent_label = described["name"] or session["agent_id"]
+                servers = [s["name"] for s in described["servers"]]
             except Exception:  # noqa: BLE001 - a label lookup failure shouldn't block viewing the chat
                 pass
         return templates.TemplateResponse(
-            request, "chat.html", {"user": user, "session": session, "agent_label": agent_label}
+            request, "chat.html",
+            {"user": user, "session": session, "agent_label": agent_label, "servers": servers},
         )
 
     @app.get("/chat/{session_id}/history")
