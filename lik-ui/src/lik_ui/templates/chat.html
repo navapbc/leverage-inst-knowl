@@ -2,14 +2,14 @@
 {% block title %}Chat · lik-ui{% endblock %}
 {% block body_class %}chat-page{% endblock %}
 {% block content %}
-  <p><a href="/connections?agent_id={{ session.agent_id | urlencode }}">Agent connections</a></p>
-
-  <h1>Chat Session</h1>
+  <h1>Chat Session: {{ session.title }}</h1>
+  <p><a href="/connections?agent_id={{ session.agent_id | urlencode }}">{{ agent_label }} — Agent connections</a></p>
 
   <div id="chat-controls">
     <label><input type="checkbox" id="toggle-tools"> Show tool use</label>
     <label><input type="checkbox" id="toggle-mcp"> Show MCP tool use</label>
   </div>
+  <hr/>
 
   <div id="transcript"
        data-session-id="{{ session.session_id }}"

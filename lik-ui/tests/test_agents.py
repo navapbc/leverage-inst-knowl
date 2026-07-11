@@ -99,13 +99,15 @@ def test_connections_page_reflects_vault_state_and_flips_on_connect(db):
     assert "lik-mcp" in r.text
     assert "Not connected" in r.text
     assert "You are a helpful agent." in r.text  # agent system prompt is shown
-    assert "disabled" in r.text  # Start chatting is blocked while a source is unconnected
+    # Start chatting is blocked while a source is unconnected. Key off the button's rendered
+    # attribute, not a bare "disabled" substring — the gate-override script also mentions it.
+    assert "disabled>Start chatting" in r.text
 
     # Simulate a completed connect by adding the credential; status flips to connected.
     vc.credentials.append({"mcp_server_url": LIK["url"]})
     r2 = client.get("/connections?agent_id=agent_1")
     assert "Connected" in r2.text
-    assert "disabled" not in r2.text  # all sources connected -> Start chatting enabled
+    assert "disabled>Start chatting" not in r2.text  # all sources connected -> enabled
 
 
 def test_home_page_shows_agent_version(db):

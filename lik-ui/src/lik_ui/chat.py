@@ -1,9 +1,10 @@
 """Chat: create or resume a Managed Agents session and stream its events to the browser.
 
 A session is the Managed Agents session, persisted by its session id; reopening a
-session resumes it rather than creating a new one. MCP tool calls are
-auto-approved on the agent definition, so no approval UI is rendered here — the stream
-just surfaces assistant text, tool activity, and connection errors.
+session resumes it rather than creating a new one. The stream surfaces assistant text,
+tool activity, and connection errors. A permission-gated tool call ("ask") pauses the
+turn awaiting the user's approval; that pause is surfaced so the UI can prompt, and the
+user's allow/deny decision is sent back to resume the turn.
 
 The concrete Managed Agents event shapes are normalized behind ``SessionsClient`` so the
 UI depends on a small stable vocabulary ({type: text|tool_use|error|done}); the exact SDK
@@ -43,7 +44,21 @@ class SessionsClient(Protocol):
         """Send a user message and yield normalized event dicts, e.g.
         {"type": "status", "state": "running"}, {"type": "text", "text": ...},
         {"type": "tool_use", "name": ..., "server": ...},
-        {"type": "error", "error_type": ..., "mcp_server_name": ...}, {"type": "done"}."""
+        {"type": "error", "error_type": ..., "mcp_server_name": ...}, {"type": "done"}.
+        A turn that pauses for the user ends with {"type": "awaiting_confirmation",
+        "event_ids": [...]} instead of "done"; resume it with ``confirm_and_stream``."""
+        ...
+
+    def confirm_and_stream(
+        self,
+        session_id: str,
+        tool_use_id: str,
+        result: str,
+        session_thread_id: str | None = None,
+        deny_message: str | None = None,
+    ) -> Iterator[dict]:
+        """Answer a paused tool call (``result`` is "allow" or "deny") and yield the resumed
+        turn's events, using the same normalized vocabulary as ``send_and_stream``."""
         ...
 
     def list_events(self, session_id: str) -> Iterator[dict]:
@@ -99,12 +114,18 @@ class AnthropicSessionsClient:
             return None
         if etype in ("agent.mcp_tool_use", "agent.tool_use"):
             # MCP tools carry an mcp_server_name; built-in agent tools don't (server -> None).
+            # ``permission`` is the gate the agent evaluated for this call: "allow" ran it,
+            # "ask" means it's paused for the user's approval (the UI prompts on this), "deny"
+            # blocked it. ``session_thread_id`` is set only when the request was cross-posted
+            # from a subagent's thread; it's echoed back on the approval to route it home.
             return {
                 "type": "tool_use",
                 "id": getattr(event, "id", None),
                 "name": getattr(event, "name", ""),
                 "server": getattr(event, "mcp_server_name", None),
                 "input": getattr(event, "input", None) or {},
+                "permission": getattr(event, "evaluated_permission", None),
+                "session_thread_id": getattr(event, "session_thread_id", None),
             }
         if etype in ("agent.mcp_tool_result", "agent.tool_result"):
             # The call id lives on mcp_tool_use_id for MCP results, tool_use_id for built-ins.
@@ -141,7 +162,21 @@ class AnthropicSessionsClient:
             }
         return None
 
-    def send_and_stream(self, session_id: str, message: str) -> Iterator[dict]:
+    @staticmethod
+    def _requires_action_ids(idle_event) -> list[str]:
+        """The event ids a ``session.status_idle`` is blocked on, or ``[]`` if it's just a
+        completed turn. A turn pauses (rather than ends) at idle when its ``stop_reason`` is
+        ``requires_action`` — e.g. a permission-gated tool call awaiting the user's approval."""
+        stop = getattr(idle_event, "stop_reason", None)
+        if getattr(stop, "type", None) == "requires_action":
+            return list(getattr(stop, "event_ids", None) or [])
+        return []
+
+    def _stream(self, session_id: str, send_events: list[dict]) -> Iterator[dict]:
+        """Dispatch ``send_events`` into the session and yield the turn's normalized events.
+        Terminates with ``{"type": "done"}`` when the turn completes, or
+        ``{"type": "awaiting_confirmation", "event_ids": [...]}`` when it pauses for the user
+        (e.g. a tool call needing approval) — the caller resumes via ``confirm_and_stream``."""
         events = self._client.beta.sessions.events
         # Subscribe BEFORE sending. ``stream()`` opens the HTTP connection eagerly (the request
         # is issued when it's called, not on first iteration), so the subscription is already
@@ -151,17 +186,48 @@ class AnthropicSessionsClient:
         # page refresh. The stream carries only events from connection time forward (prior turns
         # aren't replayed), so opening it early doesn't duplicate history.
         with events.stream(session_id) as stream:
-            events.send(
-                session_id,
-                events=[{"type": "user.message", "content": [{"type": "text", "text": message}]}],
-            )
+            events.send(session_id, events=send_events)
             for event in stream:
                 etype = getattr(event, "type", "")
-                if etype == "end_turn" or etype.startswith(("session.status_idle", "session.status_terminated")):
+                if etype == "end_turn" or etype.startswith("session.status_terminated"):
                     break  # the turn is complete
+                if etype.startswith("session.status_idle"):
+                    if pending := self._requires_action_ids(event):
+                        # Paused, not finished: don't emit "done" — the UI keeps the turn open
+                        # and prompts. Resolving all pending events resumes the turn.
+                        yield {"type": "awaiting_confirmation", "event_ids": pending}
+                        return
+                    break  # a plain end-of-turn idle
                 if normalized := self._normalize(event):
                     yield normalized
         yield {"type": "done"}
+
+    def send_and_stream(self, session_id: str, message: str) -> Iterator[dict]:
+        yield from self._stream(
+            session_id,
+            [{"type": "user.message", "content": [{"type": "text", "text": message}]}],
+        )
+
+    def confirm_and_stream(
+        self,
+        session_id: str,
+        tool_use_id: str,
+        result: str,
+        session_thread_id: str | None = None,
+        deny_message: str | None = None,
+    ) -> Iterator[dict]:
+        event: dict = {
+            "type": "user.tool_confirmation",
+            "result": result,
+            "tool_use_id": tool_use_id,
+        }
+        # Echo the originating subagent thread (if any) so the approval routes back to it.
+        if session_thread_id:
+            event["session_thread_id"] = session_thread_id
+        # A rationale is only meaningful on a denial.
+        if result == "deny" and deny_message:
+            event["deny_message"] = deny_message
+        yield from self._stream(session_id, [event])
 
     def list_events(self, session_id: str) -> Iterator[dict]:
         for event in self._client.beta.sessions.events.list(session_id, order="asc"):
@@ -227,7 +293,18 @@ def register_chat_routes(app) -> None:
         session = request.app.state.store.get_session(session_id, user["id"])
         if not session:
             return HTMLResponse("Session not found.", status_code=404)
-        return templates.TemplateResponse(request, "chat.html", {"user": user, "session": session})
+        # Show the agent's display name; the label comes from the agent's own definition via
+        # the SDK, falling back to its id when unavailable.
+        agent_label = session["agent_id"]
+        agents_client = request.app.state.agents_client
+        if agents_client is not None:
+            try:
+                agent_label = agents_client.describe(session["agent_id"])["name"] or session["agent_id"]
+            except Exception:  # noqa: BLE001 - a label lookup failure shouldn't block viewing the chat
+                pass
+        return templates.TemplateResponse(
+            request, "chat.html", {"user": user, "session": session, "agent_label": agent_label}
+        )
 
     @app.get("/chat/{session_id}/history")
     def chat_history(request: Request, session_id: str):
@@ -249,6 +326,20 @@ def register_chat_routes(app) -> None:
             )
         return JSONResponse(events)
 
+    def _sse(events: Iterator[dict]) -> StreamingResponse:
+        """Wrap a normalized-event generator as an SSE response, converting a mid-stream
+        failure into a terminal error + done so the browser closes cleanly rather than 500ing."""
+
+        def event_stream():
+            try:
+                for event in events:
+                    yield f"data: {json.dumps(event)}\n\n"
+            except Exception as exc:  # noqa: BLE001 - stream a terminal error, don't 500 mid-stream
+                yield f"data: {json.dumps({'type': 'error', 'error_type': 'stream_failed', 'detail': str(exc)})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
     @app.get("/chat/{session_id}/stream")
     def chat_stream(request: Request, session_id: str, message: str):
         user = require_user(request)
@@ -257,13 +348,28 @@ def register_chat_routes(app) -> None:
             return HTMLResponse("Session not found.", status_code=404)
 
         sessions_client: SessionsClient = request.app.state.sessions_client
+        return _sse(sessions_client.send_and_stream(session["session_id"], message))
 
-        def event_stream():
-            try:
-                for event in sessions_client.send_and_stream(session["session_id"], message):
-                    yield f"data: {json.dumps(event)}\n\n"
-            except Exception as exc:  # noqa: BLE001 - stream a terminal error, don't 500 mid-stream
-                yield f"data: {json.dumps({'type': 'error', 'error_type': 'stream_failed', 'detail': str(exc)})}\n\n"
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    @app.get("/chat/{session_id}/confirm")
+    def chat_confirm(
+        request: Request,
+        session_id: str,
+        tool_use_id: str,
+        result: str,
+        session_thread_id: str = "",
+        deny_message: str = "",
+    ):
+        """Answer a paused tool call and stream the resumed turn. GET (not POST) so the browser
+        can consume it with an ``EventSource``, matching the send stream."""
+        user = require_user(request)
+        session = request.app.state.store.get_session(session_id, user["id"])
+        if not session:
+            return HTMLResponse("Session not found.", status_code=404)
+        if result not in ("allow", "deny"):
+            return HTMLResponse("result must be 'allow' or 'deny'.", status_code=400)
 
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+        sessions_client: SessionsClient = request.app.state.sessions_client
+        return _sse(sessions_client.confirm_and_stream(
+            session["session_id"], tool_use_id, result,
+            session_thread_id or None, deny_message or None,
+        ))

@@ -26,8 +26,12 @@ class FakeSessionsClient:
     def send_and_stream(self, session_id, message):
         if self.raises:
             raise RuntimeError("stream boom")
-        for e in self.events:
-            yield e
+        yield from self.events
+
+    def confirm_and_stream(self, session_id, tool_use_id, result,
+                           session_thread_id=None, deny_message=None):
+        self.confirmed = (session_id, tool_use_id, result, session_thread_id, deny_message)
+        yield from self.events
 
     def list_events(self, session_id):
         yield from self.history
@@ -55,10 +59,24 @@ def _login(client):
 
 def test_normalize_mcp_tool_use_carries_id_and_input():
     ev = SimpleNamespace(type="agent.mcp_tool_use", id="tu_1", name="search",
-                         mcp_server_name="atlassian", input={"q": "hi"})
+                         mcp_server_name="atlassian", input={"q": "hi"},
+                         evaluated_permission="allow", session_thread_id=None)
     assert AnthropicSessionsClient._normalize(ev) == {
         "type": "tool_use", "id": "tu_1", "name": "search",
         "server": "atlassian", "input": {"q": "hi"},
+        "permission": "allow", "session_thread_id": None,
+    }
+
+
+def test_normalize_mcp_tool_use_carries_ask_permission():
+    # A permission-gated call: the "ask" gate is what the UI keys off to prompt for approval.
+    ev = SimpleNamespace(type="agent.mcp_tool_use", id="tu_9", name="get_me",
+                         mcp_server_name="github", input={},
+                         evaluated_permission="ask", session_thread_id="th_1")
+    assert AnthropicSessionsClient._normalize(ev) == {
+        "type": "tool_use", "id": "tu_9", "name": "get_me",
+        "server": "github", "input": {},
+        "permission": "ask", "session_thread_id": "th_1",
     }
 
 
@@ -67,6 +85,7 @@ def test_normalize_builtin_tool_use_has_no_server():
     assert AnthropicSessionsClient._normalize(ev) == {
         "type": "tool_use", "id": "tu_2", "name": "think",
         "server": None, "input": {"note": "hm"},
+        "permission": None, "session_thread_id": None,
     }
 
 
@@ -214,6 +233,102 @@ def test_send_and_stream_subscribes_before_sending():
     assert calls[:2] == ["stream", "send"]  # subscribed before dispatching the turn
     assert "close" in calls  # stream context is closed
     assert out == [{"type": "text", "text": "Hi"}, {"type": "done"}]
+
+
+def _fake_streaming_client(stream_events):
+    """An AnthropicSessionsClient whose stream yields ``stream_events`` and whose send()
+    records the dispatched events into the returned ``sent`` list."""
+    sent = []
+
+    class FakeStream:
+        def __enter__(self):
+            return iter(stream_events)
+
+        def __exit__(self, *exc):
+            return False
+
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+    client._client = SimpleNamespace(beta=SimpleNamespace(sessions=SimpleNamespace(
+        events=SimpleNamespace(
+            stream=lambda session_id: FakeStream(),
+            send=lambda session_id, events: sent.append((session_id, events)),
+        ))))
+    return client, sent
+
+
+def test_stream_pauses_on_requires_action_instead_of_done():
+    # A permission-gated tool call surfaces its "ask" event, then the turn goes idle with a
+    # requires_action stop_reason. That's a pause, not completion: emit awaiting_confirmation
+    # (carrying the blocked ids) and no "done".
+    stream_events = [
+        SimpleNamespace(type="agent.mcp_tool_use", id="tu_9", name="get_me",
+                        mcp_server_name="github", input={},
+                        evaluated_permission="ask", session_thread_id=None),
+        SimpleNamespace(type="session.status_idle", stop_reason=SimpleNamespace(
+            type="requires_action", event_ids=["tu_9"])),
+    ]
+    client, _ = _fake_streaming_client(stream_events)
+    out = list(client.send_and_stream("sess_1", "hi"))
+    assert out == [
+        {"type": "tool_use", "id": "tu_9", "name": "get_me", "server": "github",
+         "input": {}, "permission": "ask", "session_thread_id": None},
+        {"type": "awaiting_confirmation", "event_ids": ["tu_9"]},
+    ]
+
+
+def test_stream_ends_on_plain_idle():
+    # An end-of-turn idle (no requires_action) completes the turn with "done".
+    stream_events = [
+        SimpleNamespace(type="agent.message", content=[SimpleNamespace(text="Hi")]),
+        SimpleNamespace(type="session.status_idle", stop_reason=SimpleNamespace(type="end_turn")),
+    ]
+    client, _ = _fake_streaming_client(stream_events)
+    out = list(client.send_and_stream("sess_1", "hi"))
+    assert out == [{"type": "text", "text": "Hi"}, {"type": "done"}]
+
+
+def test_confirm_and_stream_sends_confirmation_event():
+    client, sent = _fake_streaming_client([
+        SimpleNamespace(type="session.status_idle", stop_reason=SimpleNamespace(type="end_turn")),
+    ])
+    out = list(client.confirm_and_stream("sess_1", "tu_9", "allow"))
+    assert out == [{"type": "done"}]
+    assert sent == [("sess_1", [{"type": "user.tool_confirmation",
+                                 "result": "allow", "tool_use_id": "tu_9"}])]
+
+
+def test_confirm_and_stream_deny_carries_message_and_thread():
+    client, sent = _fake_streaming_client([
+        SimpleNamespace(type="session.status_idle", stop_reason=SimpleNamespace(type="end_turn")),
+    ])
+    list(client.confirm_and_stream("sess_1", "tu_9", "deny",
+                                   session_thread_id="th_1", deny_message="nope"))
+    assert sent[0][1] == [{
+        "type": "user.tool_confirmation", "result": "deny", "tool_use_id": "tu_9",
+        "session_thread_id": "th_1", "deny_message": "nope",
+    }]
+
+
+def test_confirm_route_streams_resumed_turn(db):
+    sc = FakeSessionsClient(events=[{"type": "text", "text": "resumed"}, {"type": "done"}])
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    r = client.get(f"/chat/{session_id}/confirm?tool_use_id=tu_9&result=allow")
+    assert r.status_code == 200
+    assert "resumed" in r.text
+    assert sc.confirmed[1:3] == ("tu_9", "allow")
+
+
+def test_confirm_route_rejects_bad_result(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    r = client.get(f"/chat/{session_id}/confirm?tool_use_id=tu_9&result=maybe")
+    assert r.status_code == 400
 
 
 def test_history_drops_transient_status_events():

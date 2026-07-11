@@ -65,6 +65,36 @@
       b.appendChild(collapsible("arguments", JSON.stringify(event.input, null, 2)));
     }
     if (event.id) toolCalls[event.id] = b;
+    // "ask" means the call is paused for the user's approval. Offer Approve/Deny inline and
+    // force the bubble visible ("awaiting") even if its kind is toggled off — you can't
+    // approve what you can't see. The row is cleared once the call resolves (see
+    // toolResultBubble). A missing id means we couldn't route an answer, so no prompt.
+    if (event.permission === "ask" && event.id) {
+      b.classList.add("awaiting");
+      b.appendChild(confirmActions(event.id, event.session_thread_id));
+    }
+    return b;
+  }
+
+  // The Approve/Deny prompt appended to a paused tool call. Clicking sends the decision and
+  // streams the resumed turn back into the transcript; the tool's result then nests under this
+  // same bubble. Buttons disable on click so a decision can't be sent twice.
+  function confirmActions(toolUseId, sessionThreadId) {
+    const row = document.createElement("div");
+    row.className = "tool-actions";
+    const mk = function (label, cls, result) {
+      const btn = document.createElement("button");
+      btn.className = "btn " + cls;
+      btn.textContent = label;
+      btn.addEventListener("click", function () {
+        row.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
+        confirmTool(toolUseId, result, sessionThreadId);
+      });
+      return btn;
+    };
+    row.appendChild(mk("Approve", "secondary", "allow"));
+    row.appendChild(mk("Deny", "danger", "deny"));
+    return row;
   }
 
   // Pretty-print as JSON when the content parses as such (MCP results are usually a JSON
@@ -84,6 +114,11 @@
     const body = event.content ? prettyJson(event.content) : "(empty)";
     const call = event.tool_use_id && toolCalls[event.tool_use_id];
     if (call) {
+      // A result means the call is resolved: drop any lingering Approve/Deny prompt and the
+      // forced-visible flag so it obeys the tool-visibility toggles again.
+      const actions = call.querySelector(".tool-actions");
+      if (actions) actions.remove();
+      call.classList.remove("awaiting");
       call.appendChild(collapsible(label, body));
     } else {
       bubble("tool" + (event.is_error ? " error" : ""), "⚙ " + label)
@@ -168,18 +203,16 @@
       .catch(function () { /* history is best-effort; a blank transcript is fine */ });
   }
 
-  composer.addEventListener("submit", function (e) {
-    e.preventDefault();
-    const message = input.value.trim();
-    if (!message) return;
-    bubble("user", "You: " + message);
-    input.value = "";
-
-    // One persistent activity indicator for the whole turn. It stays visible from submit
+  // Consume one turn's SSE stream from `url` into the transcript. Shared by sending a message
+  // and by answering a paused tool call (both stream the same normalized vocabulary), so the
+  // rendering and reconcile logic lives in one place. `initial` is the first activity label.
+  function streamTurn(url, initial) {
+    // One persistent activity indicator for the whole turn. It stays visible from start
     // through tool calls and intermediate output — so the user always knows the agent is
-    // still working — and is removed only when the turn finishes (`done`) or the connection
-    // drops. It's kept pinned to the bottom of the transcript as new bubbles stream in.
-    let activity = bubble("pending", "⏳ Queued — waiting for the agent…");
+    // still working — and is removed only when the turn finishes (`done`), pauses for approval
+    // (`awaiting_confirmation`), or the connection drops. Kept pinned to the bottom as bubbles
+    // stream in.
+    let activity = bubble("pending", initial);
     function setActivity(text) { if (activity) activity.textContent = text; }
     function endActivity() { if (activity) { activity.remove(); activity = null; } }
     function keepActivityLast() { if (activity) transcript.appendChild(activity); }
@@ -189,7 +222,6 @@
     // the stream missed it (dropped connection) — reconcile from history so it still appears
     // without a manual refresh.
     let produced = false;
-    const url = "/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message);
     const source = new EventSource(url);
 
     source.onmessage = function (ev) {
@@ -221,6 +253,16 @@
         // first and the agent still answers), so surface it but keep the indicator running.
         produced = true;
         errorBubble(event);
+      } else if (event.type === "awaiting_confirmation") {
+        // The turn paused on one or more tool calls needing approval. The Approve/Deny prompts
+        // are already rendered on those tool bubbles (via toolBubble); leave a standing hint
+        // and close the stream — a decision reopens it via confirmTool. If the pausing tool_use
+        // wasn't seen live (e.g. we subscribed late), pull it from history so its prompt shows.
+        source.close();
+        if (!produced) { endActivity(); loadHistory(); return; }
+        setActivity("⏸ Waiting for your approval on the tool call above.");
+        keepActivityLast();
+        return;
       } else if (event.type === "done") {
         endActivity();
         source.close();
@@ -237,6 +279,24 @@
       // was recorded so a completed reply isn't stranded behind a refresh.
       loadHistory();
     };
+  }
+
+  // Send an allow/deny decision for a paused tool call and stream the resumed turn.
+  function confirmTool(toolUseId, result, sessionThreadId) {
+    let url = "/chat/" + sessionId + "/confirm?tool_use_id=" + encodeURIComponent(toolUseId) +
+      "&result=" + encodeURIComponent(result);
+    if (sessionThreadId) url += "&session_thread_id=" + encodeURIComponent(sessionThreadId);
+    streamTurn(url, result === "allow" ? "⚙ Approved — resuming…" : "Denied — resuming…");
+  }
+
+  composer.addEventListener("submit", function (e) {
+    e.preventDefault();
+    const message = input.value.trim();
+    if (!message) return;
+    bubble("user", "You: " + message);
+    input.value = "";
+    streamTurn("/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message),
+               "⏳ Queued — waiting for the agent…");
   });
 
   loadHistory();
