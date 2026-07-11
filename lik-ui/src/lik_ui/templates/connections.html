@@ -48,6 +48,11 @@
     <input id="session-title" name="title" autocomplete="off" placeholder="{{ agent_label }}"
            {% if not all_connected %}disabled{% endif %}>
     <button class="btn" type="submit" {% if not all_connected %}disabled{% endif %}>Start chatting</button>
+    {% if not all_connected %}
+      <label class="force-start">
+        <input type="checkbox" id="force-start"> Start anyway without connecting every source
+      </label>
+    {% endif %}
   </form>
   <div><a href="/sessions">or continue existing chat sessions</a></div>
   {% if not all_connected %}
@@ -62,6 +67,19 @@
       if (el && !el.value) {
         el.value = {{ agent_label | tojson }} + " · " + new Date().toLocaleString();
       }
+    })();
+
+    // Let the user override the "connect every source first" gate. When the checkbox is
+    // ticked, re-enable the title input and Start button so a chat can begin regardless.
+    (function () {
+      var force = document.getElementById("force-start");
+      if (!force) return;
+      var title = document.getElementById("session-title");
+      var start = document.querySelector(".start-chat button[type=submit]");
+      force.addEventListener("change", function () {
+        if (title) title.disabled = !force.checked;
+        if (start) start.disabled = !force.checked;
+      });
     })();
     {% if skills %}
 
