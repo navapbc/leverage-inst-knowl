@@ -35,10 +35,11 @@ def build_source_registry(settings: Settings) -> dict[str, SourceConfig]:
          ["openid", "email"]),
         (settings.gdrivemcp_resource_url, settings.gdrivemcp_client_id, settings.gdrivemcp_client_secret,
          ["openid", "email", "https://www.googleapis.com/auth/drive.readonly"]),
-        # No explicit scopes: GitHub grants access per the OAuth app's own configured
-        # permissions rather than per-request scopes.
+        # Read-focused GitHub access: repo + org + user identity. An empty scope yields a
+        # token the GitHub MCP server rejects with 403, so request what the resource needs.
+        # (GitHub's `repo` scope is read/write — there is no read-only private-repo scope.)
         (settings.github_resource_url, settings.github_client_id, settings.github_client_secret,
-         []),
+         ["repo", "read:org", "read:user"]),
     ]
     registry: dict[str, SourceConfig] = {}
     for resource_url, client_id, client_secret, scopes in declared:

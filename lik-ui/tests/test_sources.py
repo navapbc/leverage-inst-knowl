@@ -38,6 +38,22 @@ def test_registry_has_gdrive_entry_with_drive_scope():
     assert cfg.offline is True
 
 
+def test_registry_has_github_entry_with_read_scopes():
+    s = Settings(
+        env="test",
+        github_client_id="Ov23liExample",
+        github_client_secret="ghsecret",
+        github_resource_url="https://api.githubcopilot.com/mcp/",  # trailing slash
+    )
+    reg = build_source_registry(s)
+    key = normalize_url("https://api.githubcopilot.com/mcp")
+    assert key in reg
+    cfg = reg[key]
+    assert cfg.client_id == "Ov23liExample"
+    # Empty scopes make the GitHub MCP server 403; request the read set it needs.
+    assert cfg.scopes == ["repo", "read:org", "read:user"]
+
+
 def test_registry_holds_both_sources_independently():
     s = Settings(
         env="test",
