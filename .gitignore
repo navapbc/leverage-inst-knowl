@@ -1,1 +1,11 @@
 .DS_Store
+
+# Terraform — ignore state, local dirs, and secret tfvars. The provider lock file
+# (.terraform.lock.hcl) is intentionally committed.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log

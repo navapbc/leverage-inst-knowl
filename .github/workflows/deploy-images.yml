@@ -1,0 +1,85 @@
+# Build each service image and push it to its Lightsail container-service registry.
+# Runs in CI so the large image upload does not run from a maintainer's (slow) uplink.
+# This workflow does NOT deploy — after it runs, take the printed ":svc.label.N" refs and
+# run `terraform apply` locally with -var lik_mcp_image=... -var lik_ui_image=...
+#
+# Prerequisites (set once in repo Settings):
+#   - Variable AWS_DEPLOY_ROLE_ARN = the github_image_push_role_arn Terraform output.
+#   - Variable AWS_REGION          = us-east-1.
+# Auth is GitHub OIDC (no stored AWS keys). The IAM role trust is scoped to this repo's
+# main branch (see infra/iam_github_oidc.tf).
+
+name: Build and push container images
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Which service(s) to build and push
+        type: choice
+        options: [both, lik-mcp, lik-ui]
+        default: both
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: lik-mcp
+            service: lik-mcp-prod
+          - name: lik-ui
+            service: lik-ui-prod
+    steps:
+      - name: Skip services not selected
+        id: gate
+        run: |
+          if [ "${{ inputs.service }}" != "both" ] && [ "${{ inputs.service }}" != "${{ matrix.name }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.gate.outputs.skip != 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Install lightsailctl (required by push-container-image)
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          sudo curl -sL "https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl" \
+            -o /usr/local/bin/lightsailctl
+          sudo chmod +x /usr/local/bin/lightsailctl
+
+      - name: Build image
+        if: steps.gate.outputs.skip != 'true'
+        run: docker build -t ${{ matrix.name }}:${{ github.sha }} ./${{ matrix.name }}
+
+      - name: Push to Lightsail registry
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          out=$(aws lightsail push-container-image \
+            --region "${{ vars.AWS_REGION }}" \
+            --service-name "${{ matrix.service }}" \
+            --label app \
+            --image "${{ matrix.name }}:${{ github.sha }}")
+          echo "$out"
+          # push-container-image prints: Refer to this image as ":svc.app.N" in deployments.
+          ref=$(echo "$out" | grep -oE '":[^"]+"' | tr -d '"' | tail -1)
+          {
+            echo "### ${{ matrix.name }} pushed"
+            echo ""
+            echo "Image ref for \`terraform apply\`:"
+            echo ""
+            echo '```'
+            echo "$ref"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
