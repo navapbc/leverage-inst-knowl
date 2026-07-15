@@ -227,39 +227,80 @@ get the deployment working, then transfer it to `navapbc` before real users depe
 > If a Slack (or other) connection is added later, follow the same principle: create the app
 > in the Nava Slack workspace / org account with multiple admins, never a personal account.
 
+Transfer ownership at https://github.com/settings/applications/3731288
+
 ### 3. Populate SSM secrets
 
-Store every value as a SecureString. Replace the `…` placeholders.
+Overwrite the placeholder SecureStrings with real values. **Feed values from files via
+`file://`**, not inline command-line args — this keeps secrets out of shell history / `ps`
+output and avoids the shell-quoting breakage that bites values containing special characters
+(e.g. a `)` trips the mise zsh hook, same as the DB password). The one exception is the
+generated session secret, which is hex-only and should never touch a file.
 
-```
+**Which params must be real vs. can stay placeholder:** the app's prod fail-closed guard only
+requires `LIK_UI_SESSION_SECRET`, `LIK_UI_APP_OAUTH_CLIENT_ID`, `LIK_UI_APP_OAUTH_CLIENT_SECRET`,
+`LIK_UI_ANTHROPIC_API_KEY`, `LIK_UI_AGENTS_CONFIG`, plus lik-mcp's `LIK_OAUTH_CLIENT_ID`. The
+per-connection groups (`LIK_UI_LIKMCP_*`, `LIK_UI_GDRIVEMCP_*`, `LIK_UI_GITHUB_*`) are only
+needed for the connections you actually enable — leave the others as `PLACEHOLDER_REPLACE_ME`
+(they must *exist* so Terraform's data sources resolve, but that connection simply won't work
+until you set real values). Do **not** set `DB_MASTER_PASSWORD` under `$P/shared/` — Terraform
+owns it.
+
+```bash
 P=/ik-arch/prod
-put() { AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 --type SecureString --overwrite --name "$1" --value "$2"; }
+D=$(mktemp -d) && chmod 700 "$D"       # scratch dir for secret files
+putf() { AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 \
+           --type SecureString --overwrite --name "$1" --value "file://$2"; }
 
-# lik-mcp
-put "$P/lik-mcp/LIK_OAUTH_CLIENT_ID"          "…apps.googleusercontent.com"
+# 1. Write each REAL value into its own file. `printf %s` = no trailing newline (a stray
+#    newline would become part of the secret). Replace the placeholder text below.
+printf %s '…apps.googleusercontent.com' > "$D/mcp_client_id"       # = lik-mcp LIK_OAUTH_CLIENT_ID
+printf %s '…'                           > "$D/app_client_id"
+printf %s '…'                           > "$D/app_client_secret"
+printf %s 'sk-ant-…'                    > "$D/anthropic"
+printf %s 'agent_…:env_…'               > "$D/agents"
+printf %s '…'                           > "$D/likmcp_secret"       # secret for the lik-mcp connection
+# Only if enabling these connections now — otherwise skip and leave placeholders:
+printf %s '…'                           > "$D/gdrive_client_id"
+printf %s '…'                           > "$D/gdrive_client_secret"
+printf %s 'https://…/mcp'               > "$D/gdrive_resource_url"
+printf %s 'Iv1.…'                       > "$D/github_client_id"
+printf %s '…'                           > "$D/github_client_secret"
+printf %s 'https://…/mcp'               > "$D/github_resource_url"
 
-# lik-ui — app login + core
-put "$P/lik-ui/LIK_UI_SESSION_SECRET"          "$(openssl rand -hex 32)"
-put "$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_ID"     "…"
-put "$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET" "…"
-put "$P/lik-ui/LIK_UI_ANTHROPIC_API_KEY"       "sk-ant-…"
-put "$P/lik-ui/LIK_UI_AGENTS_CONFIG"           "agent_…:env_…"
+# 2. Push from the files.
+putf "$P/lik-mcp/LIK_OAUTH_CLIENT_ID"           "$D/mcp_client_id"
+putf "$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_ID"     "$D/app_client_id"
+putf "$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET" "$D/app_client_secret"
+putf "$P/lik-ui/LIK_UI_ANTHROPIC_API_KEY"       "$D/anthropic"
+putf "$P/lik-ui/LIK_UI_AGENTS_CONFIG"           "$D/agents"
+putf "$P/lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET"    "$D/likmcp_secret"
+putf "$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID"     "$D/gdrive_client_id"
+putf "$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET" "$D/gdrive_client_secret"
+putf "$P/lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL"  "$D/gdrive_resource_url"
+putf "$P/lik-ui/LIK_UI_GITHUB_CLIENT_ID"        "$D/github_client_id"
+putf "$P/lik-ui/LIK_UI_GITHUB_CLIENT_SECRET"    "$D/github_client_secret"
+putf "$P/lik-ui/LIK_UI_GITHUB_RESOURCE_URL"     "$D/github_resource_url"
 
-# lik-ui — lik-mcp connection (client id reused from lik-mcp above; only the secret here)
-put "$P/lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET"    "…"
+# 3. Session secret: generated, hex-only (no special chars) — keep it inline, never in a file.
+AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 \
+  --type SecureString --overwrite --name "$P/lik-ui/LIK_UI_SESSION_SECRET" \
+  --value "$(openssl rand -hex 32)"
 
-# lik-ui — Google Drive connection
-put "$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID"     "…"
-put "$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET" "…"
-put "$P/lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL"  "https://…/mcp"
-
-# lik-ui — GitHub connection
-put "$P/lik-ui/LIK_UI_GITHUB_CLIENT_ID"        "Iv1.…"
-put "$P/lik-ui/LIK_UI_GITHUB_CLIENT_SECRET"    "…"
-put "$P/lik-ui/LIK_UI_GITHUB_RESOURCE_URL"     "https://…/mcp"
+# 4. Shred the scratch files.
+rm -rf "$D"
 ```
 
-(`DB_MASTER_PASSWORD` under `$P/shared/` is created by Terraform — do not set it here.)
+Verify nothing required is still a placeholder before deploying:
+
+```bash
+AWS_PROFILE=lik mise exec -- aws ssm get-parameters-by-path --path /ik-arch/prod \
+  --recursive --with-decryption --region us-east-1 --output json \
+  | grep -B1 PLACEHOLDER_REPLACE_ME | grep '"Name"'
+```
+
+Any `LIK_UI_APP_*`, `LIK_UI_ANTHROPIC_API_KEY`, `LIK_UI_AGENTS_CONFIG`, `LIK_UI_SESSION_SECRET`,
+or `LIK_OAUTH_CLIENT_ID` still listed here will make the container fail its prod guard at boot.
 
 ### 4. Build and push images
 
