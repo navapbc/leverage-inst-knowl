@@ -323,58 +323,126 @@ or `LIK_OAUTH_CLIENT_ID` still listed here will make the container fail its prod
 
 ### 4. Build and push images
 
-Set repo variables `AWS_DEPLOY_ROLE_ARN` (= `github_image_push_role_arn` output) and
-`AWS_REGION=us-east-1`, then run the **Build and push container images** workflow
-(Actions tab → Run workflow → `both`). Copy the two `:svc.app.N` refs it prints.
+> **Prerequisite: the workflow must run from `main`.** The OIDC role trusts only
+> `repo:navapbc/leverage-inst-knowl:ref:refs/heads/main` (see `infra/iam_github_oidc.tf`), so
+> a run from any other branch fails role assumption with "Not authorized to perform
+> sts:AssumeRoleWithWebIdentity". Merge/push the `.github/workflows/deploy-images.yml` file to
+> `main` before running. (To allow other branches, add their `sub` to the trust policy and
+> re-apply — but keep prod deploys on `main`.)
+
+**4a. Set the two repo *variables*** (not secrets — these values aren't sensitive). The role
+ARN is the `github_image_push_role_arn` Terraform output
+(`arn:aws:iam::293033346213:role/github-actions-lik-image-push`).
+
+- **GitHub UI:** repo → **Settings → Secrets and variables → Actions → Variables tab →
+  New repository variable**. Add `AWS_DEPLOY_ROLE_ARN` and `AWS_REGION` (= `us-east-1`).
+- **Or via `gh` CLI:**
+  ```bash
+  gh variable set AWS_DEPLOY_ROLE_ARN --repo navapbc/leverage-inst-knowl \
+    --body arn:aws:iam::293033346213:role/github-actions-lik-image-push
+  gh variable set AWS_REGION --repo navapbc/leverage-inst-knowl --body us-east-1
+  ```
+
+**4b. Run the workflow** (from `main`):
+
+- **GitHub UI:** repo → **Actions → "Build and push container images" → Run workflow** →
+  branch `main`, input `both` → **Run workflow**.
+- **Or via `gh` CLI:**
+  ```bash
+  gh workflow run deploy-images.yml --repo navapbc/leverage-inst-knowl --ref main -f service=both
+  gh run watch --repo navapbc/leverage-inst-knowl   # follow to completion
+  ```
+
+**4c. Copy the two image refs** the workflow prints (format `:lik-mcp-prod.app.N` /
+`:lik-ui-prod.app.N`). They're written to the run summary:
+
+- **GitHub UI:** open the run → the job **Summary** shows each `### <service> pushed` block.
+- **Or via `gh` CLI:** `gh run view --repo navapbc/leverage-inst-knowl <run-id>` (or add
+  `--log` and grep for `Refer to this image as`).
 
 ### 5. Initialize the database schema
 
 The DB is empty. lik-ui also needs its own database created on the shared instance. Run
-these once as the **master user** (needed for lik-mcp's `pg_trgm` extension + roles). Pull
-the password from SSM:
+these once as the **master user** (needed for lik-mcp's `pg_trgm` extension + roles).
 
-```
-DB_HOST=$(cd infra && AWS_PROFILE=lik mise exec -- terraform output -json db_endpoint | mise exec -- jq -r .host)
+> **Requires `psql`** (libpq) on your machine — not managed by mise. If missing:
+> `brew install libpq && brew link --force libpq` (macOS). The lik-mcp step uses the repo's
+> own Python script (psycopg), so it needs no psql.
+
+The DB host is fixed (also in the Deployment status table); the password comes from SSM:
+
+```bash
+DB_HOST=ls-775fd23f9d76047da44b78ee7307c91023cfc535.celyyosemrsx.us-east-1.rds.amazonaws.com
 DB_PW=$(AWS_PROFILE=lik mise exec -- aws ssm get-parameter --region us-east-1 --with-decryption \
   --name /ik-arch/prod/shared/DB_MASTER_PASSWORD --query Parameter.Value --output text)
 
-# Create lik-ui's database on the shared instance
-mise exec -- psql "host=$DB_HOST port=5432 dbname=likdb user=lik password=$DB_PW sslmode=require" \
+# 1. Create lik-ui's database on the shared instance (connect to the master DB 'likdb' first)
+psql "host=$DB_HOST port=5432 dbname=likdb user=lik password=$DB_PW sslmode=require" \
   -c "CREATE DATABASE likuidb;"
 
-# lik-mcp schema (script applies lik-mcp/db/init.sql; run as master user)
+# 2. lik-mcp schema — its script applies lik-mcp/db/init.sql via psycopg, as master user
 cd lik-mcp
-LIK_DB_HOST=$DB_HOST LIK_DB_NAME=likdb LIK_DB_USER=lik LIK_DB_PASSWORD=$DB_PW LIK_DB_SSLMODE=require \
+LIK_DB_HOST=$DB_HOST LIK_DB_NAME=likdb LIK_DB_USER=lik LIK_DB_PASSWORD="$DB_PW" LIK_DB_SSLMODE=require \
   mise exec -- uv run python scripts/init_db.py
 cd ..
 
-# lik-ui schema
-mise exec -- psql "host=$DB_HOST port=5432 dbname=likuidb user=lik password=$DB_PW sslmode=require" \
+# 3. lik-ui schema
+psql "host=$DB_HOST port=5432 dbname=likuidb user=lik password=$DB_PW sslmode=require" \
   -f lik-ui/db/init.sql
 ```
 
-All init scripts are idempotent (`IF NOT EXISTS`), so re-running is safe.
+> `DB_PW` holds the special-char password. It's fine inside `"$DB_PW"` and the psql conninfo
+> string above (quoted), but never echo it onto an interactive command line bare (the mise
+> zsh hook parse-errors on `)`). If a command trips on it, run these from a `bash` script file.
+
+All init scripts are idempotent (`IF NOT EXISTS`), so re-running is safe. Verify afterward:
+`psql "...dbname=likdb..." -c '\dt'` shows `catalog`, `confirmations`; `...dbname=likuidb...`
+shows `users`, `user_vaults`, `sessions`, `dcr_registrations`.
 
 ### 6. Deploy the container versions
 
-```
+Export Terraform credentials first (see the credential note near the top). Then apply with
+the image refs from step 4c — this creates the two `deployment_version` resources (the
+count-guard flips on once the image vars are non-empty), and the containers boot under real
+`prod` auth using the SSM values:
+
+```bash
 cd infra
-AWS_PROFILE=lik mise exec -- terraform apply \
+# (export AWS_ACCESS_KEY_ID/SECRET/SESSION_TOKEN per the credential note)
+
+mise exec -- terraform apply \
   -var 'lik_mcp_image=:lik-mcp-prod.app.N' \
   -var 'lik_ui_image=:lik-ui-prod.app.N'
 ```
 
-(Use the refs from step 4. Consider a `prod.tfvars` — gitignored — to avoid retyping.)
+Recommended: put the refs in a gitignored `infra/prod.tfvars` so redeploys don't retype them
+(`*.tfvars` is already gitignored):
+
+```bash
+cat > prod.tfvars <<'EOF'
+lik_mcp_image = ":lik-mcp-prod.app.N"
+lik_ui_image  = ":lik-ui-prod.app.N"
+EOF
+mise exec -- terraform apply -var-file=prod.tfvars
+```
+
+The deployment takes a few minutes per service. Run it in the background or leave it to
+finish — a killed apply orphans state (see the step-1 gotcha).
 
 ### 7. Verify
 
-```
-curl -fsS <lik_ui_service_url>/healthz        # -> {"status":"ok"}
-curl -s -o /dev/null -w '%{http_code}\n' <lik_mcp_resource_server_url>   # 401 = healthy (auth on)
+```bash
+# lik-ui health (unauthenticated) -> {"status":"ok"}
+curl -fsS https://lik-ui-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/healthz
+# lik-mcp -> 401 is EXPECTED and healthy (auth is on; there's no unauth route)
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://lik-mcp-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/mcp
 ```
 
-Then open `<lik_ui_service_url>` in a browser and complete Google login and one data-source
-connect end-to-end.
+Then open `https://lik-ui-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/` in a browser
+and complete Google login and one data-source connect end-to-end. If the container is
+unhealthy, check logs (see "Viewing logs") — a boot failure is almost always a missing/placeholder
+SSM value (step 3) or an OAuth redirect-URI mismatch (step 2).
 
 ---
 
