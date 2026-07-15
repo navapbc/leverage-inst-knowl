@@ -308,23 +308,22 @@ echo "Edit this file: $SF"
 `#`-comment the connection lines you're not setting yet (leave the boot-required ones —
 `APP_OAUTH_*`, `ANTHROPIC_API_KEY`, `AGENTS_CONFIG`, `SESSION_SECRET`, `LIK_OAUTH_CLIENT_ID`).
 
-**Step C — push, then shred.** The loop writes each value to a short-lived temp file and
-sends it with `file://`, so no secret ever appears on a command line. Lines that are blank,
-`#`-commented, or still contain `…` are skipped:
+**Step C — push, then shred.** Run `infra/set-ssm-secrets.sh` against the file. It writes each
+value to a short-lived temp file and sends it with `file://` (no secret on any command line),
+skipping blank, `#`-commented, and still-`…` lines:
 
 ```bash
-while IFS='=' read -r name value; do
-  case "$name" in ''|\#*) continue ;; esac                 # skip blank / comment lines
-  if printf %s "$value" | grep -q '…'; then                # skip un-filled placeholders
-    echo "skip (still placeholder): $name"; continue
-  fi
-  f=$(mktemp)
-  printf %s "$value" > "$f"                                # exact value, no trailing newline
-  AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 \
-    --type SecureString --overwrite --name "$name" --value "file://$f"
-  rm -f "$f"
-done < "$SF"
+infra/set-ssm-secrets.sh "$SF"
 rm -f "$SF"                                                # shred the master file
+```
+
+`set-ssm-secrets.sh` also handles **single-secret updates** — e.g. correcting one client
+secret without touching the rest:
+
+```bash
+printf '%s\n' '/ik-arch/prod/lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET=GOCSPX-…' > /tmp/one.env
+infra/set-ssm-secrets.sh /tmp/one.env && rm -f /tmp/one.env
+# then redeploy so the container picks it up:  ./tf.sh apply -var-file=prod.tfvars
 ```
 
 Verify nothing required is still a placeholder before deploying:
