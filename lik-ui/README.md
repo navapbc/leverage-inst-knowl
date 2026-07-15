@@ -77,6 +77,29 @@ for the credential lik-ui currently uses. Surfacing SKILL.md needs a credential 
 permission (likely a standard org API key rather than the managed-agent credential). Until then,
 `describe_skill` returns name and description only.
 
+## TODO: decide how users get Anthropic API access
+
+lik-ui talks to the Managed Agents platform with a single Anthropic credential today. Before
+multiple users depend on it, decide how each user's calls are authorized. Two options:
+
+1. **Each user provides their own Anthropic API key.** Simplest to reason about — every user's
+   agent traffic bills and authorizes under their own key, nothing is shared. Open questions:
+   whether managed agents and skills created under one user's key are visible to or usable by
+   others (sharing/visibility model), and where users obtain a key.
+
+2. **Configure Workload Identity Federation.** Map Nava users to Anthropic API access without
+   handing out per-user keys — see
+   https://platform.claude.com/settings/workload-identity-federation. Keeps agents and skills
+   under one org-owned identity while attributing calls to the mapped user.
+
+## TODO: optionally configure a dedicated Claude Workspace for LIK
+
+Consider putting LIK's Anthropic usage in its own Claude Workspace
+(https://platform.claude.com/settings/workspaces) rather than the org's default one. A
+dedicated workspace isolates LIK's spend, rate limits, and API keys, so its usage can be
+tracked and capped without affecting other Nava work, and access can be scoped to just the
+people who run it. Optional — skip it if the default workspace is good enough for now.
+
 ## Configuration
 
 All config is `LIK_UI_`-prefixed; see `.env.example`. Outside `local`/`test`, the app
