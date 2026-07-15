@@ -231,11 +231,11 @@ Transfer ownership at https://github.com/settings/applications/3731288
 
 ### 3. Populate SSM secrets
 
-Overwrite the placeholder SecureStrings with real values. **Feed values from files via
-`file://`**, not inline command-line args — this keeps secrets out of shell history / `ps`
-output and avoids the shell-quoting breakage that bites values containing special characters
-(e.g. a `)` trips the mise zsh hook, same as the DB password). The one exception is the
-generated session secret, which is hex-only and should never touch a file.
+Overwrite the placeholder SecureStrings with real values. Edit **one** file mapping each SSM
+name to its value, then run a loop that injects each via a per-line temp file and `file://`.
+This keeps secrets off the command line (out of shell history / `ps`) and avoids the
+special-char quoting breakage (a `)` trips the mise zsh hook, same as the DB password) — while
+only asking you to edit a single file.
 
 **Which params must be real vs. can stay placeholder:** the app's prod fail-closed guard only
 requires `LIK_UI_SESSION_SECRET`, `LIK_UI_APP_OAUTH_CLIENT_ID`, `LIK_UI_APP_OAUTH_CLIENT_SECRET`,
@@ -246,49 +246,55 @@ needed for the connections you actually enable — leave the others as `PLACEHOL
 until you set real values). Do **not** set `DB_MASTER_PASSWORD` under `$P/shared/` — Terraform
 owns it.
 
+**Step A — create the template file.** This writes a single `NAME=value` file, with the
+session secret pre-generated for you:
+
 ```bash
 P=/ik-arch/prod
-D=$(mktemp -d) && chmod 700 "$D"       # scratch dir for secret files
-putf() { AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 \
-           --type SecureString --overwrite --name "$1" --value "file://$2"; }
+SF=$(mktemp) && chmod 600 "$SF"
+cat > "$SF" <<EOF
+# Replace each … with the real value. DELETE or #-comment any line you are not setting
+# (e.g. a connection you haven't configured) — its SSM placeholder is left untouched.
+# Value is everything after the first '=' (so '=' inside secrets is fine). No quotes, no
+# trailing spaces. One line per secret.
+$P/lik-mcp/LIK_OAUTH_CLIENT_ID=…apps.googleusercontent.com
+$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_ID=…
+$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET=…
+$P/lik-ui/LIK_UI_ANTHROPIC_API_KEY=sk-ant-…
+$P/lik-ui/LIK_UI_AGENTS_CONFIG=agent_…:env_…
+$P/lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET=…
+$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID=…
+$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET=…
+$P/lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL=https://…/mcp
+$P/lik-ui/LIK_UI_GITHUB_CLIENT_ID=Iv1.…
+$P/lik-ui/LIK_UI_GITHUB_CLIENT_SECRET=…
+$P/lik-ui/LIK_UI_GITHUB_RESOURCE_URL=https://…/mcp
+$P/lik-ui/LIK_UI_SESSION_SECRET=$(openssl rand -hex 32)
+EOF
+echo "Edit this file: $SF"
+```
 
-# 1. Write each REAL value into its own file. `printf %s` = no trailing newline (a stray
-#    newline would become part of the secret). Replace the placeholder text below.
-printf %s '…apps.googleusercontent.com' > "$D/mcp_client_id"       # = lik-mcp LIK_OAUTH_CLIENT_ID
-printf %s '…'                           > "$D/app_client_id"
-printf %s '…'                           > "$D/app_client_secret"
-printf %s 'sk-ant-…'                    > "$D/anthropic"
-printf %s 'agent_…:env_…'               > "$D/agents"
-printf %s '…'                           > "$D/likmcp_secret"       # secret for the lik-mcp connection
-# Only if enabling these connections now — otherwise skip and leave placeholders:
-printf %s '…'                           > "$D/gdrive_client_id"
-printf %s '…'                           > "$D/gdrive_client_secret"
-printf %s 'https://…/mcp'               > "$D/gdrive_resource_url"
-printf %s 'Iv1.…'                       > "$D/github_client_id"
-printf %s '…'                           > "$D/github_client_secret"
-printf %s 'https://…/mcp'               > "$D/github_resource_url"
+**Step B — edit `$SF`** in your editor: replace each `…` with the real value; delete or
+`#`-comment the connection lines you're not setting yet (leave the boot-required ones —
+`APP_OAUTH_*`, `ANTHROPIC_API_KEY`, `AGENTS_CONFIG`, `SESSION_SECRET`, `LIK_OAUTH_CLIENT_ID`).
 
-# 2. Push from the files.
-putf "$P/lik-mcp/LIK_OAUTH_CLIENT_ID"           "$D/mcp_client_id"
-putf "$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_ID"     "$D/app_client_id"
-putf "$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET" "$D/app_client_secret"
-putf "$P/lik-ui/LIK_UI_ANTHROPIC_API_KEY"       "$D/anthropic"
-putf "$P/lik-ui/LIK_UI_AGENTS_CONFIG"           "$D/agents"
-putf "$P/lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET"    "$D/likmcp_secret"
-putf "$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID"     "$D/gdrive_client_id"
-putf "$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET" "$D/gdrive_client_secret"
-putf "$P/lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL"  "$D/gdrive_resource_url"
-putf "$P/lik-ui/LIK_UI_GITHUB_CLIENT_ID"        "$D/github_client_id"
-putf "$P/lik-ui/LIK_UI_GITHUB_CLIENT_SECRET"    "$D/github_client_secret"
-putf "$P/lik-ui/LIK_UI_GITHUB_RESOURCE_URL"     "$D/github_resource_url"
+**Step C — push, then shred.** The loop writes each value to a short-lived temp file and
+sends it with `file://`, so no secret ever appears on a command line. Lines that are blank,
+`#`-commented, or still contain `…` are skipped:
 
-# 3. Session secret: generated, hex-only (no special chars) — keep it inline, never in a file.
-AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 \
-  --type SecureString --overwrite --name "$P/lik-ui/LIK_UI_SESSION_SECRET" \
-  --value "$(openssl rand -hex 32)"
-
-# 4. Shred the scratch files.
-rm -rf "$D"
+```bash
+while IFS='=' read -r name value; do
+  case "$name" in ''|\#*) continue ;; esac                 # skip blank / comment lines
+  if printf %s "$value" | grep -q '…'; then                # skip un-filled placeholders
+    echo "skip (still placeholder): $name"; continue
+  fi
+  f=$(mktemp)
+  printf %s "$value" > "$f"                                # exact value, no trailing newline
+  AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 \
+    --type SecureString --overwrite --name "$name" --value "file://$f"
+  rm -f "$f"
+done < "$SF"
+rm -f "$SF"                                                # shred the master file
 ```
 
 Verify nothing required is still a placeholder before deploying:
