@@ -27,6 +27,11 @@ clients, populating secrets, pushing images, and initializing the database schem
 > Do **not** use `--format env` piped through `eval` — the session token can contain
 > characters that break unquoted `eval`. Credentials are temporary and expire; re-export
 > if a `terraform` command later fails on expired credentials.
+>
+> **Shortcut:** `infra/tf.sh` does this export for you and runs terraform — e.g.
+> `./tf.sh plan`, `./tf.sh apply -var-file=prod.tfvars`, `./tf.sh output`. It mints fresh
+> credentials each run, so expiry never bites. Use it in place of the manual export + bare
+> `terraform` in the steps below.
 
 > ⚠️ **The DB master password contains shell-special characters** (`()[]{}<>` …). Never put
 > it on an interactive command line (the mise zsh hook parse-errors on `)`). Always read it
