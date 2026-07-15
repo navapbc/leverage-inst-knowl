@@ -159,6 +159,57 @@ Equality constraints to honor:
 - lik-ui's lik-mcp **resource URL** must equal `lik_mcp_resource_server_url`. Terraform
   derives this automatically — no separate value to store.
 
+#### 2a. Google clients — create in a Nava-org-owned GCP project
+
+The goal is org ownership: the project (and therefore its OAuth clients) must live under
+the Nava Google Cloud **Organization**, not a personal Google account. Personal clients are
+owned by whoever created them and vanish/leak when that person leaves — the failure mode
+this step exists to prevent.
+
+1. **Confirm the org, not a personal project.** In the [Google Cloud console](https://console.cloud.google.com/)
+   project picker, the top of the org selector must show the Nava organization (e.g.
+   `navapbc.com`), not "No organization". If you can't see the Nava org, you lack org access
+   — ask a Google Workspace / GCP admin to grant `resourcemanager.projectCreator` on the org
+   (or to create the project for you). Do **not** fall back to a personal project.
+2. **Create a dedicated project** under the org, e.g. `lik-prod`. Verify ownership afterward:
+   ```
+   AWS_PROFILE=lik mise exec -- gcloud projects describe lik-prod \
+     --format='value(parent.type,parent.id)'
+   # must print:  organization  <nava-org-id>     (NOT "no-org" / a folder you don't recognize)
+   ```
+   (or in console: IAM & Admin → Settings shows the parent organization).
+3. **Configure the OAuth consent screen** as **Internal** (User Type = Internal). Internal
+   restricts sign-in to the Nava Workspace domain and is only available on org-owned
+   projects — a second guarantee you're not on a personal project (personal projects can
+   only pick External).
+4. **Create the OAuth 2.0 Client IDs** (APIs & Services → Credentials → Create credentials →
+   OAuth client ID → Web application). Create these three, each keyed to a redirect URI from
+   the table above:
+   - **App login** → redirect `<lik_ui_service_url>/auth/callback`
+   - **lik-mcp connection** → redirect `<lik_ui_service_url>/connections/callback`
+   - **Google Drive connection** → redirect `<lik_ui_service_url>/connections/callback`
+5. **Add org co-owners** so the clients aren't bound to one person: IAM → grant another Nava
+   admin `Owner`/`Editor` on the `lik-prod` project. Ownership now survives any one departure.
+
+Record each client id + secret for step 3. (The lik-mcp connection's client id is also
+lik-mcp's `LIK_OAUTH_CLIENT_ID` — store it once; see the equality constraint above.)
+
+#### 2b. GitHub — create an OAuth App owned by the Nava org
+
+1. Go to the **organization's** developer settings, not your user's:
+   `https://github.com/organizations/navapbc/settings/applications` (requires org-owner or a
+   granted app-manager role). If you only see `https://github.com/settings/developers`,
+   that's your personal account — switch to the org URL.
+2. **New OAuth App**: Authorization callback URL = `<lik_ui_service_url>/connections/callback`.
+   Homepage URL = `<lik_ui_service_url>`.
+3. Generate a client secret. Record the client id + secret for step 3.
+4. Confirm ownership: the app's settings page header shows it's owned by `navapbc`, and other
+   org owners can administer it. (GitHub OAuth Apps created under an org are org-owned; there
+   is no "transfer from personal" that preserves the secret, which is why we create fresh.)
+
+> If a Slack (or other) connection is added later, follow the same principle: create the app
+> in the Nava Slack workspace / org account with multiple admins, never a personal account.
+
 ### 3. Populate SSM secrets
 
 Store every value as a SecureString. Replace the `…` placeholders.
