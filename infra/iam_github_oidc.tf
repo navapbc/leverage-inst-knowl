@@ -50,7 +50,7 @@ data "aws_iam_policy_document" "image_push" {
   statement {
     effect = "Allow"
     actions = [
-      "lightsail:PushContainerImage",
+      "lightsail:CreateContainerServiceRegistryLogin", # registry login used by push-container-image
       "lightsail:RegisterContainerImage",
       "lightsail:GetContainerImages",
       "lightsail:GetContainerServices",
