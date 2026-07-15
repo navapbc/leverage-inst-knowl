@@ -63,13 +63,15 @@ Both services are **deployed and serving over HTTPS under real auth**. Live iden
 | 4. Images built + pushed | ✅ done (`app.2` / `app.1`) |
 | 6. Container deployment applied | ✅ done — health checks pass (lik-ui `/healthz` = `{"status":"ok"}`, lik-mcp `/mcp` = 401 under auth) |
 | 5. DB schema init | ✅ done — `likdb`: `catalog`, `confirmations` + `pg_trgm`; `likuidb`: `users`, `user_vaults`, `sessions`, `dcr_registrations` |
-| 7. Verification | ✅ automated checks pass; ⏳ one human browser login remains |
+| 7. Verification | ✅ done — end-to-end Google login confirmed |
 
-> ✅ **Deployment is functionally complete.** Both services serve over HTTPS under real auth,
-> schema is initialized, and `GET /auth/login` correctly 303-redirects to Google with the
-> right `client_id` and a `redirect_uri` matching the registered callback. The only remaining
-> confirmation is a **human completing the Google login in a browser** (an interactive consent
-> step that can't be scripted) — open the lik-ui URL and sign in to confirm end to end.
+> ✅ **Deployment is COMPLETE and verified end-to-end.** A Nava Workspace account signed in
+> successfully: `/auth/login` → Google → `/auth/callback` (303, user persisted to `likuidb`
+> with no DB error) → authenticated `/`, `/sessions`, `/settings`, `/connections` all 200. The
+> full OAuth → session → Postgres path works. (Note: the container booted at step 6 *before*
+> schema init, so the logs show harmless `database "likuidb" does not exist` pool errors from
+> 15:51–15:52; they stopped once step 5 created the DB — the pool self-healed, no restart
+> needed. If you ever init schema after deploy again, expect the same transient boot errors.)
 
 > ⚠️ **Do NOT `terraform destroy` a container service in normal operation.** Its public
 > URL contains a hash that changes on recreate, which breaks every OAuth registration
@@ -462,7 +464,7 @@ mise exec -- terraform apply -var-file=prod.tfvars
 The deployment takes a few minutes per service. Run it in the background or leave it to
 finish — a killed apply orphans state (see the step-1 gotcha).
 
-### 7. Verify ✅ automated checks pass (human browser login pending)
+### 7. Verify ✅ done — end-to-end login confirmed
 
 ```bash
 # lik-ui health (unauthenticated) -> {"status":"ok"}
