@@ -324,12 +324,13 @@ or `LIK_OAUTH_CLIENT_ID` still listed here will make the container fail its prod
 
 ### 4. Build and push images
 
-> **Prerequisite: the workflow must run from `main`.** The OIDC role trusts only
-> `repo:navapbc/leverage-inst-knowl:ref:refs/heads/main` (see `infra/iam_github_oidc.tf`), so
-> a run from any other branch fails role assumption with "Not authorized to perform
-> sts:AssumeRoleWithWebIdentity". Merge/push the `.github/workflows/deploy-images.yml` file to
-> `main` before running. (To allow other branches, add their `sub` to the trust policy and
-> re-apply — but keep prod deploys on `main`.)
+> **Prerequisite: the workflow must run from `main`.** The job runs in the `prod` GitHub
+> Environment, so the OIDC token's `sub` is `repo:navapbc/leverage-inst-knowl:environment:prod`
+> — which the IAM role trusts (see `infra/iam_github_oidc.tf`). The `prod` environment has a
+> **deployment branch policy restricting it to `main`**, so a run from any other branch is
+> rejected by GitHub before it can assume the role. Merge `.github/workflows/deploy-images.yml`
+> to `main` before running. (To allow another branch, add it to the environment's branch
+> policy — do not loosen the IAM trust.)
 
 **4a. Repo variables — ✅ done (env-scoped to `prod`).** The two variables live in a GitHub
 **Environment** named `prod` (not at repo level), so a future `dev` environment can hold its
@@ -350,14 +351,16 @@ gh variable set AWS_REGION --env prod --repo navapbc/leverage-inst-knowl --body 
 gh variable list --env prod --repo navapbc/leverage-inst-knowl
 ```
 
-> **Two environment gotchas:** (1) env-scoped variables resolve only because the job sets
-> `environment: prod` — remove that line and the workflow sees empty values. (2) The OIDC
-> trust is still **branch-based** (`ref:refs/heads/main`), independent of the environment. If
-> you later want per-environment roles, switch the trust `sub` to
-> `repo:navapbc/leverage-inst-knowl:environment:prod` in `infra/iam_github_oidc.tf` and
-> re-apply — but that claim is only present because the job declares `environment: prod`, so
-> keep the two in sync. Adding a real `dev` also requires a parallel Terraform stack (separate
-> DB/services/SSM prefix/state), which is out of the current single-env scope.
+> **Environment ↔ OIDC coupling (important):** the job sets `environment: prod`, which does
+> two things at once — (1) it scopes the `AWS_DEPLOY_ROLE_ARN` / `AWS_REGION` variables, and
+> (2) it changes the OIDC token `sub` to `repo:…:environment:prod` (the branch `ref:` form is
+> *not* present when a job uses an environment). The IAM trust matches on that environment
+> `sub`, and the environment's branch policy restricts deploys to `main`. **These move
+> together:** if you ever remove `environment: prod` from the job, the variables stop
+> resolving *and* the OIDC sub reverts to the branch form — breaking role assumption until the
+> trust is switched back. A future `dev` needs its own environment (+ role/branch-policy) and
+> a parallel Terraform stack (separate DB/services/SSM prefix/state), which is out of the
+> current single-env scope.
 
 **4b. Run the workflow** (from `main`):
 

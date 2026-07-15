@@ -28,12 +28,15 @@ data "aws_iam_policy_document" "github_trust" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Tightly scope to this repo + branch. Lightsail IAM is coarse (Resource "*"), so the
-    # trust scope is the primary control on who can push images.
+    # Scope to this repo + GitHub Environment. The workflow job runs with
+    # `environment: prod`, so GitHub mints the token with sub = repo:ORG/REPO:environment:prod
+    # (the branch `ref:` form is NOT present when a job uses an environment). Branch
+    # restriction to `main` is enforced by the environment's deployment branch policy.
+    # Lightsail IAM is coarse (Resource "*"), so this trust scope is the primary control.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${var.github_repo}:ref:refs/heads/${var.github_branch}"]
+      values   = ["repo:${var.github_org}/${var.github_repo}:environment:${var.github_environment}"]
     }
   }
 }
@@ -47,7 +50,7 @@ data "aws_iam_policy_document" "image_push" {
   statement {
     effect = "Allow"
     actions = [
-      "lightsail:PushContainerImage",
+      "lightsail:CreateContainerServiceRegistryLogin", # registry login used by push-container-image
       "lightsail:RegisterContainerImage",
       "lightsail:GetContainerImages",
       "lightsail:GetContainerServices",

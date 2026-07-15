@@ -91,7 +91,18 @@ variable "github_repo" {
 }
 
 variable "github_branch" {
-  description = "Branch allowed to assume the CI push role."
+  description = "Branch allowed to deploy to the GitHub environment (enforced by the env's branch policy, not the OIDC sub)."
   type        = string
   default     = "main"
+}
+
+variable "github_environment" {
+  description = <<-EOT
+    GitHub Environment the CI job runs in. Because the workflow job sets `environment: prod`,
+    the OIDC token's `sub` is `repo:ORG/REPO:environment:<this>` (NOT the branch form), so the
+    trust policy matches on environment. Branch restriction is enforced by the environment's
+    deployment branch policy (set to `main`), not by the sub.
+  EOT
+  type        = string
+  default     = "prod"
 }
