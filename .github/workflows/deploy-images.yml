@@ -27,6 +27,9 @@ permissions:
 jobs:
   push:
     runs-on: ubuntu-latest
+    # The prod environment scopes AWS_DEPLOY_ROLE_ARN / AWS_REGION (and enables optional
+    # deployment protection rules). Env-scoped vars only resolve when the job declares this.
+    environment: prod
     strategy:
       matrix:
         include:

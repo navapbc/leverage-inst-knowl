@@ -257,6 +257,7 @@ cat > "$SF" <<EOF
 # (e.g. a connection you haven't configured) — its SSM placeholder is left untouched.
 # Value is everything after the first '=' (so '=' inside secrets is fine). No quotes, no
 # trailing spaces. One line per secret.
+
 $P/lik-mcp/LIK_OAUTH_CLIENT_ID=…apps.googleusercontent.com
 
 $P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_ID=…
@@ -330,18 +331,33 @@ or `LIK_OAUTH_CLIENT_ID` still listed here will make the container fail its prod
 > `main` before running. (To allow other branches, add their `sub` to the trust policy and
 > re-apply — but keep prod deploys on `main`.)
 
-**4a. Set the two repo *variables*** (not secrets — these values aren't sensitive). The role
-ARN is the `github_image_push_role_arn` Terraform output
-(`arn:aws:iam::293033346213:role/github-actions-lik-image-push`).
+**4a. Repo variables — ✅ done (env-scoped to `prod`).** The two variables live in a GitHub
+**Environment** named `prod` (not at repo level), so a future `dev` environment can hold its
+own values. The workflow job declares `environment: prod`, which is required for env-scoped
+variables to resolve. Already created:
 
-- **GitHub UI:** repo → **Settings → Secrets and variables → Actions → Variables tab →
-  New repository variable**. Add `AWS_DEPLOY_ROLE_ARN` and `AWS_REGION` (= `us-east-1`).
-- **Or via `gh` CLI:**
-  ```bash
-  gh variable set AWS_DEPLOY_ROLE_ARN --repo navapbc/leverage-inst-knowl \
-    --body arn:aws:iam::293033346213:role/github-actions-lik-image-push
-  gh variable set AWS_REGION --repo navapbc/leverage-inst-knowl --body us-east-1
-  ```
+| Variable | Value | Scope |
+|----------|-------|-------|
+| `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::293033346213:role/github-actions-lik-image-push` | env `prod` |
+| `AWS_REGION` | `us-east-1` | env `prod` |
+
+To recreate or inspect:
+```bash
+gh api --method PUT repos/navapbc/leverage-inst-knowl/environments/prod   # create the env
+gh variable set AWS_DEPLOY_ROLE_ARN --env prod --repo navapbc/leverage-inst-knowl \
+  --body arn:aws:iam::293033346213:role/github-actions-lik-image-push
+gh variable set AWS_REGION --env prod --repo navapbc/leverage-inst-knowl --body us-east-1
+gh variable list --env prod --repo navapbc/leverage-inst-knowl
+```
+
+> **Two environment gotchas:** (1) env-scoped variables resolve only because the job sets
+> `environment: prod` — remove that line and the workflow sees empty values. (2) The OIDC
+> trust is still **branch-based** (`ref:refs/heads/main`), independent of the environment. If
+> you later want per-environment roles, switch the trust `sub` to
+> `repo:navapbc/leverage-inst-knowl:environment:prod` in `infra/iam_github_oidc.tf` and
+> re-apply — but that claim is only present because the job declares `environment: prod`, so
+> keep the two in sync. Adding a real `dev` also requires a parallel Terraform stack (separate
+> DB/services/SSM prefix/state), which is out of the current single-env scope.
 
 **4b. Run the workflow** (from `main`):
 
