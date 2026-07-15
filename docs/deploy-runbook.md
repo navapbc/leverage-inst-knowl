@@ -497,6 +497,38 @@ AWS_PROFILE=lik mise exec -- aws lightsail get-container-log \
 
 ---
 
+## Agent MCP-server URL dependency (external — not in this repo)
+
+> ⚠️ The lik-mcp (and Google Drive / GitHub) **connection URLs are declared by the *agent
+> definition***, not by lik-ui or Terraform. lik-ui reads the selected agent's `mcp_servers`
+> via the Claude Agent SDK and matches each declared URL against its pre-configured OAuth
+> clients (keyed by `LIK_UI_*_RESOURCE_URL` — see `lik-ui/src/lik_ui/sources.py`). If the
+> agent declares a URL that lik-ui has no client for, the connect fails with
+> *"<url> has no dynamic client registration and no configured client."*
+
+**Why this matters for this deploy:** the agent
+`agent_016uQNVgNEVtcAmvwKtskh8d` (from `LIK_UI_AGENTS_CONFIG`) was authored pointing at the
+old `https://leverage-inst-knowl.onrender.com/mcp` deployment. After migrating to Lightsail,
+its declared lik-mcp server URL must be updated to the Lightsail URL:
+
+```
+https://lik-mcp-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/mcp
+```
+
+- This is changed in the **agent definition on the Claude Managed Agents platform** (via the
+  Agent SDK / console) — it is out-of-band agent authoring, not a lik-ui/Terraform change.
+- The Managed Agent runs headless server-side and connects to the URL *it* declares, so you
+  **cannot** redirect it from lik-ui: pointing `LIK_UI_LIKMCP_RESOURCE_URL` at the old URL
+  would only mint a credential for the old server, not move the agent.
+- lik-ui's `LIK_UI_LIKMCP_RESOURCE_URL` must **equal** whatever URL the agent declares (it's
+  already the Lightsail URL, Terraform-derived), so once the agent is updated, no lik-ui
+  change is needed.
+- **This recurs on any URL change** (including the custom-domain migration below): whenever
+  the lik-mcp public URL changes, the agent's declared `mcp_servers` entry must be updated to
+  match. A custom domain (stable across infra changes) removes this recurring coupling.
+
+---
+
 ## Custom-domain migration (later)
 
 Currently the services use the Lightsail-provided HTTPS URLs. To move to a custom domain:
