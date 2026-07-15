@@ -1,4 +1,5 @@
 [tools]
+actionlint = "latest"
 aws = "latest"
 gcloud = "latest"
 node = "latest"
