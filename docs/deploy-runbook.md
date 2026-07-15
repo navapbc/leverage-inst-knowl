@@ -62,15 +62,14 @@ Both services are **deployed and serving over HTTPS under real auth**. Live iden
 | 3. Real SSM secrets set (no placeholders remain) | ✅ done |
 | 4. Images built + pushed | ✅ done (`app.2` / `app.1`) |
 | 6. Container deployment applied | ✅ done — health checks pass (lik-ui `/healthz` = `{"status":"ok"}`, lik-mcp `/mcp` = 401 under auth) |
-| **5. DB schema init** | ⏳ **NOT DONE — required next** |
-| 7. End-to-end login verification | ⏳ pending (blocked on step 5) |
+| 5. DB schema init | ✅ done — `likdb`: `catalog`, `confirmations` + `pg_trgm`; `likuidb`: `users`, `user_vaults`, `sessions`, `dcr_registrations` |
+| 7. Verification | ✅ automated checks pass; ⏳ one human browser login remains |
 
-> ⏳ **Schema init (step 5) is still outstanding, and the deploy ran *before* it.** The
-> containers boot healthy because `/healthz` doesn't touch the tables — but the databases are
-> still empty. Until step 5 runs (create `likuidb` + apply both `init.sql`), the first real
-> action (e.g. a login that persists a `users`/`sessions` row) will error. Run step 5 now,
-> then do step 7. Order didn't matter here because the DB is empty either way; just don't call
-> it live until the schema exists.
+> ✅ **Deployment is functionally complete.** Both services serve over HTTPS under real auth,
+> schema is initialized, and `GET /auth/login` correctly 303-redirects to Google with the
+> right `client_id` and a `redirect_uri` matching the registered callback. The only remaining
+> confirmation is a **human completing the Google login in a browser** (an interactive consent
+> step that can't be scripted) — open the lik-ui URL and sign in to confirm end to end.
 
 > ⚠️ **Do NOT `terraform destroy` a container service in normal operation.** Its public
 > URL contains a hash that changes on recreate, which breaks every OAuth registration
@@ -394,7 +393,7 @@ gh variable list --env prod --repo navapbc/leverage-inst-knowl
 - **Or via `gh` CLI:** `gh run view --repo navapbc/leverage-inst-knowl <run-id>` (or add
   `--log` and grep for `Refer to this image as`).
 
-### 5. Initialize the database schema ⏳ NOT DONE — run this next
+### 5. Initialize the database schema ✅ done
 
 The DB is empty. lik-ui also needs its own database created on the shared instance. Run
 these once as the **master user** (needed for lik-mcp's `pg_trgm` extension + roles).
@@ -463,7 +462,7 @@ mise exec -- terraform apply -var-file=prod.tfvars
 The deployment takes a few minutes per service. Run it in the background or leave it to
 finish — a killed apply orphans state (see the step-1 gotcha).
 
-### 7. Verify
+### 7. Verify ✅ automated checks pass (human browser login pending)
 
 ```bash
 # lik-ui health (unauthenticated) -> {"status":"ok"}
