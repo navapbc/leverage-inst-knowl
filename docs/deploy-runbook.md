@@ -204,8 +204,25 @@ lik-mcp's `LIK_OAUTH_CLIENT_ID` — store it once; see the equality constraint a
    Homepage URL = `<lik_ui_service_url>`.
 3. Generate a client secret. Record the client id + secret for step 3.
 4. Confirm ownership: the app's settings page header shows it's owned by `navapbc`, and other
-   org owners can administer it. (GitHub OAuth Apps created under an org are org-owned; there
-   is no "transfer from personal" that preserves the secret, which is why we create fresh.)
+   org owners can administer it.
+
+**If you lack org-level GitHub access:** unlike Google, GitHub OAuth Apps *can* be transferred.
+Create the app under your personal account now (`https://github.com/settings/developers`),
+get the deployment working, then transfer it to `navapbc` before real users depend on it:
+
+- In the app's settings, use **Transfer ownership** (Advanced section) and name `navapbc` as
+  the destination. The **client id and secret are preserved** across the transfer, so the
+  SSM values and running config keep working — no redeploy needed in the normal case.
+- If a secret ever does get regenerated, just `put-parameter` the new
+  `LIK_UI_GITHUB_CLIENT_SECRET` and redeploy.
+- Treat the personal-ownership window as temporary: it is the exact state this section
+  exists to exit (see the origin doc's "before others depend on this" gate). Don't let it
+  become permanent.
+
+  This transfer escape hatch is **GitHub-only**. Google clients (2a) cannot be transferred
+  between projects — if you lack GCP org access, get an admin to create the org project or
+  recreate the clients there later (which changes the Google client id/secret and requires an
+  SSM update).
 
 > If a Slack (or other) connection is added later, follow the same principle: create the app
 > in the Nava Slack workspace / org account with multiple admins, never a personal account.
