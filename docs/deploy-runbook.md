@@ -27,6 +27,11 @@ clients, populating secrets, pushing images, and initializing the database schem
 > Do **not** use `--format env` piped through `eval` — the session token can contain
 > characters that break unquoted `eval`. Credentials are temporary and expire; re-export
 > if a `terraform` command later fails on expired credentials.
+>
+> **Shortcut:** `infra/tf.sh` does this export for you and runs terraform — e.g.
+> `./tf.sh plan`, `./tf.sh apply -var-file=prod.tfvars`, `./tf.sh output`. It mints fresh
+> credentials each run, so expiry never bites. Use it in place of the manual export + bare
+> `terraform` in the steps below.
 
 > ⚠️ **The DB master password contains shell-special characters** (`()[]{}<>` …). Never put
 > it on an interactive command line (the mise zsh hook parse-errors on `)`). Always read it
@@ -37,8 +42,7 @@ clients, populating secrets, pushing images, and initializing the database schem
 
 ## Deployment status (2026-07-15)
 
-Bootstrap (database + both container services + GitHub OIDC role) is **applied and in
-Terraform state**. Live identifiers:
+Both services are **deployed and serving over HTTPS under real auth**. Live identifiers:
 
 | Resource | Value |
 |----------|-------|
@@ -47,15 +51,25 @@ Terraform state**. Live identifiers:
 | lik-ui service URL (`LIK_UI_APP_BASE_URL`) | `https://lik-ui-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/` |
 | DB endpoint | `ls-775fd23f9d76047da44b78ee7307c91023cfc535.celyyosemrsx.us-east-1.rds.amazonaws.com:5432` |
 | CI image-push role | `arn:aws:iam::293033346213:role/github-actions-lik-image-push` |
+| Deployed images | `:lik-mcp-prod.app.2`, `:lik-ui-prod.app.1` |
 
-**Remaining before the site is live** (steps 2–7 below): register OAuth clients with the
-callback URLs above, replace the placeholder SSM secrets with real values, build+push
-images, initialize schema, and run the deployment apply.
+**Progress:**
 
-> **SSM parameters are currently PLACEHOLDERS.** All `/ik-arch/prod/lik-*/…` secret params
-> were seeded with `PLACEHOLDER_REPLACE_ME` so that `terraform plan`/`import` could resolve
-> the `ssm.tf` data sources during bootstrap. **They must be overwritten with real values
-> (step 3) before the deployment apply**, or the services will boot with garbage config.
+| Step | Status |
+|------|--------|
+| Bootstrap: DB + services + OIDC role | ✅ applied |
+| 2. OAuth clients registered (Nava org) | ✅ done |
+| 3. Real SSM secrets set (no placeholders remain) | ✅ done |
+| 4. Images built + pushed | ✅ done (`app.2` / `app.1`) |
+| 6. Container deployment applied | ✅ done — health checks pass (lik-ui `/healthz` = `{"status":"ok"}`, lik-mcp `/mcp` = 401 under auth) |
+| 5. DB schema init | ✅ done — `likdb`: `catalog`, `confirmations` + `pg_trgm`; `likuidb`: `users`, `user_vaults`, `sessions`, `dcr_registrations` |
+| 7. Verification | ✅ automated checks pass; ⏳ one human browser login remains |
+
+> ✅ **Deployment is functionally complete.** Both services serve over HTTPS under real auth,
+> schema is initialized, and `GET /auth/login` correctly 303-redirects to Google with the
+> right `client_id` and a `redirect_uri` matching the registered callback. The only remaining
+> confirmation is a **human completing the Google login in a browser** (an interactive consent
+> step that can't be scripted) — open the lik-ui URL and sign in to confirm end to end.
 
 > ⚠️ **Do NOT `terraform destroy` a container service in normal operation.** Its public
 > URL contains a hash that changes on recreate, which breaks every OAuth registration
@@ -141,7 +155,7 @@ You'll use `lik_mcp_service_url`, `lik_mcp_resource_server_url`, `lik_ui_service
 `lik_ui_oauth_callback_urls`, and `github_image_push_role_arn` — captured values are in the
 Deployment status table above.
 
-### 2. Register OAuth clients under Nava org ownership
+### 2. Register OAuth clients under Nava org ownership ✅ done
 
 Create **new** clients (do not transfer personal ones). Use the URLs from step 1.
 
@@ -229,7 +243,7 @@ get the deployment working, then transfer it to `navapbc` before real users depe
 
 Transfer ownership at https://github.com/settings/applications/3731288
 
-### 3. Populate SSM secrets
+### 3. Populate SSM secrets ✅ done (no placeholders remain)
 
 Overwrite the placeholder SecureStrings with real values. Edit **one** file mapping each SSM
 name to its value, then run a loop that injects each via a per-line temp file and `file://`.
@@ -322,7 +336,7 @@ AWS_PROFILE=lik mise exec -- aws ssm get-parameters-by-path --path /ik-arch/prod
 Any `LIK_UI_APP_*`, `LIK_UI_ANTHROPIC_API_KEY`, `LIK_UI_AGENTS_CONFIG`, `LIK_UI_SESSION_SECRET`,
 or `LIK_OAUTH_CLIENT_ID` still listed here will make the container fail its prod guard at boot.
 
-### 4. Build and push images
+### 4. Build and push images ✅ done (`:lik-mcp-prod.app.2`, `:lik-ui-prod.app.1`)
 
 > **Prerequisite: the workflow must run from `main`.** The job runs in the `prod` GitHub
 > Environment, so the OIDC token's `sub` is `repo:navapbc/leverage-inst-knowl:environment:prod`
@@ -379,7 +393,7 @@ gh variable list --env prod --repo navapbc/leverage-inst-knowl
 - **Or via `gh` CLI:** `gh run view --repo navapbc/leverage-inst-knowl <run-id>` (or add
   `--log` and grep for `Refer to this image as`).
 
-### 5. Initialize the database schema
+### 5. Initialize the database schema ✅ done
 
 The DB is empty. lik-ui also needs its own database created on the shared instance. Run
 these once as the **master user** (needed for lik-mcp's `pg_trgm` extension + roles).
@@ -418,7 +432,7 @@ All init scripts are idempotent (`IF NOT EXISTS`), so re-running is safe. Verify
 `psql "...dbname=likdb..." -c '\dt'` shows `catalog`, `confirmations`; `...dbname=likuidb...`
 shows `users`, `user_vaults`, `sessions`, `dcr_registrations`.
 
-### 6. Deploy the container versions
+### 6. Deploy the container versions ✅ done (containers healthy; see step 5 caveat)
 
 Export Terraform credentials first (see the credential note near the top). Then apply with
 the image refs from step 4c — this creates the two `deployment_version` resources (the
@@ -448,7 +462,7 @@ mise exec -- terraform apply -var-file=prod.tfvars
 The deployment takes a few minutes per service. Run it in the background or leave it to
 finish — a killed apply orphans state (see the step-1 gotcha).
 
-### 7. Verify
+### 7. Verify ✅ automated checks pass (human browser login pending)
 
 ```bash
 # lik-ui health (unauthenticated) -> {"status":"ok"}
