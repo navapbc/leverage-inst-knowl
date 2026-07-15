@@ -6,10 +6,56 @@ steps Terraform can't do declaratively: bootstrapping the state bucket, register
 clients, populating secrets, pushing images, and initializing the database schema.
 
 **Conventions**
-- All commands run with `AWS_PROFILE=lik` and via `mise exec --`, e.g.
-  `AWS_PROFILE=lik mise exec -- aws ...` / `mise exec -- terraform ...`.
+- All AWS CLI commands run with `AWS_PROFILE=lik` and via `mise exec --`, e.g.
+  `AWS_PROFILE=lik mise exec -- aws ...`.
 - Region is **us-east-1** for everything. The old `us-east-2` Lightsail DB is **not**
   touched by any step here.
+
+> ⚠️ **Terraform cannot use the `lik` profile directly.** The profile authenticates via a
+> `login_session` credential provider that the AWS CLI understands but Terraform's Go SDK
+> does not (it falls back to IMDS and fails with "No valid credential sources found").
+> Export short-lived credentials into the environment before every `terraform` command:
+>
+> ```bash
+> J=$(AWS_PROFILE=lik mise exec -- aws configure export-credentials --format process)
+> export AWS_ACCESS_KEY_ID=$(printf '%s' "$J" | python3 -c 'import sys,json;print(json.load(sys.stdin)["AccessKeyId"])')
+> export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$J" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SecretAccessKey"])')
+> export AWS_SESSION_TOKEN=$(printf '%s' "$J" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SessionToken"])')
+> mise exec -- terraform <cmd>
+> ```
+>
+> Do **not** use `--format env` piped through `eval` — the session token can contain
+> characters that break unquoted `eval`. Credentials are temporary and expire; re-export
+> if a `terraform` command later fails on expired credentials.
+
+> ⚠️ **The DB master password contains shell-special characters** (`()[]{}<>` …). Never put
+> it on an interactive command line (the mise zsh hook parse-errors on `)`). Always read it
+> into a variable from SSM and reference it quoted, or run the step from a `bash` script
+> file — see "Initialize the database schema".
+
+---
+
+## Deployment status (2026-07-15)
+
+Bootstrap (database + both container services + GitHub OIDC role) is **applied and in
+Terraform state**. Live identifiers:
+
+| Resource | Value |
+|----------|-------|
+| lik-mcp service URL | `https://lik-mcp-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/` |
+| lik-mcp resource URL (`LIK_RESOURCE_SERVER_URL`) | `https://lik-mcp-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/mcp` |
+| lik-ui service URL (`LIK_UI_APP_BASE_URL`) | `https://lik-ui-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/` |
+| DB endpoint | `ls-775fd23f9d76047da44b78ee7307c91023cfc535.celyyosemrsx.us-east-1.rds.amazonaws.com:5432` |
+| CI image-push role | `arn:aws:iam::293033346213:role/github-actions-lik-image-push` |
+
+**Remaining before the site is live** (steps 2–7 below): register OAuth clients with the
+callback URLs above, replace the placeholder SSM secrets with real values, build+push
+images, initialize schema, and run the deployment apply.
+
+> **SSM parameters are currently PLACEHOLDERS.** All `/ik-arch/prod/lik-*/…` secret params
+> were seeded with `PLACEHOLDER_REPLACE_ME` so that `terraform plan`/`import` could resolve
+> the `ssm.tf` data sources during bootstrap. **They must be overwritten with real values
+> (step 3) before the deployment apply**, or the services will boot with garbage config.
 
 > ⚠️ **Do NOT `terraform destroy` a container service in normal operation.** Its public
 > URL contains a hash that changes on recreate, which breaks every OAuth registration
@@ -17,9 +63,10 @@ clients, populating secrets, pushing images, and initializing the database schem
 
 ---
 
-## One-time: bootstrap the state bucket
+## One-time: bootstrap the state bucket ✅ done (2026-07-15)
 
-The S3 backend bucket must exist (with versioning) before `terraform init`. Create it once:
+The S3 backend bucket must exist (with versioning) before `terraform init`. Created once
+with the commands below; `terraform init` then succeeded against it.
 
 ```
 AWS_PROFILE=lik mise exec -- aws s3api create-bucket \
@@ -46,28 +93,53 @@ AWS_PROFILE=lik mise exec -- terraform init
 The order matters: services must exist to yield the URLs that OAuth clients are keyed to,
 and secrets must be in SSM before the container deployments boot under real auth.
 
-### 1. Create the database, container services, and CI role
+### 1. Create the database, container services, and CI role ✅ done (2026-07-15)
 
-Bootstrap everything except the container deployments (those need image refs + secrets):
+Bootstrap everything except the container deployments (those need image refs + secrets).
+Export credentials first (see the Terraform credential note above), then:
 
 ```
 cd infra
-AWS_PROFILE=lik mise exec -- terraform apply \
+mise exec -- terraform apply \
+  -target=random_password.db_master \
   -target=aws_lightsail_database.main \
+  -target=aws_ssm_parameter.db_master_password \
   -target=aws_lightsail_container_service.lik_mcp \
   -target=aws_lightsail_container_service.lik_ui \
+  -target=aws_iam_openid_connect_provider.github \
   -target=aws_iam_role.github_image_push \
   -target=aws_iam_role_policy.image_push
 ```
 
+> **Two gotchas learned during the first run:**
+> 1. **Seed SSM placeholders BEFORE this step (or before any `plan`/`import`).** The full
+>    config's `ssm.tf` data sources are read on every operation and fail with
+>    `ParameterNotFound` if the `/ik-arch/prod/lik-*/…` params don't exist. `-target` prunes
+>    them for *apply*, but `import` does not. Seed placeholders (or real values) first:
+>    ```
+>    for n in lik-mcp/LIK_OAUTH_CLIENT_ID lik-ui/LIK_UI_SESSION_SECRET lik-ui/LIK_UI_APP_OAUTH_CLIENT_ID \
+>      lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID \
+>      lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL lik-ui/LIK_UI_GITHUB_CLIENT_ID \
+>      lik-ui/LIK_UI_GITHUB_CLIENT_SECRET lik-ui/LIK_UI_GITHUB_RESOURCE_URL lik-ui/LIK_UI_ANTHROPIC_API_KEY \
+>      lik-ui/LIK_UI_AGENTS_CONFIG; do
+>      AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 --type SecureString \
+>        --name "/ik-arch/prod/$n" --value PLACEHOLDER_REPLACE_ME; done
+>    ```
+> 2. **Run this apply in the background / with a long timeout.** DB creation takes 5–10 min.
+>    If the apply process is killed mid-flight, resources get created in AWS but not recorded
+>    in state (orphans), and you must `terraform force-unlock <id>` then `terraform import`
+>    each orphan (`random_password.db_master` must be imported from a `bash` script file to
+>    dodge the password-quoting gotcha). Prefer letting it run to completion.
+
 Record the outputs:
 
 ```
-AWS_PROFILE=lik mise exec -- terraform output
+mise exec -- terraform output
 ```
 
 You'll use `lik_mcp_service_url`, `lik_mcp_resource_server_url`, `lik_ui_service_url`,
-`lik_ui_oauth_callback_urls`, and `github_image_push_role_arn`.
+`lik_ui_oauth_callback_urls`, and `github_image_push_role_arn` — captured values are in the
+Deployment status table above.
 
 ### 2. Register OAuth clients under Nava org ownership
 
