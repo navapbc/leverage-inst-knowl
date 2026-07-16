@@ -4,6 +4,8 @@ Settings are read once and the same object configures both the bind address and 
 so the transport selection and the server share one config (mirrors lik-mcp).
 """
 
+import logging
+
 import uvicorn
 
 from .agents import build_agents_client
@@ -44,8 +46,24 @@ def build_production_app(settings: Settings):
     )
 
 
+class _HealthCheckFilter(logging.Filter):
+    """Drop uvicorn access-log lines for the health-check endpoint.
+
+    Lightsail probes ``/healthz`` from every node every few seconds, which otherwise
+    buries real request logs. Uvicorn's access record puts the request path at
+    ``record.args[2]``; we keep everything else.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and args[2] == "/healthz":
+            return False
+        return True
+
+
 def main() -> None:
     settings = Settings()
+    logging.getLogger("uvicorn.access").addFilter(_HealthCheckFilter())
     app = build_production_app(settings)
     uvicorn.run(app, host=settings.http_host, port=settings.http_port)
 

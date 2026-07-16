@@ -204,7 +204,28 @@ this step exists to prevent.
    - **App login** → redirect `<lik_ui_service_url>/auth/callback`
    - **lik-mcp connection** → redirect `<lik_ui_service_url>/connections/callback`
    - **Google Drive connection** → redirect `<lik_ui_service_url>/connections/callback`
-5. **Add org co-owners** so the clients aren't bound to one person: IAM → grant another Nava
+5. **Enable the Google APIs the Drive connection needs** (APIs & Services → Library, on the
+   `lik-prod` project). Creating the OAuth client is not enough — the required APIs must be
+   enabled on the *same project that owns the OAuth client*, or a tool call returns
+   `403 ... has not been used in project <n> before or it is disabled` *after* a successful
+   connect (auth works, `initialize` works, the first tool call fails). Enable both:
+   - **Drive MCP API** (`drivemcp.googleapis.com`) — the Google-hosted Drive MCP server the
+     agent actually talks to. This is the one that is easy to miss: it is a distinct API from
+     the Drive API, and its absence is what makes `list_recent_files` fail with a bare
+     "access forbidden" once the connection is otherwise fully working.
+     ```
+     AWS_PROFILE=lik mise exec -- gcloud services enable drivemcp.googleapis.com --project lik-prod
+     ```
+   - **Google Drive API** (`drive.googleapis.com`) — the underlying files API the MCP server
+     calls downstream on the user's behalf.
+
+   The scope requested for the Drive connection is declared in code, not in the console's Data
+   Access tab — see `lik-ui/src/lik_ui/sources.py` (the Google Drive source entry):
+   `openid`, `email`, `https://www.googleapis.com/auth/drive.readonly`. `drive.readonly` is
+   sufficient for reading files/metadata/content (it is one of the scopes the Drive MCP server
+   advertises as supported) and grants no write access. After changing scopes, existing
+   connections must **reconnect** — a new scope needs fresh consent.
+6. **Add org co-owners** so the clients aren't bound to one person: IAM → grant another Nava
    admin `Owner`/`Editor` on the `lik-prod` project. Ownership now survives any one departure.
 
 Record each client id + secret for step 3. (The lik-mcp connection's client id is also

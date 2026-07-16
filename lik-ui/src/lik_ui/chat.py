@@ -141,6 +141,11 @@ class AnthropicSessionsClient:
                 "type": "error",
                 "error_type": getattr(err, "type", "session.error"),
                 "mcp_server_name": getattr(err, "mcp_server_name", None),
+                # Carry the platform's human-readable message and whether it's still
+                # retrying vs. given up, so the UI can show a non-MCP error (e.g. an
+                # overloaded model) accurately instead of a generic "reconnect" nudge.
+                "message": getattr(err, "message", None),
+                "retry_status": getattr(getattr(err, "retry_status", None), "type", None),
             }
         if etype == "session.status_running":
             # The turn left the work queue and the agent is now working. Lets the UI move a

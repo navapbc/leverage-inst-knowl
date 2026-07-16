@@ -143,6 +143,28 @@ def test_normalize_model_request_end_carries_token_usage():
     }
 
 
+def test_normalize_session_error_carries_message_and_retry_status():
+    # A non-MCP error (e.g. an overloaded model) has no mcp_server_name; the message and
+    # retry status must survive so the UI can report it accurately instead of a generic
+    # "reconnect your source" nudge.
+    ev = SimpleNamespace(
+        type="session.error",
+        error=SimpleNamespace(
+            type="model_overloaded_error",
+            message="The API is temporarily overloaded.",
+            mcp_server_name=None,
+            retry_status=SimpleNamespace(type="exhausted"),
+        ),
+    )
+    assert AnthropicSessionsClient._normalize(ev) == {
+        "type": "error",
+        "error_type": "model_overloaded_error",
+        "mcp_server_name": None,
+        "message": "The API is temporarily overloaded.",
+        "retry_status": "exhausted",
+    }
+
+
 def test_new_chat_creates_session_with_vault_and_redirects(db):
     sc = FakeSessionsClient()
     client = TestClient(_app(db, sc), follow_redirects=False)
