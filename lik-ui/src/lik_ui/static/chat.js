@@ -291,9 +291,9 @@
   // missed (e.g. it subscribed after a fast turn already ended) without a manual refresh.
   function loadHistory() {
     return fetch("/chat/" + sessionId + "/history")
-      .then(function (r) { return r.ok ? r.json() : []; })
-      .then(function (events) {
-        if (!Array.isArray(events)) return;
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (data) {
+        const events = (data && Array.isArray(data.events)) ? data.events : [];
         resetTranscript();
         events.forEach(function (event) {
           if (event.type === "user") {
@@ -313,15 +313,17 @@
             errorBubble(event);
           }
         });
+        return (data && data.status) || "idle";
       })
-      .catch(function () { /* history is best-effort; a blank transcript is fine */ });
+      .catch(function () { return "idle"; /* history is best-effort; a blank transcript is fine */ });
   }
 
   // Reload persisted history, then clear any trusted-server call left waiting — e.g. a pause
   // that predates a page refresh, which history replays with its prompt intact.
   function reconcile() {
-    return loadHistory().then(function () {
+    return loadHistory().then(function (status) {
       autoApproveNext(pendingCallIds());
+      return status;
     });
   }
 
@@ -435,5 +437,15 @@
                "⏳ Queued — waiting for the agent…");
   });
 
-  reconcile();
+  reconcile().then(function (status) {
+    // A turn already in flight when the page loads (e.g. a queued retry after a reload) has
+    // no live stream attached yet, so history alone renders it silently. Attach to it so its
+    // queued/running state shows and it streams to completion without a manual refresh.
+    if (status && status.toLowerCase() !== "idle") {
+      const label = status.toLowerCase().indexOf("queue") !== -1
+        ? "⏳ Queued — waiting for the agent…"
+        : "⚙ Working — the agent is running…";
+      streamTurn("/chat/" + sessionId + "/resume", label);
+    }
+  });
 })();

@@ -67,6 +67,17 @@ class SessionsClient(Protocol):
         for the user's own turns (which the live stream never echoes back)."""
         ...
 
+    def status(self, session_id: str) -> str:
+        """Return the session's current lifecycle status (e.g. "idle", "queued",
+        "running"). Read on page load so an in-flight turn can be reflected in the UI."""
+        ...
+
+    def resume_stream(self, session_id: str) -> Iterator[dict]:
+        """Attach to an already in-flight turn without sending anything, yielding its
+        remaining events in the same normalized vocabulary as ``send_and_stream``. Used
+        when a page reload finds a turn still queued/running so it isn't left silent."""
+        ...
+
 
 class AnthropicSessionsClient:
     """Real ``SessionsClient`` backed by the Anthropic SDK's Managed Agents sessions API.
@@ -177,9 +188,10 @@ class AnthropicSessionsClient:
             return list(getattr(stop, "event_ids", None) or [])
         return []
 
-    def _stream(self, session_id: str, send_events: list[dict]) -> Iterator[dict]:
-        """Dispatch ``send_events`` into the session and yield the turn's normalized events.
-        Terminates with ``{"type": "done"}`` when the turn completes, or
+    def _stream(self, session_id: str, send_events: list[dict] | None) -> Iterator[dict]:
+        """Dispatch ``send_events`` into the session (or nothing, when ``send_events`` is
+        None — used to attach to a turn already in flight) and yield the turn's normalized
+        events. Terminates with ``{"type": "done"}`` when the turn completes, or
         ``{"type": "awaiting_confirmation", "event_ids": [...]}`` when it pauses for the user
         (e.g. a tool call needing approval) — the caller resumes via ``confirm_and_stream``."""
         events = self._client.beta.sessions.events
@@ -191,7 +203,8 @@ class AnthropicSessionsClient:
         # page refresh. The stream carries only events from connection time forward (prior turns
         # aren't replayed), so opening it early doesn't duplicate history.
         with events.stream(session_id) as stream:
-            events.send(session_id, events=send_events)
+            if send_events:
+                events.send(session_id, events=send_events)
             for event in stream:
                 etype = getattr(event, "type", "")
                 if etype == "end_turn" or etype.startswith("session.status_terminated"):
@@ -240,6 +253,20 @@ class AnthropicSessionsClient:
                 if normalized["type"] == "status":
                     continue  # live-only; a past turn's "running" means nothing on replay
                 yield normalized
+
+    def status(self, session_id: str) -> str:
+        session = self._client.beta.sessions.retrieve(session_id)
+        return getattr(session, "status", "") or ""
+
+    def resume_stream(self, session_id: str) -> Iterator[dict]:
+        # Only attach when a turn is actually in flight: subscribing to an idle session
+        # would block waiting for events that never come. This re-checks status (the page
+        # decided to resume from a slightly older read); on the rare race where the turn
+        # ends in between, the browser falls back to a history reload on ``done``.
+        if self.status(session_id).lower() in ("", "idle"):
+            yield {"type": "done"}
+            return
+        yield from self._stream(session_id, None)
 
 
 def build_sessions_client(settings: Settings) -> SessionsClient | None:
@@ -321,8 +348,9 @@ def register_chat_routes(app) -> None:
 
     @app.get("/chat/{session_id}/history")
     def chat_history(request: Request, session_id: str):
-        """Prior events for the session, replayed when the page opens.
-        Empty in stub mode (no sessions client) so the transcript just starts blank."""
+        """Prior events for the session plus its current status, replayed when the page
+        opens. The status lets the page reflect a turn still in flight (e.g. a queued
+        retry after a reload). Empty/idle in stub mode so the transcript starts blank."""
         user = require_user(request)
         session = request.app.state.store.get_session(session_id, user["id"])
         if not session:
@@ -330,14 +358,30 @@ def register_chat_routes(app) -> None:
 
         sessions_client: SessionsClient | None = request.app.state.sessions_client
         if sessions_client is None:
-            return JSONResponse([])
+            return JSONResponse({"status": "idle", "events": []})
         try:
             events = list(sessions_client.list_events(session["session_id"]))
+            status = sessions_client.status(session["session_id"])
         except Exception as exc:  # noqa: BLE001 - a history-fetch failure shouldn't block chatting
             return JSONResponse(
                 {"detail": f"Could not load history: {exc}"}, status_code=502
             )
-        return JSONResponse(events)
+        return JSONResponse({"status": status, "events": events})
+
+    @app.get("/chat/{session_id}/resume")
+    def chat_resume(request: Request, session_id: str):
+        """Attach to a turn already in flight (found via the status on page load) and
+        stream its remaining events, so a queued/running turn isn't left silent until a
+        manual refresh. No-op (just ``done``) in stub mode or once the turn has ended."""
+        user = require_user(request)
+        session = request.app.state.store.get_session(session_id, user["id"])
+        if not session:
+            return HTMLResponse("Session not found.", status_code=404)
+
+        sessions_client: SessionsClient | None = request.app.state.sessions_client
+        if sessions_client is None:
+            return _sse(iter([{"type": "done"}]))
+        return _sse(sessions_client.resume_stream(session["session_id"]))
 
     def _sse(events: Iterator[dict]) -> StreamingResponse:
         """Wrap a normalized-event generator as an SSE response, converting a mid-stream

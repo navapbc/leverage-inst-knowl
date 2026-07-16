@@ -13,11 +13,19 @@ from tests.test_oauth_connector import RecordingVaultClient
 
 
 class FakeSessionsClient:
-    def __init__(self, events=None, raises=False, history=None):
+    def __init__(self, events=None, raises=False, history=None, session_status="idle", resume=None):
         self.created = []
         self.events = events if events is not None else [{"type": "text", "text": "Hello"}, {"type": "done"}]
         self.raises = raises
         self.history = history or []
+        self.session_status = session_status
+        self.resume = resume if resume is not None else [{"type": "text", "text": "resumed"}, {"type": "done"}]
+
+    def status(self, session_id):
+        return self.session_status
+
+    def resume_stream(self, session_id):
+        yield from self.resume
 
     def create_session(self, agent_id, environment_id, vault_ids, title):
         self.created.append((agent_id, environment_id, tuple(vault_ids), title))
@@ -163,6 +171,24 @@ def test_normalize_session_error_carries_message_and_retry_status():
         "message": "The API is temporarily overloaded.",
         "retry_status": "exhausted",
     }
+
+
+def _client_with_status(status):
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+    client._client = SimpleNamespace(
+        beta=SimpleNamespace(sessions=SimpleNamespace(
+            retrieve=lambda session_id: SimpleNamespace(status=status)))
+    )
+    return client
+
+
+def test_status_reads_session_status():
+    assert _client_with_status("queued").status("s") == "queued"
+
+
+def test_resume_stream_returns_done_without_attaching_when_idle():
+    # Subscribing to an idle session would block forever, so resume short-circuits.
+    assert list(_client_with_status("idle").resume_stream("s")) == [{"type": "done"}]
 
 
 def test_new_chat_creates_session_with_vault_and_redirects(db):
@@ -431,8 +457,33 @@ def test_history_replays_prior_events(db):
     r = client.get(f"/chat/{session_id}/history")
     assert r.status_code == 200
     body = r.json()
-    assert [e["type"] for e in body] == ["user", "tool_use", "text"]
-    assert body[0]["text"] == "hello"
+    assert [e["type"] for e in body["events"]] == ["user", "tool_use", "text"]
+    assert body["events"][0]["text"] == "hello"
+    assert body["status"] == "idle"
+
+
+def test_history_reports_in_flight_status(db):
+    # A turn still queued when the page (re)loads must be reported so the UI can show it.
+    sc = FakeSessionsClient(history=[{"type": "user", "text": "retry"}], session_status="queued")
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    body = client.get(f"/chat/{session_id}/history").json()
+    assert body["status"] == "queued"
+    assert [e["type"] for e in body["events"]] == ["user"]
+
+
+def test_resume_route_streams_in_flight_turn(db):
+    sc = FakeSessionsClient(resume=[{"type": "text", "text": "picked up"}, {"type": "done"}])
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    r = client.get(f"/chat/{session_id}/resume")
+    assert r.status_code == 200
+    assert "picked up" in r.text
+    assert '"type": "done"' in r.text
 
 
 def test_history_empty_in_stub_mode(db):
@@ -449,7 +500,7 @@ def test_history_empty_in_stub_mode(db):
     _login(stub_client)
     r = stub_client.get(f"/chat/{session_id}/history")
     assert r.status_code == 200
-    assert r.json() == []
+    assert r.json() == {"status": "idle", "events": []}
 
 
 def test_new_chat_unknown_agent_404(db):
