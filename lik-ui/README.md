@@ -110,6 +110,10 @@ dedicated workspace isolates LIK's spend, rate limits, and API keys, so its usag
 tracked and capped without affecting other Nava work, and access can be scoped to just the
 people who run it. Optional — skip it if the default workspace is good enough for now.
 
+A workspace can be used to lock down the vault so that only admins can see the vault IDs,
+which can be used to get access to data as other users.
+More details at https://platform.claude.com/docs/en/manage-claude/workspaces.
+
 ## TODO: streaming timeouts on the deployed ingress (scaling)
 
 The chat endpoint streams tokens to the browser over **SSE** (`StreamingResponse` with
