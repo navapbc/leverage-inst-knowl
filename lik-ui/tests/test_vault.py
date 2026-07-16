@@ -84,7 +84,9 @@ class _FakeCredentialsAPI:
         self.creds = [c for c in self.creds if c.id != credential_id]
 
     def create(self, *, vault_id, display_name, auth):
-        url = auth["mcp_server_url"]
+        # The platform stores the URL with a trailing slash stripped and enforces uniqueness
+        # on that stored form, so mirror both here to reproduce the real 409 behavior.
+        url = auth["mcp_server_url"].rstrip("/")
         if any(c.auth.mcp_server_url == url for c in self.creds):
             raise AssertionError(f"409: credential already exists for {url}")
         self._n += 1
@@ -126,6 +128,20 @@ def test_reconnect_updates_existing_credential_for_same_url():
     assert first_id == second_id  # same credential, updated in place
     urls = [c.auth.mcp_server_url for c in creds.creds]
     assert urls == [url]  # exactly one credential remains for the URL
+
+
+def test_reconnect_matches_across_trailing_slash():
+    """A slash-terminated declared URL (e.g. GitHub's ``.../mcp/``) must find its stored,
+    slash-stripped credential on reconnect and update it in place — not 409 on a duplicate
+    create. Regression for the 'credential already exists for this MCP server URL' error."""
+    client, creds = _vault_client_with_fake_sdk()
+    url = "https://api.githubcopilot.com/mcp/"
+
+    first_id = _put(client, url)
+    second_id = _put(client, url)  # would raise the fake's 409 if it created a duplicate
+
+    assert first_id == second_id
+    assert [c.auth.mcp_server_url for c in creds.creds] == ["https://api.githubcopilot.com/mcp"]
 
 
 def test_reconnect_refresh_block_omits_immutable_fields():

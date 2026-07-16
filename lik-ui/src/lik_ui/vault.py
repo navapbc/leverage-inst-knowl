@@ -103,10 +103,16 @@ class AnthropicVaultClient:
         return credential.id
 
     def _find_credential_id(self, vault_id: str, mcp_server_url: str) -> str | None:
-        """Return the id of the credential (if any) already keyed to this exact MCP server URL."""
+        """Return the id of the credential (if any) already keyed to this MCP server URL.
+        Compare on the normalized URL: the platform stores the URL with a trailing slash
+        stripped, so a slash-terminated declared URL (e.g. GitHub's ``.../mcp/``) would miss
+        its stored form under raw equality — and the ensuing create would 409 on the duplicate."""
+        from .sources import normalize_url
+
+        target = normalize_url(mcp_server_url)
         for cred in self._client.beta.vaults.credentials.list(vault_id=vault_id):
             url = getattr(getattr(cred, "auth", None), "mcp_server_url", None)
-            if url == mcp_server_url:
+            if url and normalize_url(url) == target:
                 return cred.id
         return None
 
