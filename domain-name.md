@@ -126,6 +126,24 @@ retry before assuming something is broken.
 
 ---
 
+## Caveat: real-time streaming and timeouts
+
+Both apps stream responses over **SSE** (`text/event-stream`): lik-ui streams chat tokens,
+and lik-mcp uses the MCP streamable-http transport (SSE under the hood). Two things to know
+when putting them behind a custom domain:
+
+- **Keep the routing records pointing *directly* at the container service (as Step 6 does).
+  Do NOT insert a Lightsail distribution / CDN in front of these apps.** A Lightsail
+  distribution has a 30-second origin-response timeout and only handles
+  `Transfer-Encoding: chunked`, which breaks longer SSE streams.
+- **The container-service ingress has a fixed, undocumented, non-configurable timeout.** A
+  long stream (e.g. a lengthy LLM generation or a slow MCP tool call) can be cut mid-response
+  with a 504-class error, and there is no knob to raise the ceiling. If long streams die
+  mid-response, suspect the ingress timeout first — not the app code.
+- **Scaling fallback:** if reliable long-lived streaming becomes a hard requirement, the
+  managed Lightsail ingress is the wrong tier — move to ECS/EC2 behind an ALB, where the
+  idle timeout is configurable. See the apps' READMEs for the tracked TODO.
+
 ## Summary of records in the `lik.navapbc.com` zone
 
 | Record | Type | Purpose | Points to |

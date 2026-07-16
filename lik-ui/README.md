@@ -100,6 +100,20 @@ dedicated workspace isolates LIK's spend, rate limits, and API keys, so its usag
 tracked and capped without affecting other Nava work, and access can be scoped to just the
 people who run it. Optional — skip it if the default workspace is good enough for now.
 
+## TODO: streaming timeouts on the deployed ingress (scaling)
+
+The chat endpoint streams tokens to the browser over **SSE** (`StreamingResponse` with
+`media_type="text/event-stream"`, consumed by an `EventSource`). On the current Lightsail
+container-service deployment, the managed ingress has a **fixed, undocumented,
+non-configurable timeout**: a long LLM generation whose stream exceeds it is cut
+mid-response with a 504-class error, and there is no knob to raise the ceiling. Do **not**
+front the app with a Lightsail distribution/CDN either — its 30s origin timeout and
+chunked-only handling break SSE. If long responses start dying mid-stream, suspect the
+ingress timeout before the app code. The fix when this becomes a hard limit is to move off
+the managed Lightsail ingress to ECS/EC2 behind an ALB (configurable idle timeout);
+switching the browser transport to WebSockets is a lighter mitigation if staying on
+Lightsail. See `../domain-name.md` (Caveat: real-time streaming and timeouts).
+
 ## Configuration
 
 All config is `LIK_UI_`-prefixed; see `.env.example`. Outside `local`/`test`, the app

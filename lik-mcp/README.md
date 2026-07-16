@@ -270,3 +270,19 @@ landed — so do not load real or restricted data yet:
 **Catalog table maintenance/management**
 
 - Age out old rows.
+
+**Streaming timeouts on the deployed ingress (scaling)**
+
+- The service uses the MCP `streamable-http` transport, which streams over SSE
+  (`text/event-stream`). On the current Lightsail container-service deployment, the managed
+  ingress has a **fixed, undocumented, non-configurable timeout** that would cut a stream
+  exceeding it with a 504-class error. **For lik-mcp this risk is very low**: no AI/LLM is
+  involved — every tool just runs a fast Postgres query and returns, so responses complete
+  in well under any plausible ingress timeout. The concern only becomes real if a future
+  tool does long-running work. (It matters much more for lik-ui, which streams LLM output.)
+  Two things to keep true regardless: do **not** front the service with a Lightsail
+  distribution/CDN (its 30s origin timeout and chunked-only handling break SSE), and if
+  streams ever start dying mid-response, suspect the ingress timeout before the app. The
+  fix if it becomes a hard limit is to move off the managed Lightsail ingress to ECS/EC2
+  behind an ALB, where the idle timeout is configurable. See `../domain-name.md` (Caveat:
+  real-time streaming and timeouts).
