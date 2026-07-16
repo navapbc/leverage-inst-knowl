@@ -75,6 +75,10 @@ resource "aws_lightsail_container_service_deployment_version" "lik_ui" {
       LIK_UI_GITHUB_CLIENT_SECRET = data.aws_ssm_parameter.ui["LIK_UI_GITHUB_CLIENT_SECRET"].value
       LIK_UI_GITHUB_RESOURCE_URL  = data.aws_ssm_parameter.ui["LIK_UI_GITHUB_RESOURCE_URL"].value
 
+      LIK_UI_SLACK_CLIENT_ID     = data.aws_ssm_parameter.ui["LIK_UI_SLACK_CLIENT_ID"].value
+      LIK_UI_SLACK_CLIENT_SECRET = data.aws_ssm_parameter.ui["LIK_UI_SLACK_CLIENT_SECRET"].value
+      LIK_UI_SLACK_RESOURCE_URL  = data.aws_ssm_parameter.ui["LIK_UI_SLACK_RESOURCE_URL"].value
+
       LIK_UI_ANTHROPIC_API_KEY = data.aws_ssm_parameter.ui["LIK_UI_ANTHROPIC_API_KEY"].value
       LIK_UI_AGENTS_CONFIG     = data.aws_ssm_parameter.ui["LIK_UI_AGENTS_CONFIG"].value
     }
