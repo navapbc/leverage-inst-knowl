@@ -258,11 +258,18 @@
   }
 
   function errorBubble(event) {
-    const b = bubble("error", "Connection issue" + (event.mcp_server_name ? " with " + event.mcp_server_name : "") + ". Reconnect that source and retry.");
-    const link = document.createElement("a");
-    link.href = "/connections?agent_id=" + encodeURIComponent(agentId);
-    link.textContent = " Fix connections";
-    b.appendChild(link);
+    // Always surface the platform's own error text — never a synthesized message, which
+    // can mislead (e.g. telling the user to "reconnect" when the model was just
+    // overloaded). Fall back to the raw error type only if no message was provided.
+    // A credential error additionally names the MCP server to reconnect, so append the
+    // Fix-connections link — but the wording stays the original error.
+    const b = bubble("error", event.message || event.error_type || "Unknown error");
+    if (event.mcp_server_name) {
+      const link = document.createElement("a");
+      link.href = "/connections?agent_id=" + encodeURIComponent(agentId);
+      link.textContent = " Fix connections";
+      b.appendChild(link);
+    }
   }
 
   // Wipe the rendered transcript back to empty so it can be re-rendered from an
