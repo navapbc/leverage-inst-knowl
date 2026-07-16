@@ -56,14 +56,14 @@ def build_handler(*, www_auth_hint=True, registration=True, mcp_status=401, call
     return handler, calls
 
 
-def _connector(store, handler, registry=None):
+def _connector(handler, registry=None):
     factory = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))  # noqa: E731
-    return OAuthConnector(store, registry or {}, REDIRECT, client_factory=factory)
+    return OAuthConnector(registry or {}, REDIRECT, client_factory=factory)
 
 
-async def test_discover_via_www_authenticate_hint(store):
+async def test_discover_via_www_authenticate_hint():
     handler, _ = build_handler()
-    conn = _connector(store, handler)
+    conn = _connector(handler)
     d = await conn.discover(MCP_URL)
     assert d.issuer == ISSUER
     assert d.authorization_endpoint == f"{ISSUER}/authorize"
@@ -71,16 +71,16 @@ async def test_discover_via_www_authenticate_hint(store):
     assert d.registration_endpoint == REG_ENDPOINT
 
 
-async def test_discover_falls_back_to_wellknown_prm(store):
+async def test_discover_falls_back_to_wellknown_prm():
     # No resource_metadata hint on the 401 -> connector tries the well-known PRM paths.
     handler, calls = build_handler(www_auth_hint=False)
-    conn = _connector(store, handler)
+    conn = _connector(handler)
     d = await conn.discover(MCP_URL)
     assert d.token_endpoint == f"{ISSUER}/token"
     assert calls.get(("GET", PRM_HINT_URL), 0) >= 1  # path-suffixed well-known was tried
 
 
-async def test_discover_falls_back_to_as_metadata_at_origin(store):
+async def test_discover_falls_back_to_as_metadata_at_origin():
     # Atlassian-style: no protected-resource metadata at all (401 has no hint, well-known
     # PRM 404s), but AS metadata is served directly at the MCP origin.
     origin_as = "https://mcp.example.com/.well-known/oauth-authorization-server"
@@ -99,26 +99,29 @@ async def test_discover_falls_back_to_as_metadata_at_origin(store):
             })
         return httpx.Response(404)
 
-    conn = _connector(store, handler)
+    conn = _connector(handler)
     d = await conn.discover(MCP_URL)
     assert d.token_endpoint == "https://mcp.example.com/token"
     assert d.registration_endpoint == "https://mcp.example.com/register"
 
 
-async def test_discover_raises_when_metadata_unreachable(store):
+async def test_discover_raises_when_metadata_unreachable():
     handler, _ = build_handler(www_auth_hint=False, mcp_status=404)
 
     def only_404(request):  # nothing resolves
         return httpx.Response(404)
 
-    conn = _connector(store, only_404)
+    conn = _connector(only_404)
     with pytest.raises(ConnectorError):
         await conn.discover(MCP_URL)
 
 
-async def test_acquire_via_dcr_registers_then_reuses(store):
+async def test_acquire_via_dcr_registers_fresh_each_time():
+    # No caching: each acquisition re-registers. A cached client_id can silently expire on
+    # the AS and is only rejected at the browser authorization step (which the server never
+    # sees), so registering per connect avoids a permanently-broken cached registration.
     handler, calls = build_handler(registration=True)
-    conn = _connector(store, handler)
+    conn = _connector(handler)
     d = await conn.discover(MCP_URL)
 
     creds = await conn.acquire_client(MCP_URL, d)
@@ -126,18 +129,17 @@ async def test_acquire_via_dcr_registers_then_reuses(store):
     assert creds.client_secret == "dyn_secret"
     assert creds.offline is True  # offline_access advertised
     assert calls[("POST", REG_ENDPOINT)] == 1
-    assert store.get_dcr_registration(ISSUER)["client_id"] == "dyn_client"
 
-    # Second acquisition reuses the stored registration — no second POST.
+    # Second acquisition registers again — a fresh POST, no reuse.
     creds2 = await conn.acquire_client(MCP_URL, d)
     assert creds2.client_id == "dyn_client"
-    assert calls[("POST", REG_ENDPOINT)] == 1
+    assert calls[("POST", REG_ENDPOINT)] == 2
 
 
-async def test_acquire_configured_when_no_dcr(store):
+async def test_acquire_configured_when_no_dcr():
     handler, calls = build_handler(registration=False)
     registry = {MCP_URL: SourceConfig(client_id="preconf", client_secret="s", scopes=["openid", "email"], offline=True)}
-    conn = _connector(store, handler, registry=registry)
+    conn = _connector(handler, registry=registry)
     d = await conn.discover(MCP_URL)
     assert d.registration_endpoint is None
 
@@ -146,9 +148,9 @@ async def test_acquire_configured_when_no_dcr(store):
     assert ("POST", REG_ENDPOINT) not in calls  # no DCR attempted
 
 
-async def test_acquire_raises_when_no_dcr_and_no_config(store):
+async def test_acquire_raises_when_no_dcr_and_no_config():
     handler, _ = build_handler(registration=False)
-    conn = _connector(store, handler, registry={})
+    conn = _connector(handler, registry={})
     d = await conn.discover(MCP_URL)
     with pytest.raises(ConnectorError):
         await conn.acquire_client(MCP_URL, d)
@@ -171,7 +173,7 @@ def test_make_pkce_challenge_is_s256_of_verifier():
     import base64
     import hashlib
 
-    conn = OAuthConnector(None, {}, REDIRECT)
+    conn = OAuthConnector({}, REDIRECT)
     verifier, challenge = conn.make_pkce()
     expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
     assert challenge == expected
@@ -180,7 +182,7 @@ def test_make_pkce_challenge_is_s256_of_verifier():
 def test_authorization_url_carries_pkce_resource_and_offline():
     from urllib.parse import parse_qs, urlsplit
 
-    conn = OAuthConnector(None, {}, REDIRECT)
+    conn = OAuthConnector({}, REDIRECT)
     url = conn.authorization_url(_DISCOVERY, _CREDS, state="st", code_challenge="ch", mcp_url=MCP_URL)
     q = parse_qs(urlsplit(url).query)
     assert q["code_challenge"] == ["ch"]
@@ -202,22 +204,22 @@ def test_authorization_url_omits_offline_access_when_as_lacks_it():
         token_endpoint=f"{ISSUER}/token",
         scopes_supported=["openid", "email", "profile"],  # no offline_access
     )
-    conn = OAuthConnector(None, {}, REDIRECT)
+    conn = OAuthConnector({}, REDIRECT)
     url = conn.authorization_url(google_like, _CREDS, state="st", code_challenge="ch", mcp_url=MCP_URL)
     q = parse_qs(urlsplit(url).query)
     assert "offline_access" not in q["scope"][0]
     assert q["access_type"] == ["offline"]
 
 
-async def test_exchange_code_posts_and_returns_tokens(store):
+async def test_exchange_code_posts_and_returns_tokens():
     handler, calls = build_handler()
-    conn = _connector(store, handler)
+    conn = _connector(handler)
     tokens = await conn.exchange_code(_DISCOVERY, _CREDS, "the-code", "the-verifier", MCP_URL)
     assert tokens["access_token"] == "at-xyz"
     assert calls[("POST", f"{ISSUER}/token")] == 1
 
 
-async def test_exchange_code_requests_json(store):
+async def test_exchange_code_requests_json():
     # GitHub's token endpoint returns form-encoding unless asked for JSON; the exchange
     # must send Accept: application/json so every provider replies with JSON.
     seen = {}
@@ -226,25 +228,25 @@ async def test_exchange_code_requests_json(store):
         seen["accept"] = request.headers.get("accept")
         return httpx.Response(200, json={"access_token": "at", "expires_in": 3600})
 
-    conn = _connector(store, handler)
+    conn = _connector(handler)
     await conn.exchange_code(_DISCOVERY, _CREDS, "code", "verifier", MCP_URL)
     assert seen["accept"] == "application/json"
 
 
-async def test_exchange_code_raises_on_non_json_response(store):
+async def test_exchange_code_raises_on_non_json_response():
     # A token endpoint that answers 200 with form-encoded text (GitHub's default) must
     # surface a clean ConnectorError, not a raw JSONDecodeError bubbling up as a 500.
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="access_token=at&token_type=bearer",
                               headers={"content-type": "application/x-www-form-urlencoded"})
 
-    conn = _connector(store, handler)
+    conn = _connector(handler)
     with pytest.raises(ConnectorError, match="non-JSON"):
         await conn.exchange_code(_DISCOVERY, _CREDS, "code", "verifier", MCP_URL)
 
 
 def test_refresh_block_omitted_without_refresh_token():
-    conn = OAuthConnector(None, {}, REDIRECT)
+    conn = OAuthConnector({}, REDIRECT)
     assert conn._refresh_block(_DISCOVERY, _CREDS, {"access_token": "at"}) is None
     block = conn._refresh_block(_DISCOVERY, _CREDS, {"access_token": "at", "refresh_token": "rt"})
     assert block["refresh_token"] == "rt"
@@ -255,7 +257,7 @@ def test_refresh_block_omitted_without_refresh_token():
 def test_refresh_block_omits_scope_when_empty():
     # Atlassian-style: no granted scope in the token response and none requested -> omit
     # the scope field entirely (the platform rejects an empty string).
-    conn = OAuthConnector(None, {}, REDIRECT)
+    conn = OAuthConnector({}, REDIRECT)
     creds = ClientCredentials(client_id="c", client_secret=None, scopes=[], offline=True)
     disc = Discovery(
         issuer=ISSUER, authorization_endpoint=f"{ISSUER}/authorize",
@@ -293,8 +295,8 @@ class RecordingVaultClient:
         return [{"display_name": c.get("display_name"), "url": c["mcp_server_url"]} for c in self.credentials]
 
 
-def test_deposit_keys_credential_by_exact_url_with_refresh_block(store):
-    conn = OAuthConnector(store, {}, REDIRECT)
+def test_deposit_keys_credential_by_exact_url_with_refresh_block():
+    conn = OAuthConnector({}, REDIRECT)
     vc = RecordingVaultClient()
     conn.deposit(
         vc, "vlt_9", MCP_URL, _DISCOVERY, _CREDS,

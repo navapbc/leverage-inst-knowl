@@ -27,16 +27,3 @@ def test_sessions_are_scoped_to_their_user(store):
     # b cannot open a's session
     assert store.get_session(sess["session_id"], b["id"]) is None
     assert store.get_session(sess["session_id"], a["id"])["session_id"] == "sess_1"
-
-
-def test_dcr_registration_absent_then_stored_and_reused(store):
-    assert store.get_dcr_registration("https://cf.mcp.atlassian.com") is None
-    store.put_dcr_registration(
-        "https://cf.mcp.atlassian.com", "client_abc", "secret_xyz", {"redirect_uris": ["https://x/cb"]}
-    )
-    got = store.get_dcr_registration("https://cf.mcp.atlassian.com")
-    assert got["client_id"] == "client_abc"
-    assert got["metadata"]["redirect_uris"] == ["https://x/cb"]
-    # Re-registering the same issuer updates in place (no duplicate; issuer is the PK).
-    store.put_dcr_registration("https://cf.mcp.atlassian.com", "client_def", "secret_new", {})
-    assert store.get_dcr_registration("https://cf.mcp.atlassian.com")["client_id"] == "client_def"

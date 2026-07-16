@@ -21,7 +21,6 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from pydantic import BaseModel
 
-from .db import Store
 from .sources import SourceConfig, normalize_url
 
 _RESOURCE_METADATA_RE = re.compile(r'resource_metadata="([^"]+)"')
@@ -115,8 +114,7 @@ class ClientCredentials(BaseModel):
 
 
 class OAuthConnector:
-    def __init__(self, store: Store, source_registry: dict[str, SourceConfig], redirect_uri: str, *, client_factory=None):
-        self.store = store
+    def __init__(self, source_registry: dict[str, SourceConfig], redirect_uri: str, *, client_factory=None):
         self.sources = source_registry
         self.redirect_uri = redirect_uri
         # Injected so tests can supply an httpx.MockTransport-backed client.
@@ -213,17 +211,14 @@ class OAuthConnector:
         return self._acquire_configured(mcp_url)
 
     async def _acquire_via_dcr(self, discovery: Discovery) -> ClientCredentials:
+        # Register a fresh client on every connect rather than caching it. Some
+        # authorization servers silently expire or purge dynamically-registered clients
+        # (Atlassian does, despite advertising no expiry), and a cached-but-dead client_id
+        # is only rejected at the browser authorization step — which the server never sees,
+        # so it can't self-heal. Registering per connect sidesteps that trap; the cost is
+        # one extra registration call and some orphaned client records on the AS side.
         offline = "offline_access" in discovery.scopes_supported
         scopes = list(discovery.scopes_supported)
-
-        stored = self.store.get_dcr_registration(discovery.issuer)
-        if stored:
-            return ClientCredentials(
-                client_id=stored["client_id"],
-                client_secret=stored.get("client_secret"),
-                scopes=scopes,
-                offline=offline,
-            )
 
         body = {
             "client_name": "lik-ui",
@@ -245,7 +240,6 @@ class OAuthConnector:
         if not client_id:
             raise ConnectorError("Dynamic client registration returned no client_id")
         client_secret = reg.get("client_secret")
-        self.store.put_dcr_registration(discovery.issuer, client_id, client_secret, reg)
         return ClientCredentials(client_id=client_id, client_secret=client_secret, scopes=scopes, offline=offline)
 
     def _acquire_configured(self, mcp_url: str) -> ClientCredentials:
