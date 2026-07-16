@@ -173,17 +173,34 @@ def test_normalize_session_error_carries_message_and_retry_status():
     }
 
 
-def _client_with_status(status):
+def _client_with_status(status, events=()):
     client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
     client._client = SimpleNamespace(
         beta=SimpleNamespace(sessions=SimpleNamespace(
-            retrieve=lambda session_id: SimpleNamespace(status=status)))
+            retrieve=lambda session_id: SimpleNamespace(status=status),
+            events=SimpleNamespace(list=lambda session_id, order: iter(events))))
     )
     return client
 
 
-def test_status_reads_session_status():
-    assert _client_with_status("queued").status("s") == "queued"
+def test_status_reports_running_session():
+    assert _client_with_status("running").status("s") == "running"
+
+
+def test_status_reports_queued_for_unprocessed_trailing_user_message():
+    # The session status reads "idle" while a just-submitted turn waits unprocessed; the
+    # trailing user message with a null processed_at is what marks it queued.
+    events = [
+        SimpleNamespace(type="agent.message", processed_at="t0"),
+        SimpleNamespace(type="user.message", processed_at=None),
+    ]
+    assert _client_with_status("idle", events).status("s") == "queued"
+
+
+def test_status_stays_idle_when_last_user_message_is_processed():
+    events = [SimpleNamespace(type="user.message", processed_at="t0"),
+              SimpleNamespace(type="agent.message", processed_at="t1")]
+    assert _client_with_status("idle", events).status("s") == "idle"
 
 
 def test_resume_stream_returns_done_without_attaching_when_idle():
