@@ -60,6 +60,28 @@ variable "container_scale" {
   default     = 1
 }
 
+# --- Custom domains (optional) ----------------------------------------------
+# A Lightsail container service's `.url` attribute ALWAYS returns the default
+# `...cs.amazonlightsail.com` address, even after a custom domain is attached — there is no
+# provider attribute that flips it. So the URL-derived env values (APP_BASE_URL,
+# RESOURCE_SERVER_URL, ALLOWED_HOSTS) do NOT follow a custom domain on their own. Set these
+# to the friendly base URLs (scheme + host, no trailing slash, no `/mcp` suffix) to make the
+# apps advertise the custom domain. Leave empty to use the Lightsail default URL (the
+# bootstrap / pre-domain state). Only flip these once the custom domain is validated and
+# attached (see docs/deploy-runbook.md "Custom-domain migration").
+
+variable "ui_custom_domain_url" {
+  description = "Custom base URL for lik-ui, e.g. \"https://ui.lik.navapbc.com\". Empty = use the Lightsail default URL."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_custom_domain_url" {
+  description = "Custom base URL for lik-mcp, e.g. \"https://mcp.lik.navapbc.com\". The /mcp path is appended. Empty = use the Lightsail default URL."
+  type        = string
+  default     = ""
+}
+
 variable "lik_mcp_image" {
   description = <<-EOT
     Lightsail-registered image ref for lik-mcp, e.g. ":lik-mcp-prod.app.3". Produced by

@@ -1,0 +1,18 @@
+# Copy to prod.tfvars (gitignored) and fill in. Apply with:
+#   ./tf.sh apply -var-file=prod.tfvars
+# Only non-default variables need to appear here; see variables.tf for the full list and
+# defaults. Never put secrets in tfvars — those live in SSM (see ssm.tf / the runbook).
+
+# --- Image refs (required for a deployment apply) ---------------------------
+# Lightsail-registered refs from the CI push (`aws lightsail push-container-image`).
+# Bump the ".app.N" number on each redeploy. Omit both for a bootstrap (DB+services) apply.
+lik_mcp_image = ":lik-mcp-prod.app.N"
+lik_ui_image  = ":lik-ui-prod.app.N"
+
+# --- Custom domains (optional) ----------------------------------------------
+# Friendly base URLs (scheme + host, no trailing slash, no /mcp suffix). Empty/omitted =
+# use the Lightsail default ...cs.amazonlightsail.com URL (the pre-domain / bootstrap state).
+# Only set these AFTER the custom domain is validated and attached, or the apps advertise a
+# name that isn't serving yet. See docs/deploy-runbook.md "Custom-domain migration".
+# ui_custom_domain_url  = "https://ui.lik.navapbc.com"
+# mcp_custom_domain_url = "https://mcp.lik.navapbc.com"   # /mcp is appended automatically

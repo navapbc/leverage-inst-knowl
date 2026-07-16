@@ -60,6 +60,16 @@ LIK_UI_DB_PORT=5433 uv run pytest   # compose publishes Postgres on 5433
 The suite refuses to run unless `LIK_UI_DB_NAME` ends in `_test` (it truncates tables),
 and it targets the compose default database `likuidb_test`.
 
+## Smoke test
+
+After a deploy (especially a domain/URL change), verify the OAuth paths end-to-end against
+the live app:
+
+- Open the app at its public URL and sign in — it loads with a valid TLS lock and login
+  succeeds (exercises the app-login callback, `/auth/callback`).
+- Connect one data source (exercises `/connections/callback`) and make a lik-mcp call
+  (exercises the resource URL; expect a one-time reconnect after a resource-URL change).
+
 ## TODO: cache agent `describe` results
 
 The home (agent picker) and connections pages call `AgentsClient.describe(agent_id)` on
@@ -118,6 +128,13 @@ Lightsail. See `../domain-name.md` (Caveat: real-time streaming and timeouts).
 
 All config is `LIK_UI_`-prefixed; see `.env.example`. Outside `local`/`test`, the app
 fails closed if app-login, vault, or agent config is missing. Secrets are never logged.
+
+`LIK_UI_APP_BASE_URL` is the public HTTPS URL the app is reached at; **both OAuth callback
+URLs are derived from it** (`{base}/auth/callback` for login, `{base}/connections/callback`
+for data sources — see `src/lik_ui/__main__.py`). It must match the redirect URIs registered
+with each OAuth provider. In the production Terraform deploy this value is not set by hand —
+it is computed from the container service's URL (or a custom domain when configured); see
+[`../infra/README.md`](../infra/README.md) "URL-derived env values and custom domains".
 
 ## OAuth connector: why it's hand-rolled
 

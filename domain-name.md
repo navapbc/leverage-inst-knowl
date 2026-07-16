@@ -71,20 +71,29 @@ services.
 - On the **lik-mcp** container service → **Custom domains → Create certificate** →
   enter `mcp.lik.navapbc.com`.
 
-Each certificate gives you a **validation record** (a CNAME that proves you own the name).
-Copy both.
+Each certificate needs a **validation record** (a CNAME that proves you own the name) —
+but because your DNS zone lives in Lightsail in the same account (Step 1), you normally
+**don't add this yourself**. See Step 4.
 
-## Step 4 — Add each validation record to your DNS zone
+## Step 4 — Validation records (usually automatic)
 
 This record lets Lightsail confirm you control the name.
 
-Back in your `lik.navapbc.com` DNS zone (from Step 1) in the `DNS records` tab, add the 
-two **validation CNAME records** from Step 3 — one per app.
+**Because your `lik.navapbc.com` zone is a Lightsail DNS zone in the same account,
+Lightsail adds each validation CNAME to it automatically when you create the certificate
+(Step 3).** The certificate status moves from *"Attempting to validate…"* to **Valid** on
+its own, usually within minutes. If that happened, there is nothing to do here — skip to
+Step 5.
+
+**Manual fallback** — only if a certificate is *not* validating automatically (this is the
+required path when your DNS is hosted outside Lightsail, e.g. Route 53 or a registrar).
+On the certificate, expand **Validation details** and copy the CNAME Name and Value, then
+add it in your `lik.navapbc.com` DNS zone's `DNS records` tab — one per app:
 - In the name/subdomain field, paste the name before `.lik.navapbc.com`
 - In the value/target field, paste the Value exactly, e.g. `_424c7224….acm-validations.aws.`
 
-Then wait. Each certificate's status flips from **Pending** to **Valid** once Lightsail
-sees its record (usually minutes, up to about an hour).
+You have 72 hours to add the record before the request expires. Once Lightsail sees it, the
+status flips to **Valid**.
 
 ## Step 5 — Attach the validated certificate to each app
 
@@ -93,6 +102,20 @@ select its now-**Valid** certificate:
 
 - lik-ui → `ui.lik.navapbc.com`
 - lik-mcp → `mcp.lik.navapbc.com`
+
+> **⚠️ If the container services are managed by Terraform (they are — see `infra/`), this
+> console attach creates drift.** Terraform reads the attached domain on its next refresh,
+> and because the attachment lives in a `public_domain_names` block, a `terraform plan` will
+> propose to **remove** it (`- public_domain_names`) unless the config declares it too.
+> Applying that plan would detach your certificate.
+>
+> The `infra/` config already declares the attachment as a `dynamic "public_domain_names"`
+> block gated on the `ui_custom_domain_url` / `mcp_custom_domain_url` variables, with
+> `certificate_name` `lik-ui-prod-cert` / `lik-mcp-prod-cert`. So the fix is to **set those
+> variables** (Step 7.c below) *before* the next apply — that makes the desired config match
+> the console attach, and the plan drops the removal. If the console-created certificate has
+> a different name than those literals, update the `.tf` to match. See
+> `docs/deploy-runbook.md` "Custom-domain migration" for the full apply sequence.
 
 ## Step 6 — Point each friendly name at its app
 
@@ -104,12 +127,75 @@ In your `lik.navapbc.com` DNS zone, add two **routing CNAME records**:
 - `ui.lik.navapbc.com` → the lik-ui container service's default `...cs.amazonlightsail.com` address
 - `mcp.lik.navapbc.com` → the lik-mcp container service's default `...cs.amazonlightsail.com` address
 
-## Step 7 — Update the Managed Agents configuration
+> **Where to find that address:** on the container service's page, the console labels it
+> **Public domain** (e.g. `lik-ui-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com`) —
+> distinct from **Custom domains** (the friendly names you attached) and **Private domain**
+> (internal only). Paste it as a **bare hostname**: no `https://`, no trailing `/`. Heads-up
+> on a naming clash: the Terraform/API field `publicDomainNames` holds the *custom* domains,
+> the opposite of the console's "Public domain" label — hence this guide says "default
+> address" throughout.
 
-The lik-mcp tool is registered in the Managed Agents configuration by its URL, which may still
-points at the old `...cs.amazonlightsail.com` address. Go to https://platform.claude.com/workspaces/default/agents and update all relevant agents to use the new custom domain:
+## Step 7 — Point the app configuration at the friendly domains
+
+The certificate and DNS work above only changes how the apps are *reached*. Three places
+still reference the old `...cs.amazonlightsail.com` addresses and must be updated to the new
+friendly domains, or logins and data-source connections will break.
+
+### Step 7.a — Update the Managed Agents configuration
+
+The lik-mcp tool is registered in the Managed Agents configuration by its URL, which may
+still point at the old `...cs.amazonlightsail.com` address. Go to
+https://platform.claude.com/workspaces/default/agents and update all relevant agents:
 
 - Set the lik-mcp tool URL to `https://mcp.lik.navapbc.com/mcp`
+
+### Step 7.b — Update each OAuth client's registered redirect (callback) URL
+
+Every OAuth provider only redirects back to a **pre-registered** callback URL. lik-ui uses
+two callback paths, both under its own friendly domain (`ui.lik.navapbc.com`):
+
+- **App login** (Google OIDC) → `https://ui.lik.navapbc.com/auth/callback`
+- **Data-source connections** (GitHub, Google Drive, lik-mcp) → `https://ui.lik.navapbc.com/connections/callback`
+
+In each provider's OAuth app settings, **add** the new URL to the allowed redirect/callback
+list (keep the old one until cutover is confirmed, then remove it):
+
+- **Google app-login client** → add the `/auth/callback` URL above.
+- **GitHub OAuth App** → set/add the `/connections/callback` URL as the Authorization callback URL.
+- **Google Drive client** and **lik-mcp client** → add the `/connections/callback` URL.
+- **Atlassian** → nothing to register by hand: it uses Dynamic Client Registration, so lik-ui
+  re-registers the redirect URL automatically on the next connect (it registers whatever
+  `redirect_uri` lik-ui is currently configured with — see Step 7.c). If a stale client was
+  registered under the old domain, just reconnect Atlassian after 7.c to refresh it.
+
+Also update any **resource URLs** that point at lik-mcp's old address so they use the friendly
+domain (these key the stored credential and must match exactly on both sides):
+
+- lik-ui: `LIK_UI_LIKMCP_RESOURCE_URL=https://mcp.lik.navapbc.com/mcp`
+- lik-mcp: `LIK_RESOURCE_SERVER_URL=https://mcp.lik.navapbc.com/mcp`
+
+Because the resource URL is the vault credential key, users may need to **reconnect** lik-mcp
+once after this change.
+
+### Step 7.c — Update the callback URL lik-ui itself sends
+
+lik-ui builds both callback URLs from a single setting — it does **not** hardcode them. Point
+that setting at the friendly domain and redeploy:
+
+- Set `LIK_UI_APP_BASE_URL=https://ui.lik.navapbc.com`
+
+On the next deploy, lik-ui sends `https://ui.lik.navapbc.com/auth/callback` and
+`.../connections/callback` — which must match what you registered in Step 7.b. (This same
+value is what Atlassian's DCR will register, closing the loop for that source.)
+
+> **In the Terraform deployment (`infra/`), you do not set `LIK_UI_APP_BASE_URL` (or the
+> lik-mcp resource URL) by hand.** They are derived from the `ui_custom_domain_url` /
+> `mcp_custom_domain_url` variables, because the container service's `.url` attribute always
+> returns the default `...cs.amazonlightsail.com` address even after the custom domain is
+> attached. Set those two variables in `prod.tfvars` and `terraform apply`; that single
+> change drives all the URL-derived env values *and* keeps the `public_domain_names`
+> attachment from Step 5 under management. See `infra/README.md` "URL-derived env values and
+> custom domains" and `docs/deploy-runbook.md`.
 
 
 ## Step 8 — Test
@@ -148,8 +234,8 @@ when putting them behind a custom domain:
 
 | Record | Type | Purpose | Points to |
 |---|---|---|---|
-| (validation record for ui) | CNAME | Prove domain ownership for the cert | Value given by Lightsail in Step 3 |
-| (validation record for mcp) | CNAME | Prove domain ownership for the cert | Value given by Lightsail in Step 3 |
+| (validation record for ui) | CNAME | Prove domain ownership for the cert | Auto-added by Lightsail at cert creation (Step 4); manual only if auto-validation fails |
+| (validation record for mcp) | CNAME | Prove domain ownership for the cert | Auto-added by Lightsail at cert creation (Step 4); manual only if auto-validation fails |
 | `ui.lik.navapbc.com` | CNAME | Route traffic to lik-ui | lik-ui default `...cs.amazonlightsail.com` |
 | `mcp.lik.navapbc.com` | CNAME | Route traffic to lik-mcp | lik-mcp default `...cs.amazonlightsail.com` |
 

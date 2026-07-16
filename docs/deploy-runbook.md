@@ -449,16 +449,18 @@ mise exec -- terraform apply \
   -var 'lik_ui_image=:lik-ui-prod.app.N'
 ```
 
-Recommended: put the refs in a gitignored `infra/prod.tfvars` so redeploys don't retype them
-(`*.tfvars` is already gitignored):
+Recommended: put the refs (and any custom-domain URLs) in a gitignored `infra/prod.tfvars`
+so redeploys don't retype them. Copy the committed template and edit it (`*.tfvars` is
+gitignored; `*.tfvars.example` is committed as the reference):
 
 ```bash
-cat > prod.tfvars <<'EOF'
-lik_mcp_image = ":lik-mcp-prod.app.N"
-lik_ui_image  = ":lik-ui-prod.app.N"
-EOF
+cp prod.tfvars.example prod.tfvars   # then edit: image refs, optional custom domains
 mise exec -- terraform apply -var-file=prod.tfvars
 ```
+
+`prod.tfvars.example` documents every non-default variable a real `prod.tfvars` may set —
+image refs plus the optional `ui_custom_domain_url` / `mcp_custom_domain_url` (see
+"Custom-domain migration" for when to populate the domains).
 
 The deployment takes a few minutes per service. Run it in the background or leave it to
 finish — a killed apply orphans state (see the step-1 gotcha).
@@ -530,14 +532,36 @@ https://lik-mcp-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/mcp
 
 ## Custom-domain migration (later)
 
-Currently the services use the Lightsail-provided HTTPS URLs. To move to a custom domain:
+Currently the services use the Lightsail-provided HTTPS URLs. To move to a custom domain
+(see `../domain-name.md` for the console DNS/certificate steps):
 
-1. Add `public_domain_names` to the `aws_lightsail_container_service` resources and attach
-   a Lightsail-managed certificate; point DNS at the services.
-2. Update the OAuth client redirect URIs (both `/auth/callback` and `/connections/callback`,
-   and lik-mcp's resource URL) to the new domain in each provider console.
-3. `terraform apply` — the derived `LIK_RESOURCE_SERVER_URL`, `LIK_UI_APP_BASE_URL`, and
-   allowed-hosts values follow the new URLs automatically once the domain is the primary.
+1. Validate and attach the custom domains to each container service — a Lightsail-managed
+   certificate per service, then point DNS at the services (`../domain-name.md` Steps 1–6).
+   Do this **first**: the URL-derived env values below must not advertise a name that isn't
+   serving yet. The `public_domain_names` attachment is already declared in `lik_ui.tf` /
+   `lik_mcp.tf` (a `dynamic` block gated on the domain vars, with `certificate_name`
+   `lik-ui-prod-cert` / `lik-mcp-prod-cert`) — so once the vars are set it stays under
+   Terraform management. If you attach via the console first, setting the vars makes the
+   config match the attachment (no destroy); if the cert names differ from those literals,
+   update them in the `.tf` to match, or Terraform will try to remove the attachment.
+2. Update the OAuth client redirect URIs (both `/auth/callback` and `/connections/callback`)
+   in each provider console to the new `ui.` domain (`../domain-name.md` Step 7.b).
+3. Set the custom-domain variables and `terraform apply`:
+   ```
+   ui_custom_domain_url  = "https://ui.lik.navapbc.com"
+   mcp_custom_domain_url = "https://mcp.lik.navapbc.com"   # /mcp is appended automatically
+   ```
+   These drive the URL-derived env values (`LIK_UI_APP_BASE_URL`, `LIK_RESOURCE_SERVER_URL`,
+   `LIK_UI_LIKMCP_RESOURCE_URL`, and the `*_ALLOWED_HOSTS`). **They do not update on their own**
+   — the container service's `.url` attribute always returns the default
+   `...cs.amazonlightsail.com` address even after a custom domain is attached, so the friendly
+   URL must be supplied explicitly through these variables.
+4. Update the **agent definition's** declared lik-mcp `mcp_servers` URL to
+   `https://mcp.lik.navapbc.com/mcp` (out-of-band, per the note above) so it matches the new
+   `LIK_UI_LIKMCP_RESOURCE_URL`. Because the custom domain is stable across future infra
+   changes, this is the last time that URL should need to change.
+5. Because the lik-mcp resource URL is the vault credential key, users may need to reconnect
+   lik-mcp once after the switch.
 
 ---
 
