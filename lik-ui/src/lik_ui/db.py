@@ -1,15 +1,14 @@
-"""Postgres access for lik-ui's own store: users, the user->vault mapping, sessions
-(one managed session each), and app-level DCR client registrations.
+"""Postgres access for lik-ui's own store: users, the user->vault mapping, and sessions
+(one managed session each).
 
 ``Database`` owns the connection pool (mirrors lik-mcp); ``Store`` holds the domain
 queries. Nothing here logs credential material — vault ids and client ids are opaque
-handles, but client secrets stored in ``dcr_registrations`` are never emitted in logs.
+handles.
 """
 
 from contextlib import contextmanager
 
 from psycopg.rows import dict_row
-from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
 
@@ -117,30 +116,3 @@ class Store:
                 """,
                 (session_id, user_id),
             ).fetchone()
-
-    # --- DCR registrations -----------------------------------------------------
-    def get_dcr_registration(self, issuer: str) -> dict | None:
-        with self.db.connection() as conn:
-            return conn.execute(
-                "SELECT issuer, client_id, client_secret, metadata FROM dcr_registrations WHERE issuer = %s",
-                (issuer,),
-            ).fetchone()
-
-    def put_dcr_registration(
-        self, issuer: str, client_id: str, client_secret: str | None, metadata: dict | None = None
-    ) -> dict:
-        with self.db.connection() as conn:
-            row = conn.execute(
-                """
-                INSERT INTO dcr_registrations (issuer, client_id, client_secret, metadata)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (issuer) DO UPDATE
-                    SET client_id = EXCLUDED.client_id,
-                        client_secret = EXCLUDED.client_secret,
-                        metadata = EXCLUDED.metadata
-                RETURNING issuer, client_id, client_secret, metadata
-                """,
-                (issuer, client_id, client_secret, Json(metadata or {})),
-            ).fetchone()
-            conn.commit()
-            return row

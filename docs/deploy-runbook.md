@@ -62,7 +62,7 @@ Both services are **deployed and serving over HTTPS under real auth**. Live iden
 | 3. Real SSM secrets set (no placeholders remain) | ✅ done |
 | 4. Images built + pushed | ✅ done (`app.2` / `app.1`) |
 | 6. Container deployment applied | ✅ done — health checks pass (lik-ui `/healthz` = `{"status":"ok"}`, lik-mcp `/mcp` = 401 under auth) |
-| 5. DB schema init | ✅ done — `likdb`: `catalog`, `confirmations` + `pg_trgm`; `likuidb`: `users`, `user_vaults`, `sessions`, `dcr_registrations` |
+| 5. DB schema init | ✅ done — `likdb`: `catalog`, `confirmations` + `pg_trgm`; `likuidb`: `users`, `user_vaults`, `sessions` |
 | 7. Verification | ✅ done — end-to-end Google login confirmed |
 
 > ✅ **Deployment is COMPLETE and verified end-to-end.** A Nava Workspace account signed in
@@ -431,7 +431,7 @@ psql "host=$DB_HOST port=5432 dbname=likuidb user=lik password=$DB_PW sslmode=re
 
 All init scripts are idempotent (`IF NOT EXISTS`), so re-running is safe. Verify afterward:
 `psql "...dbname=likdb..." -c '\dt'` shows `catalog`, `confirmations`; `...dbname=likuidb...`
-shows `users`, `user_vaults`, `sessions`, `dcr_registrations`.
+shows `users`, `user_vaults`, `sessions`.
 
 ### 6. Deploy the container versions ✅ done (containers healthy; see step 5 caveat)
 

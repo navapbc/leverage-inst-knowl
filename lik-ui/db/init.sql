@@ -27,13 +27,3 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id, created_at DESC);
-
--- App-level dynamic client registrations, keyed by the authorization server's issuer.
--- Registered once against a DCR-capable AS (e.g. Atlassian) and reused across users.
-CREATE TABLE IF NOT EXISTS dcr_registrations (
-    issuer          text        PRIMARY KEY,
-    client_id       text        NOT NULL,
-    client_secret   text,
-    metadata        jsonb       NOT NULL DEFAULT '{}'::jsonb,
-    created_at      timestamptz NOT NULL DEFAULT now()
-);

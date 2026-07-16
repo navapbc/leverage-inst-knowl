@@ -28,7 +28,6 @@ def build_production_app(settings: Settings):
     )
     vault_client = build_vault_client(settings)
     connector = OAuthConnector(
-        store,
         build_source_registry(settings),
         redirect_uri=f"{settings.app_base_url}/connections/callback",
     )

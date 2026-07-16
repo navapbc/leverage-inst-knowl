@@ -17,7 +17,7 @@ from tests.test_oauth_connector import ISSUER, MCP_URL, REDIRECT, RecordingVault
 def _app(db, vc):
     handler, _ = build_handler(registration=True)
     connector = OAuthConnector(
-        Store(db), {}, REDIRECT,
+        {}, REDIRECT,
         client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
     oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
