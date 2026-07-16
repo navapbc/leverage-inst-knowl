@@ -256,7 +256,22 @@ class AnthropicSessionsClient:
 
     def status(self, session_id: str) -> str:
         session = self._client.beta.sessions.retrieve(session_id)
-        return getattr(session, "status", "") or ""
+        status = (getattr(session, "status", "") or "").lower()
+        # A turn submitted but not yet started sits with the session status still "idle"
+        # while the user message waits unprocessed (``processed_at`` null) — the platform
+        # labels that "queued". The session status never reports it, so derive it from the
+        # trailing event instead, so a page reload can show the turn is queued.
+        if status in ("", "idle"):
+            latest = None
+            for event in self._client.beta.sessions.events.list(session_id, order="asc"):
+                latest = event
+            if (
+                latest is not None
+                and getattr(latest, "type", "") == "user.message"
+                and getattr(latest, "processed_at", None) is None
+            ):
+                return "queued"
+        return status
 
     def resume_stream(self, session_id: str) -> Iterator[dict]:
         # Only attach when a turn is actually in flight: subscribing to an idle session
