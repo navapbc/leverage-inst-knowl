@@ -281,6 +281,8 @@ get the deployment working, then transfer it to `navapbc` before real users depe
 
 > If a Slack (or other) connection is added later, follow the same principle: create the app
 > in the Nava Slack workspace / org account with multiple admins, never a personal account.
+> For Slack specifically, see "Adding the Slack MCP connection (later)" below for the full
+> procedure.
 
 Transfer ownership at https://github.com/settings/applications/3731288
 
@@ -566,6 +568,158 @@ https://lik-mcp-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/mcp
 - **This recurs on any URL change** (including the custom-domain migration below): whenever
   the lik-mcp public URL changes, the agent's declared `mcp_servers` entry must be updated to
   match. A custom domain (stable across infra changes) removes this recurring coupling.
+
+---
+
+## Adding the Slack MCP connection (later)
+
+Connects agent `agent_016uQNVgNEVtcAmvwKtskh8d` (and any other agent that declares it) to
+the **official Slack MCP server** at `https://mcp.slack.com/mcp` (Streamable HTTP, GA Feb
+2026). Slack issues per-user OAuth tokens, so each user's Slack permissions are enforced by
+Slack — lik-ui stores no shared Slack identity.
+
+> ⚠️ **Slack support is not wired in code yet — this is a build step, then an ops step.**
+> Unlike GitHub/Drive, there is no `LIK_UI_SLACK_*` plumbing today. Slack does **not** offer
+> dynamic client registration, so it takes the pre-configured-client path (`_acquire_configured`),
+> the same shape as GitHub — but that path still needs a source entry and env vars added first.
+
+### A. Build: add Slack as a no-DCR source (code + infra, via PR to `main`)
+
+Mirror the existing GitHub connection exactly. Four files:
+
+- **`lik-ui/src/lik_ui/settings.py`** — add `slack_client_id`, `slack_client_secret`,
+  `slack_resource_url` fields (copy the `github_*` block).
+- **`lik-ui/src/lik_ui/sources.py`** — add a fourth tuple to `declared` in
+  `build_source_registry`: `(settings.slack_resource_url, settings.slack_client_id,
+  settings.slack_client_secret, <slack user-token scopes>)`. Take the exact scope list from
+  Slack's MCP server docs (the user-token scopes its curated tool subset requires) — do not
+  guess; an empty/wrong scope yields a token the server rejects, the same 403 failure mode
+  as GitHub.
+- **`infra/ssm.tf`** — add `LIK_UI_SLACK_CLIENT_ID`, `LIK_UI_SLACK_CLIENT_SECRET`,
+  `LIK_UI_SLACK_RESOURCE_URL` to `ui_ssm_params`.
+- **`infra/lik_ui.tf`** — add the three matching `LIK_UI_SLACK_*` env lines to the container
+  `environment` block (copy the `LIK_UI_GITHUB_*` lines).
+
+Review, merge to `main`, then rebuild + push the `lik-ui` image (deploy step 4). No lik-mcp
+change is needed.
+
+### B. Create the Slack app — org-owned in the Nava Slack workspace
+
+Follow the same ownership principle as GitHub (step 2b): create it in the **Nava Slack
+workspace / org account with multiple admins, never a personal account**.
+Refer to https://slack.com/help/articles/52414744085139-Connect-Slackbot-to-other-apps-with-MCP
+
+1. Create a Slack app in the Nava workspace and configure it as an **OAuth 2.0 client** for
+   the Slack MCP server.
+2. **The app must be directory-published or internal** — the Slack MCP server rejects
+   unlisted apps. This is a hard gate: OAuth will fail at connect time otherwise.
+3. Set the OAuth **redirect URI** to `<lik_ui_service_url>/connections/callback` (the same
+   callback lik-ui uses for every data connection).
+4. Record the app's **client id + secret** for step C.
+
+The Slack MCP server exposes a **curated tool subset** (search, messages, canvases, users) —
+no file ops, reminders, workflow triggers, or admin methods.
+
+For reference, here is the Slack app's manifest:
+```json
+{
+    "display_information": {
+        "name": "lik-ui",
+        "description": "Leveraging institutional knowledge",
+        "background_color": "#474747",
+        "long_description": "This app is created to use Slack's MCP server.\r\nGo to https://ui.lik.navapbc.com and test it out. Log in with your Nava account.\r\nCode at https://github.com/navapbc/leverage-inst-knowl"
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "lik-ui",
+            "always_online": false
+        }
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://ui.lik.navapbc.com/connections/callback"
+        ],
+        "scopes": {
+            "user": [
+                "canvases:read",
+                "canvases:write",
+                "channels:history",
+                "channels:read",
+                "channels:write",
+                "chat:write",
+                "emoji:read",
+                "files:read",
+                "groups:history",
+                "groups:read",
+                "groups:write",
+                "im:history",
+                "im:write",
+                "mpim:history",
+                "mpim:read",
+                "mpim:write",
+                "reactions:read",
+                "reactions:write",
+                "search:read",
+                "search:read.files",
+                "search:read.im",
+                "search:read.mpim",
+                "search:read.private",
+                "search:read.public",
+                "search:read.users",
+                "users:read",
+                "users:read.email"
+            ],
+            "user_optional": [
+                "canvases:write",
+                "chat:write"
+            ],
+            "bot": [
+                "mcp:connect"
+            ]
+        },
+        "pkce_enabled": true
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false,
+        "is_mcp_enabled": true
+    }
+}
+```
+
+### C. Populate SSM secrets
+
+Add three params (see "Populate SSM secrets", step 3, for the `set-ssm-secrets.sh` file
+mechanics). `RESOURCE_URL` is a fixed external URL, stored in SSM like the GitHub one:
+
+```
+/ik-arch/prod/lik-ui/LIK_UI_SLACK_CLIENT_ID=…
+/ik-arch/prod/lik-ui/LIK_UI_SLACK_CLIENT_SECRET=…
+/ik-arch/prod/lik-ui/LIK_UI_SLACK_RESOURCE_URL=https://mcp.slack.com/mcp
+```
+
+### D. Update the agent definition to declare the Slack server
+
+The connection only appears once the agent declares it. On the **Claude Managed Agents
+platform** (out-of-band, per "Agent MCP-server URL dependency" above), add a `mcp_servers`
+entry to `agent_016uQNVgNEVtcAmvwKtskh8d` with url `https://mcp.slack.com/mcp`. That URL
+must **exactly equal** `LIK_UI_SLACK_RESOURCE_URL` (normalized — a trailing slash is
+tolerated, nothing else); a mismatch means lik-ui has no client for the declared URL and the
+connect fails with *"…has no dynamic client registration and no configured client."*
+
+### E. Redeploy and verify
+
+1. Deploy the new `lik-ui` image + config (deploy step 6, `terraform apply`) so the
+   `LIK_UI_SLACK_*` env vars land in the container.
+2. Sign in and open `/connections`: a **Slack** row now appears (declared by the agent),
+   marked not-connected.
+3. Click connect → Slack OAuth 2.0 / PKCE → back to `/connections/callback`; lik-ui deposits
+   the per-user credential in the vault and the row flips to connected.
+4. In a chat session, confirm the agent can call a Slack tool (e.g. a message search). A
+   `403`/access-forbidden on the first tool call after a clean connect usually means missing
+   or wrong scopes in the `sources.py` entry (step A) — reconnect after fixing, since a new
+   scope needs fresh consent.
 
 ---
 

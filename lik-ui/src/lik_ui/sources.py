@@ -40,6 +40,16 @@ def build_source_registry(settings: Settings) -> dict[str, SourceConfig]:
         # (GitHub's `repo` scope is read/write — there is no read-only private-repo scope.)
         (settings.github_resource_url, settings.github_client_id, settings.github_client_secret,
          ["repo", "read:org", "read:user"]),
+        # Read-focused Slack access for the server's curated tool subset (search, messages,
+        # canvases, users). Per-user tokens already cap access at each user's own Slack
+        # permissions. Write scopes are intentionally omitted; to let the agent post
+        # messages / edit canvases / add reactions, add "chat:write", "canvases:write",
+        # "reactions:write" here AND configure them on the Slack app.
+        (settings.slack_resource_url, settings.slack_client_id, settings.slack_client_secret,
+         ["search:read.public", "search:read.private", "search:read.mpim", "search:read.im",
+          "search:read.files", "search:read.users", "channels:history", "groups:history",
+          "mpim:history", "im:history", "channels:read", "groups:read", "mpim:read",
+          "canvases:read", "files:read", "users:read", "users:read.email", "emoji:read"]),
     ]
     registry: dict[str, SourceConfig] = {}
     for resource_url, client_id, client_secret, scopes in declared:
