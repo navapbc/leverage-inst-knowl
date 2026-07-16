@@ -225,7 +225,25 @@ this step exists to prevent.
    sufficient for reading files/metadata/content (it is one of the scopes the Drive MCP server
    advertises as supported) and grants no write access. After changing scopes, existing
    connections must **reconnect** — a new scope needs fresh consent.
-6. **Add org co-owners** so the clients aren't bound to one person: IAM → grant another Nava
+6. **Enroll the project in the Google Workspace Developer Preview Program** — the Drive MCP
+   server is a **developer-preview** service, and its *tool execution* is gated behind preview
+   enrollment separately from enabling the API. Without enrollment you get the misleading
+   failure below: OAuth succeeds, `initialize` and `tools/list` succeed, the token works
+   against the raw Drive API — but **every** Drive tool call returns
+   `"The caller does not have permission"`. This is not a scope, OAuth-client, or API-enable
+   problem and nothing in lik-ui fixes it.
+   - Submit the [Developer Preview Program](https://developers.google.com/workspace/preview)
+     form (signed in as a `navapbc.com` account with access to `lik-prod`). It asks for the
+     **project number** (`954378910957` — shown on the project's Cloud console welcome page /
+     "Project info" card, distinct from the project id `lik-prod`). Approval is typically quick.
+   - Once approved, the same token/scopes start working — no reconnect or redeploy needed.
+
+   > Diagnosis tip: the wrapped agent error ("authentication failed: access forbidden" /
+   > "caller does not have permission") hides the real cause. To see the ground truth, mint a
+   > token for the Drive OAuth client via a loopback redirect and call `drivemcp.googleapis.com`
+   > (`initialize` / `tools/list` / `tools/call`) plus the raw Drive API directly — if raw Drive
+   > works but every MCP tool 403s, it is preview enrollment, not your config.
+7. **Add org co-owners** so the clients aren't bound to one person: IAM → grant another Nava
    admin `Owner`/`Editor` on the `lik-prod` project. Ownership now survives any one departure.
 
 Record each client id + secret for step 3. (The lik-mcp connection's client id is also
