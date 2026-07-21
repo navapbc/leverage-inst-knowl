@@ -51,9 +51,15 @@ def register_connection_routes(app) -> None:
 
         state = secrets.token_urlsafe(32)
         verifier, challenge = connector.make_pkce()
+        # A dynamically-registered client must be reused for the token exchange: the
+        # authorization code is bound to the exact client that requested it, so re-registering
+        # in the callback would mint a different client and the exchange would 400. Stash its
+        # credentials server-side (keyed by state) rather than in the signed-not-encrypted
+        # cookie, which would expose the client secret. Configured clients are static and
+        # need no stash — the callback re-acquires them from the source registry.
+        if discovery.registration_endpoint:
+            request.app.state.store.stash_pending_client(state, creds.client_id, creds.client_secret)
         # Stash the discovered endpoints (no secrets) so the callback need not re-discover.
-        # ClientCredentials are NOT stashed — they carry a client secret and the session
-        # cookie is signed, not encrypted; the callback re-acquires them cheaply (DB/local).
         request.session["oauth_connect"] = {
             "state": state,
             "verifier": verifier,
@@ -79,12 +85,12 @@ def register_connection_routes(app) -> None:
 
         mcp_url = pending["mcp_url"]
         connector: OAuthConnector = request.app.state.connector
-        # Reuse the endpoints discovered at connect time; re-acquire the client (cheap) and
+        # Reuse the endpoints discovered at connect time and the client acquired then, and
         # deposit. Guard the whole exchange+deposit so a malformed token response or a
         # misconfigured (e.g. missing) vault client surfaces as a clean failure, not a 500.
         try:
             discovery = Discovery(**pending["discovery"])
-            creds = await connector.acquire_client(mcp_url, discovery)
+            creds = connector.reuse_client(request.app.state.store, mcp_url, discovery, state)
             tokens = await connector.exchange_code(discovery, creds, code, pending["verifier"], mcp_url)
             vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
             connector.deposit(
@@ -210,6 +216,23 @@ class OAuthConnector:
             return await self._acquire_via_dcr(discovery)
         return self._acquire_configured(mcp_url)
 
+    def reuse_client(self, store, mcp_url: str, discovery: Discovery, state: str) -> ClientCredentials:
+        """Return the client the connect step used, for the token exchange. For DCR sources,
+        this is the client registered at connect time and stashed under ``state`` — reusing
+        it is mandatory, since the authorization code is bound to that exact client.
+        Configured sources are static, so re-acquire them from the registry."""
+        if discovery.registration_endpoint:
+            row = store.take_pending_client(state)
+            if not row:
+                raise ConnectorError("This connection attempt expired. Please start the connection again.")
+            return ClientCredentials(
+                client_id=row["client_id"],
+                client_secret=row.get("client_secret"),
+                scopes=list(discovery.scopes_supported),
+                offline="offline_access" in discovery.scopes_supported,
+            )
+        return self._acquire_configured(mcp_url)
+
     async def _acquire_via_dcr(self, discovery: Discovery) -> ClientCredentials:
         # Register a fresh client on every connect rather than caching it. Some
         # authorization servers silently expire or purge dynamically-registered clients
@@ -317,11 +340,29 @@ class OAuthConnector:
             try:
                 resp.raise_for_status()
             except httpx.HTTPError as exc:
-                raise ConnectorError(f"Token exchange failed: {exc}") from exc
+                raise ConnectorError(f"Token exchange failed: {exc}{self._error_detail(resp)}") from exc
             try:
                 return resp.json()
             except ValueError as exc:
                 raise ConnectorError(f"Token endpoint returned a non-JSON response: {exc}") from exc
+
+    @staticmethod
+    def _error_detail(resp: httpx.Response) -> str:
+        """Extract the authorization server's error from a failed token response so the cause
+        (e.g. invalid_grant, invalid_client) is visible instead of a bare HTTP status. RFC 6749
+        error bodies carry ``error``/``error_description`` and no token material; a non-JSON
+        body is included truncated. Returns a "" when there's nothing useful to add."""
+        try:
+            body = resp.json()
+        except ValueError:
+            text = (resp.text or "").strip()
+            return f" — {text[:300]}" if text else ""
+        if isinstance(body, dict) and body.get("error"):
+            detail = str(body["error"])
+            if body.get("error_description"):
+                detail += f": {body['error_description']}"
+            return f" — {detail}"
+        return ""
 
     def _refresh_block(self, discovery: Discovery, creds: ClientCredentials, token_response: dict) -> dict | None:
         refresh_token = token_response.get("refresh_token")

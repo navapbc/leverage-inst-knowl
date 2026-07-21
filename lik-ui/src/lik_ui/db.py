@@ -81,6 +81,30 @@ class Store:
             conn.execute("DELETE FROM user_vaults WHERE user_id = %s", (user_id,))
             conn.commit()
 
+    # --- pending OAuth connects ------------------------------------------------
+    def stash_pending_client(self, state: str, client_id: str, client_secret: str | None) -> None:
+        """Persist the client credentials for an in-flight connect, keyed by its state
+        token, so the callback can redeem the code with the same client that requested it.
+        Opportunistically purge abandoned connects so the table can't grow unbounded."""
+        with self.db.connection() as conn:
+            conn.execute("DELETE FROM pending_connections WHERE created_at < now() - interval '15 minutes'")
+            conn.execute(
+                "INSERT INTO pending_connections (state, client_id, client_secret) VALUES (%s, %s, %s)",
+                (state, client_id, client_secret),
+            )
+            conn.commit()
+
+    def take_pending_client(self, state: str) -> dict | None:
+        """Return and delete the stashed client for this state (single-use). None if the
+        state is unknown or already consumed."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                "DELETE FROM pending_connections WHERE state = %s RETURNING client_id, client_secret",
+                (state,),
+            ).fetchone()
+            conn.commit()
+            return row
+
     # --- sessions --------------------------------------------------------------
     def create_session(self, user_id: int, agent_id: str, session_id: str, title: str | None = None) -> dict:
         """Persist a session record keyed by the Managed Agents ``session_id``."""

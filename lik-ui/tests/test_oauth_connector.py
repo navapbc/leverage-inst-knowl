@@ -136,6 +136,56 @@ async def test_acquire_via_dcr_registers_fresh_each_time():
     assert calls[("POST", REG_ENDPOINT)] == 2
 
 
+class _FakeStore:
+    """Minimal stand-in for Store's pending-connect stash (in-memory, single-use)."""
+
+    def __init__(self):
+        self.pending = {}
+
+    def stash_pending_client(self, state, client_id, client_secret):
+        self.pending[state] = {"client_id": client_id, "client_secret": client_secret}
+
+    def take_pending_client(self, state):
+        return self.pending.pop(state, None)
+
+
+async def test_reuse_client_returns_stashed_dcr_client_without_reregistering():
+    # The callback must reuse the client the connect step registered — re-registering would
+    # mint a different client and the token exchange (code bound to the first client) 400s.
+    handler, calls = build_handler(registration=True)
+    conn = _connector(handler)
+    d = await conn.discover(MCP_URL)
+    store = _FakeStore()
+
+    creds = await conn.acquire_client(MCP_URL, d)
+    store.stash_pending_client("st-1", creds.client_id, creds.client_secret)
+    assert calls[("POST", REG_ENDPOINT)] == 1
+
+    reused = conn.reuse_client(store, MCP_URL, d, "st-1")
+    assert reused.client_id == creds.client_id
+    assert reused.client_secret == creds.client_secret
+    assert calls[("POST", REG_ENDPOINT)] == 1  # no second registration
+    assert store.take_pending_client("st-1") is None  # single-use: consumed
+
+
+async def test_reuse_client_raises_when_pending_state_expired():
+    handler, _ = build_handler(registration=True)
+    conn = _connector(handler)
+    d = await conn.discover(MCP_URL)
+    with pytest.raises(ConnectorError, match="expired"):
+        conn.reuse_client(_FakeStore(), MCP_URL, d, "missing-state")
+
+
+async def test_reuse_client_uses_configured_source_without_stash():
+    handler, calls = build_handler(registration=False)
+    registry = {MCP_URL: SourceConfig(client_id="preconf", client_secret="s", scopes=["openid"], offline=False)}
+    conn = _connector(handler, registry=registry)
+    d = await conn.discover(MCP_URL)
+    reused = conn.reuse_client(_FakeStore(), MCP_URL, d, "unused-state")
+    assert reused.client_id == "preconf"
+    assert ("POST", REG_ENDPOINT) not in calls
+
+
 async def test_acquire_configured_when_no_dcr():
     handler, calls = build_handler(registration=False)
     registry = {MCP_URL: SourceConfig(client_id="preconf", client_secret="s", scopes=["openid", "email"], offline=True)}
@@ -231,6 +281,26 @@ async def test_exchange_code_requests_json():
     conn = _connector(handler)
     await conn.exchange_code(_DISCOVERY, _CREDS, "code", "verifier", MCP_URL)
     assert seen["accept"] == "application/json"
+
+
+async def test_exchange_code_surfaces_oauth_error_from_body():
+    # A 400 from the token endpoint must surface the RFC 6749 error (the actual cause),
+    # not just the bare HTTP status, so failures are diagnosable.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "invalid_grant", "error_description": "code already used"})
+
+    conn = _connector(handler)
+    with pytest.raises(ConnectorError, match="invalid_grant: code already used"):
+        await conn.exchange_code(_DISCOVERY, _CREDS, "code", "verifier", MCP_URL)
+
+
+async def test_exchange_code_surfaces_non_json_error_body_truncated():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, text="Bad Request: something went wrong", headers={"content-type": "text/plain"})
+
+    conn = _connector(handler)
+    with pytest.raises(ConnectorError, match="something went wrong"):
+        await conn.exchange_code(_DISCOVERY, _CREDS, "code", "verifier", MCP_URL)
 
 
 async def test_exchange_code_raises_on_non_json_response():

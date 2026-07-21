@@ -27,3 +27,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id, created_at DESC);
+
+-- Short-lived OAuth client credentials for an in-flight connect, keyed by the connect's
+-- state token. A dynamically-registered client must be reused between the authorize step
+-- and the token exchange (the authorization code is bound to the client that requested it),
+-- but its secret can't live in the signed-not-encrypted session cookie. Rows are deleted
+-- on use in the callback; stale rows (abandoned connects) are purged opportunistically.
+CREATE TABLE IF NOT EXISTS pending_connections (
+    state          text        PRIMARY KEY,
+    client_id      text        NOT NULL,
+    client_secret  text,
+    created_at     timestamptz NOT NULL DEFAULT now()
+);
