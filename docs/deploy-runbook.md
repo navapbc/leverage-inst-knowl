@@ -136,7 +136,8 @@ mise exec -- terraform apply \
 >    for n in lik-mcp/LIK_OAUTH_CLIENT_ID lik-ui/LIK_UI_SESSION_SECRET lik-ui/LIK_UI_APP_OAUTH_CLIENT_ID \
 >      lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID \
 >      lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL lik-ui/LIK_UI_GITHUB_CLIENT_ID \
->      lik-ui/LIK_UI_GITHUB_CLIENT_SECRET lik-ui/LIK_UI_GITHUB_RESOURCE_URL lik-ui/LIK_UI_ANTHROPIC_API_KEY \
+>      lik-ui/LIK_UI_GITHUB_CLIENT_SECRET lik-ui/LIK_UI_GITHUB_RESOURCE_URL lik-ui/LIK_UI_SLACK_CLIENT_ID \
+>      lik-ui/LIK_UI_SLACK_CLIENT_SECRET lik-ui/LIK_UI_SLACK_RESOURCE_URL lik-ui/LIK_UI_ANTHROPIC_API_KEY \
 >      lik-ui/LIK_UI_AGENTS_CONFIG; do
 >      AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 --type SecureString \
 >        --name "/ik-arch/prod/$n" --value PLACEHOLDER_REPLACE_ME; done
@@ -309,51 +310,23 @@ needed for the connections you actually enable — leave the others as `PLACEHOL
 until you set real values). Do **not** set `DB_MASTER_PASSWORD` under `$P/shared/` — Terraform
 owns it.
 
-**Step A — create the template file.** This writes a single `NAME=value` file, with the
-session secret pre-generated for you:
+**Step A — create your working copy from the template.** `infra/ssm-secrets.example` lists
+every SSM parameter (with `…` placeholders and inline notes). Copy it to a private temp file,
+expanding the `$P` path prefix as you go:
 
 ```bash
 P=/ik-arch/prod
 SF=$(mktemp) && chmod 600 "$SF"
-cat > "$SF" <<EOF
-# Replace each … with the real value. DELETE or #-comment any line you are not setting
-# (e.g. a connection you haven't configured) — its SSM placeholder is left untouched.
-# Value is everything after the first '=' (so '=' inside secrets is fine). No quotes, no
-# trailing spaces. One line per secret.
-
-$P/lik-mcp/LIK_OAUTH_CLIENT_ID=…apps.googleusercontent.com
-
-$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_ID=…
-$P/lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET=…
-
-$P/lik-ui/LIK_UI_ANTHROPIC_API_KEY=sk-ant-…
-
-$P/lik-ui/LIK_UI_AGENTS_CONFIG=agent_…:env_…
-
-# LIK_UI_LIKMCP_CLIENT_ID is intentionally absent: it must equal lik-mcp's
-# LIK_OAUTH_CLIENT_ID (same Google client), so Terraform reuses that one param —
-# setting LIK_OAUTH_CLIENT_ID above covers it. Same for LIK_UI_LIKMCP_RESOURCE_URL,
-# which Terraform derives from the lik-mcp service URL. Only the secret is separate:
-$P/lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET=…
-
-$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID=…
-$P/lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET=…
-$P/lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL=https://drivemcp.googleapis.com/mcp/v1
-
-# GitHub OAuth App client id — opaque, format varies (NOT the Iv1. "GitHub App" format);
-# paste yours verbatim, whatever its shape.
-$P/lik-ui/LIK_UI_GITHUB_CLIENT_ID=…
-$P/lik-ui/LIK_UI_GITHUB_CLIENT_SECRET=…
-$P/lik-ui/LIK_UI_GITHUB_RESOURCE_URL=https://api.githubcopilot.com/mcp
-
-$P/lik-ui/LIK_UI_SESSION_SECRET=$(openssl rand -hex 32)
-EOF
+P=$P envsubst '$P' < infra/ssm-secrets.example > "$SF"
 echo "Edit this file: $SF"
 ```
+
+(No `envsubst`? `sed "s#\$P#$P#g" infra/ssm-secrets.example > "$SF"` does the same.)
 
 **Step B — edit `$SF`** in your editor: replace each `…` with the real value; delete or
 `#`-comment the connection lines you're not setting yet (leave the boot-required ones —
 `APP_OAUTH_*`, `ANTHROPIC_API_KEY`, `AGENTS_CONFIG`, `SESSION_SECRET`, `LIK_OAUTH_CLIENT_ID`).
+Generate `LIK_UI_SESSION_SECRET` with `openssl rand -hex 32`.
 
 **Step C — push, then shred.** Run `infra/set-ssm-secrets.sh` against the file. It writes each
 value to a short-lived temp file and sends it with `file://` (no secret on any command line),
@@ -584,30 +557,24 @@ the **official Slack MCP server** at `https://mcp.slack.com/mcp` (Streamable HTT
 2026). Slack issues per-user OAuth tokens, so each user's Slack permissions are enforced by
 Slack — lik-ui stores no shared Slack identity.
 
-> ⚠️ **Slack support is not wired in code yet — this is a build step, then an ops step.**
-> Unlike GitHub/Drive, there is no `LIK_UI_SLACK_*` plumbing today. Slack does **not** offer
-> dynamic client registration, so it takes the pre-configured-client path (`_acquire_configured`),
-> the same shape as GitHub — but that path still needs a source entry and env vars added first.
+> **Slack is already wired in code and infra — only the ops steps below remain.** Slack does
+> **not** offer dynamic client registration, so it takes the pre-configured-client path
+> (`_acquire_configured`), the same shape as GitHub. What's left is external setup: create the
+> Slack app (B), populate the `LIK_UI_SLACK_*` secrets (C), point the agent at the server (D),
+> then redeploy + verify (E).
 
-### A. Build: add Slack as a no-DCR source (code + infra, via PR to `main`)
+### A. Build ✅ done — Slack is a no-DCR source in code + infra
 
-Mirror the existing GitHub connection exactly. Four files:
+Wired mirroring the GitHub connection, across four files (no further code change needed):
 
-- **`lik-ui/src/lik_ui/settings.py`** — add `slack_client_id`, `slack_client_secret`,
-  `slack_resource_url` fields (copy the `github_*` block).
-- **`lik-ui/src/lik_ui/sources.py`** — add a fourth tuple to `declared` in
-  `build_source_registry`: `(settings.slack_resource_url, settings.slack_client_id,
-  settings.slack_client_secret, <slack user-token scopes>)`. Take the exact scope list from
-  Slack's MCP server docs (the user-token scopes its curated tool subset requires) — do not
-  guess; an empty/wrong scope yields a token the server rejects, the same 403 failure mode
-  as GitHub.
-- **`infra/ssm.tf`** — add `LIK_UI_SLACK_CLIENT_ID`, `LIK_UI_SLACK_CLIENT_SECRET`,
-  `LIK_UI_SLACK_RESOURCE_URL` to `ui_ssm_params`.
-- **`infra/lik_ui.tf`** — add the three matching `LIK_UI_SLACK_*` env lines to the container
-  `environment` block (copy the `LIK_UI_GITHUB_*` lines).
-
-Review, merge to `main`, then rebuild + push the `lik-ui` image (deploy step 4). No lik-mcp
-change is needed.
+- **`lik-ui/src/lik_ui/settings.py`** — `slack_client_id` / `slack_client_secret` /
+  `slack_resource_url` fields.
+- **`lik-ui/src/lik_ui/sources.py`** — the Slack tuple in `build_source_registry`'s `declared`
+  list, with a read-focused user-token scope set (search, channel/group/im history, canvases,
+  files, users, emoji). Write scopes (`chat:write`, `canvases:write`, `reactions:write`) are
+  intentionally omitted; to enable them, add each here **and** to the Slack app in step B.
+- **`infra/ssm.tf`** — the three `LIK_UI_SLACK_*` params in `ui_ssm_params`.
+- **`infra/lik_ui.tf`** — the three matching `LIK_UI_SLACK_*` container `environment` lines.
 
 ### B. Create the Slack app — org-owned in the Nava Slack workspace
 
@@ -696,8 +663,9 @@ For reference, here is the Slack app's manifest:
 
 ### C. Populate SSM secrets
 
-Add three params (see "Populate SSM secrets", step 3, for the `set-ssm-secrets.sh` file
-mechanics). `RESOURCE_URL` is a fixed external URL, stored in SSM like the GitHub one:
+Set the three `LIK_UI_SLACK_*` params — already in `infra/ssm-secrets.example` and the step-1
+placeholder seed. Use `set-ssm-secrets.sh` with a single-secret file per "Populate SSM secrets",
+step 3. `RESOURCE_URL` is the fixed external URL, stored in SSM like the GitHub one:
 
 ```
 /ik-arch/prod/lik-ui/LIK_UI_SLACK_CLIENT_ID=…
@@ -716,8 +684,10 @@ connect fails with *"…has no dynamic client registration and no configured cli
 
 ### E. Redeploy and verify
 
-1. Deploy the new `lik-ui` image + config (deploy step 6, `terraform apply`) so the
-   `LIK_UI_SLACK_*` env vars land in the container.
+1. `terraform apply` (deploy step 6) so the `LIK_UI_SLACK_*` values land in the container from
+   SSM. The Slack code is already in the image, so no rebuild is needed unless the currently
+   deployed `lik-ui` image predates it (built before the Slack source entry merged) — in that
+   case rebuild + push first (deploy step 4).
 2. Sign in and open `/connections`: a **Slack** row now appears (declared by the agent),
    marked not-connected.
 3. Click connect → Slack OAuth 2.0 / PKCE → back to `/connections/callback`; lik-ui deposits
