@@ -99,7 +99,7 @@ Then, from `infra/`:
 
 ```
 cd infra
-AWS_PROFILE=lik mise exec -- terraform init
+./tf.sh init
 ```
 
 ---
@@ -112,11 +112,11 @@ and secrets must be in SSM before the container deployments boot under real auth
 ### 1. Create the database, container services, and CI role ✅ done (2026-07-15)
 
 Bootstrap everything except the container deployments (those need image refs + secrets).
-Export credentials first (see the Terraform credential note above), then:
+`tf.sh` mints fresh credentials for you, so no manual export is needed:
 
 ```
 cd infra
-mise exec -- terraform apply \
+./tf.sh apply \
   -target=random_password.db_master \
   -target=aws_lightsail_database.main \
   -target=aws_ssm_parameter.db_master_password \
@@ -144,14 +144,14 @@ mise exec -- terraform apply \
 >    ```
 > 2. **Run this apply in the background / with a long timeout.** DB creation takes 5–10 min.
 >    If the apply process is killed mid-flight, resources get created in AWS but not recorded
->    in state (orphans), and you must `terraform force-unlock <id>` then `terraform import`
+>    in state (orphans), and you must `./tf.sh force-unlock <id>` then `./tf.sh import`
 >    each orphan (`random_password.db_master` must be imported from a `bash` script file to
 >    dodge the password-quoting gotcha). Prefer letting it run to completion.
 
 Record the outputs:
 
 ```
-mise exec -- terraform output
+./tf.sh output
 ```
 
 You'll use `lik_mcp_service_url`, `lik_mcp_resource_server_url`, `lik_ui_service_url`,
@@ -455,16 +455,13 @@ shows `users`, `user_vaults`, `sessions`.
 
 ### 6. Deploy the container versions ✅ done (containers healthy; see step 5 caveat)
 
-Export Terraform credentials first (see the credential note near the top). Then apply with
-the image refs from step 4c — this creates the two `deployment_version` resources (the
-count-guard flips on once the image vars are non-empty), and the containers boot under real
-`prod` auth using the SSM values:
+Apply with the image refs from step 4c — this creates the two `deployment_version` resources
+(the count-guard flips on once the image vars are non-empty), and the containers boot under
+real `prod` auth using the SSM values. `tf.sh` handles credentials:
 
 ```bash
 cd infra
-# (export AWS_ACCESS_KEY_ID/SECRET/SESSION_TOKEN per the credential note)
-
-mise exec -- terraform apply \
+./tf.sh apply \
   -var 'lik_mcp_image=:lik-mcp-prod.app.N' \
   -var 'lik_ui_image=:lik-ui-prod.app.N'
 ```
@@ -475,7 +472,7 @@ gitignored; `*.tfvars.example` is committed as the reference):
 
 ```bash
 cp prod.tfvars.example prod.tfvars   # then edit: image refs, optional custom domains
-mise exec -- terraform apply -var-file=prod.tfvars
+./tf.sh apply -var-file=prod.tfvars
 ```
 
 `prod.tfvars.example` documents every non-default variable a real `prod.tfvars` may set —
@@ -505,7 +502,7 @@ SSM value (step 3) or an OAuth redirect-URI mismatch (step 2).
 ## Routine redeploy (new image)
 
 1. Run the **Build and push container images** workflow → copy the new refs.
-2. `terraform apply -var lik_mcp_image=… -var lik_ui_image=…`.
+2. `./tf.sh apply -var lik_mcp_image=… -var lik_ui_image=…`.
 
 No secret or DB steps needed unless config changed.
 
@@ -684,7 +681,7 @@ connect fails with *"…has no dynamic client registration and no configured cli
 
 ### E. Redeploy and verify
 
-1. `terraform apply` (deploy step 6) so the `LIK_UI_SLACK_*` values land in the container from
+1. `./tf.sh apply -var-file=prod.tfvars` (deploy step 6) so the `LIK_UI_SLACK_*` values land in the container from
    SSM. The Slack code is already in the image, so no rebuild is needed unless the currently
    deployed `lik-ui` image predates it (built before the Slack source entry merged) — in that
    case rebuild + push first (deploy step 4).
@@ -715,7 +712,7 @@ Currently the services use the Lightsail-provided HTTPS URLs. To move to a custo
    update them in the `.tf` to match, or Terraform will try to remove the attachment.
 2. Update the OAuth client redirect URIs (both `/auth/callback` and `/connections/callback`)
    in each provider console to the new `ui.` domain (`../domain-name.md` Step 7.b).
-3. Set the custom-domain variables and `terraform apply`:
+3. Set the custom-domain variables (in `prod.tfvars`) and `./tf.sh apply -var-file=prod.tfvars`:
    ```
    ui_custom_domain_url  = "https://ui.lik.navapbc.com"
    mcp_custom_domain_url = "https://mcp.lik.navapbc.com"   # /mcp is appended automatically
