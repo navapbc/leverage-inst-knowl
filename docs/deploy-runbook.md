@@ -237,6 +237,12 @@ this step exists to prevent.
      **project number** (`954378910957` — shown on the project's Cloud console welcome page /
      "Project info" card, distinct from the project id `lik-prod`). Approval is typically quick.
    - Once approved, the same token/scopes start working — no reconnect or redeploy needed.
+     Expect a **propagation delay**: approval does not flip the gate instantly. It can take
+     minutes to a few hours (Workspace changes are documented as taking up to ~24h) before
+     tool calls stop returning "The caller does not have permission", so don't treat an
+     immediate retry failure as proof enrollment didn't work — wait and retry before
+     concluding. Verification is functional (a Drive tool call succeeding), as there is no
+     console/`gcloud` field that reports preview-enrollment status.
 
    > Diagnosis tip: the wrapped agent error ("authentication failed: access forbidden" /
    > "caller does not have permission") hides the real cause. To see the ground truth, mint a
