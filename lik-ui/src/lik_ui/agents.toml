@@ -12,9 +12,11 @@
 default_environment_id = "env_016c6vWcCUvyVUaztWhvsAQt"
 
 [[agents]]
+# LIK Query: Project Index
 agent_id = "agent_01E7mqTKAdtosKpWDSLxALmq"
 # environment_id omitted -> uses default_environment_id above
 
 [[agents]]
+# Knowledge Search Agent
 agent_id = "agent_016uQNVgNEVtcAmvwKtskh8d"
 # environment_id omitted -> uses default_environment_id above
