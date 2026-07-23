@@ -11,6 +11,22 @@ which model it uses, its instructions, and which tools and data sources it may r
 runs it. Each task is a **session**: Anthropic runs the back-and-forth loop between the model and its
 tools, hands the agent a private sandbox to work in, and streams the results back to your app.
 
+### Status: beta, with a data-retention constraint
+
+CMA is in **beta**. [Anthropic's own words](https://platform.claude.com/docs/en/managed-agents/overview#beta-access):
+*"Claude Managed Agents is in beta. [...] Behaviors may be refined between releases to improve outputs."*
+All endpoints require a dated beta header (`managed-agents-2026-04-01`), so behavior can change between
+releases — something to weigh before depending on it long term.
+
+The beta also carries a data-handling limit that shapes our design. CMA is stateful by design — sessions
+keep conversation history, sandbox state, and outputs on Anthropic's servers:
+
+> Claude Managed Agents is stateful by design [...]. Because of this, Managed Agents is not currently
+> eligible for [Zero Data Retention] or HIPAA Business Associate Agreement (BAA) coverage.
+
+For a system built around governed knowledge, that bounds what data may flow through an agent session and
+is a factor in the access-control design (see [v0.4/06-access-control.md](v0.4/06-access-control.md)).
+
 ## Why use it instead of building our own
 
 Running an agent yourself means standing up and operating a lot of moving parts. CMA provides each of
@@ -89,13 +105,6 @@ Anthropic (per-user key vs. workload identity federation), and the chat and agen
 CMA owns the middle — the generic agent runtime. LIK owns the two ends: the governed knowledge
 ([lik-mcp](lik-mcp/README.md)) and the human front door ([lik-ui](lik-ui/README.md)).
 
-## One constraint worth noting
-
-CMA is stateful by design — sessions keep conversation history, sandbox state, and outputs on
-Anthropic's servers — so it is **not** currently eligible for Zero Data Retention or a HIPAA BAA. For a
-system built around governed knowledge, that bounds what data may flow through an agent session and is a
-factor in the access-control design (see [v0.4/06-access-control.md](v0.4/06-access-control.md)).
-
 ## Future option: replacing CMA
 
 Using CMA is a bet we can unwind. Consistent with the architecture's "earn each step" principle
@@ -105,8 +114,9 @@ needed. Three triggers could justify it:
 - **Cost** — per-session platform and sandbox charges outgrow what self-hosted compute would cost at our
   volume.
 - **Vendor lock-in** — we want to run on our own infrastructure, or reduce dependence on a single vendor.
-- **Data handling** — the retention constraint above (no ZDR / HIPAA BAA) blocks a class of data we need
-  the agent to touch.
+- **Data handling** — the [retention constraint](#status-beta-with-a-data-retention-constraint)
+  (no ZDR / HIPAA BAA) blocks a class of data we may need the agent to touch.
+  This may be resolved once Managed Agents is promoted out of Beta status.
 
 ### What already insulates us
 
