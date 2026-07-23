@@ -6,6 +6,7 @@
 
 ## Coding
 
+* **Never commit or push to `main` without asking first.** All changes go through a branch and PR. Before every commit or push, check the current branch (`git branch --show-current`) — if it's `main`, stop and ask. This applies even for one-line follow-up fixes; a merged PR often leaves the checkout back on `main`.
 * Prefix all skill names with `lik-` (e.g. `lik-query-project-index`). Applies to the skill directory under `.claude/skills/` and its `name:` frontmatter.
 * Wrap `SKILL.md` prose at a 120-character line limit. Exceptions that stay on one line: YAML frontmatter values (e.g. the `description`), table rows, and fenced code.
 * The software is being implemented based on the docs in the `v0.4` folder.
