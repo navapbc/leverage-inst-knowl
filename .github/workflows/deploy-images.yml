@@ -1,13 +1,16 @@
-# Build each service image and push it to its Lightsail container-service registry.
-# Runs in CI so the large image upload does not run from a maintainer's (slow) uplink.
-# This workflow does NOT deploy — after it runs, take the printed ":svc.label.N" refs and
-# run `terraform apply` locally with -var lik_mcp_image=... -var lik_ui_image=...
+# Build each service image, push it to its Lightsail registry, then deploy it.
+# The build/push runs in CI so the large image upload does not run from a maintainer's
+# (slow) uplink. The `apply` job then runs `terraform apply` — but ONLY when the plan is a
+# clean image swap (`Plan: N to add, 0 to change, N to destroy.`). Any other plan (config
+# drift, anything with "to change") is left for the maintainer to review and apply locally
+# with `./tf.sh apply -var-file=prod.tfvars`.
 #
 # Prerequisites (set once in repo Settings):
 #   - Variable AWS_DEPLOY_ROLE_ARN = the github_image_push_role_arn Terraform output.
+#   - Variable AWS_APPLY_ROLE_ARN  = the github_apply_role_arn Terraform output.
 #   - Variable AWS_REGION          = us-east-1.
-# Auth is GitHub OIDC (no stored AWS keys). The IAM role trust is scoped to this repo's
-# main branch (see infra/iam_github_oidc.tf).
+# Auth is GitHub OIDC (no stored AWS keys). Both IAM roles' trust is scoped to this repo's
+# `prod` environment (see infra/iam_github_oidc.tf).
 
 name: Build and push container images
 
@@ -77,6 +80,9 @@ jobs:
           echo "$out"
           # push-container-image prints: Refer to this image as ":svc.app.N" in deployments.
           ref=$(echo "$out" | grep -oE '":[^"]+"' | tr -d '"' | tail -1)
+          # Hand the ref to the apply job via an artifact (matrix job outputs collide).
+          mkdir -p image-ref
+          printf '%s' "$ref" > "image-ref/${{ matrix.name }}.txt"
           {
             echo "### ${{ matrix.name }} pushed"
             echo ""
@@ -86,3 +92,135 @@ jobs:
             echo "$ref"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload image ref
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-ref-${{ matrix.name }}
+          path: image-ref/${{ matrix.name }}.txt
+          if-no-files-found: error
+
+  # Deploy the pushed image(s) — but auto-apply only for a routine image swap. The gate is
+  # the plan summary: a per-service deployment_version replacement reads as "N to add,
+  # 0 to change, N to destroy" (see infra/lik_mcp.tf / lik_ui.tf). Anything else is left
+  # for the maintainer to review and apply locally.
+  apply:
+    needs: push
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      # Single deployment environment, so the custom-domain URLs are hardcoded here (they
+      # must be passed, or the empty default detaches the live domain — see infra/lik_ui.tf).
+      MCP_CUSTOM_DOMAIN_URL: https://mcp.lik.navapbc.com
+      UI_CUSTOM_DOMAIN_URL: https://ui.lik.navapbc.com
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
+
+      - name: Download image refs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: image-ref-*
+          path: image-refs
+          merge-multiple: true
+
+      - name: Resolve image refs (built this run, else currently deployed)
+        run: |
+          set -euo pipefail
+          # For each service: use the ref just pushed (artifact) if present, otherwise read
+          # the currently-deployed ref from Lightsail. Both must be non-empty — passing an
+          # empty image var would DESTROY that service's deployment (count guard).
+          resolve() {
+            local name="$1" svc="$2" file ref
+            file="image-refs/${name}.txt"
+            if [ -f "$file" ]; then
+              ref=$(cat "$file")
+            else
+              ref=$(aws lightsail get-container-services --region "$AWS_REGION" \
+                --service-name "$svc" \
+                --query "containerServices[0].currentDeployment.containers.\"${name}\".image" \
+                --output text)
+            fi
+            if [ -z "$ref" ] || [ "$ref" = "None" ]; then
+              echo "::error::could not resolve image ref for ${name} (service ${svc})"
+              exit 1
+            fi
+            printf '%s' "$ref"
+          }
+          MCP_REF=$(resolve lik-mcp lik-mcp-prod)
+          UI_REF=$(resolve lik-ui lik-ui-prod)
+          echo "MCP_REF=$MCP_REF" >> "$GITHUB_ENV"
+          echo "UI_REF=$UI_REF" >> "$GITHUB_ENV"
+          echo "Resolved refs: lik-mcp=$MCP_REF  lik-ui=$UI_REF"
+
+      - name: Terraform init
+        run: terraform -chdir=infra init -input=false
+
+      - name: Terraform plan
+        run: |
+          terraform -chdir=infra plan -input=false -no-color -out=tfplan \
+            -var "lik_mcp_image=$MCP_REF" \
+            -var "lik_ui_image=$UI_REF" \
+            -var "mcp_custom_domain_url=$MCP_CUSTOM_DOMAIN_URL" \
+            -var "ui_custom_domain_url=$UI_CUSTOM_DOMAIN_URL" | tee plan.out
+
+      - name: Apply only a clean image swap
+        run: |
+          set -euo pipefail
+          summary=$(grep -E '^(Plan:|No changes\.)' plan.out | tail -1 || true)
+          echo "Plan summary: ${summary:-<none>}"
+          case "$summary" in
+            "Plan: 1 to add, 0 to change, 1 to destroy."|"Plan: 2 to add, 0 to change, 2 to destroy.")
+              echo "Clean image swap — applying."
+              terraform -chdir=infra apply -input=false tfplan
+              {
+                echo "### ✅ Deployed"
+                echo ""
+                echo "- lik-mcp: \`$MCP_REF\`"
+                echo "- lik-ui: \`$UI_REF\`"
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            "No changes."*)
+              {
+                echo "### Nothing to deploy"
+                echo ""
+                echo "Terraform reports no changes — the running deployment already matches."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              {
+                echo "### ⚠️ Not a clean image swap — apply skipped"
+                echo ""
+                echo "The plan below was not a routine image swap, so it was left for review:"
+                echo ""
+                echo '```'
+                echo "${summary:-see the Terraform plan step log}"
+                echo '```'
+                echo ""
+                echo "Review and apply locally:"
+                echo ""
+                echo '```'
+                echo "cd infra && ./tf.sh apply -var-file=prod.tfvars"
+                echo '```'
+                echo ""
+                echo "Image refs from this run (bump these in prod.tfvars if applying manually):"
+                echo ""
+                echo '```'
+                echo "lik_mcp_image = \"$MCP_REF\""
+                echo "lik_ui_image  = \"$UI_REF\""
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+          esac

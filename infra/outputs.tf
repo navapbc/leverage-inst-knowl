@@ -33,3 +33,8 @@ output "github_image_push_role_arn" {
   description = "IAM role ARN for the GitHub Actions image-push workflow (configure-aws-credentials)."
   value       = aws_iam_role.github_image_push.arn
 }
+
+output "github_apply_role_arn" {
+  description = "IAM role ARN for the GitHub Actions gated terraform-apply job. Set as the AWS_APPLY_ROLE_ARN repo/prod variable."
+  value       = aws_iam_role.github_apply.arn
+}

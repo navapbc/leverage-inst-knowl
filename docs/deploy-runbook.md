@@ -265,13 +265,20 @@ variables to resolve. Already created:
 | Variable | Value | Scope |
 |----------|-------|-------|
 | `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::293033346213:role/github-actions-lik-image-push` | env `prod` |
+| `AWS_APPLY_ROLE_ARN` | `arn:aws:iam::293033346213:role/github-actions-lik-apply` | env `prod` |
 | `AWS_REGION` | `us-east-1` | env `prod` |
+
+`AWS_APPLY_ROLE_ARN` is the `apply` job's role (`terraform output github_apply_role_arn`).
+The role is created by Terraform, so it must exist before the first CI apply — run one local
+`cd infra && ./tf.sh apply -var-file=prod.tfvars` after merging the role, then set the variable.
 
 To recreate or inspect:
 ```bash
 gh api --method PUT repos/navapbc/leverage-inst-knowl/environments/prod   # create the env
 gh variable set AWS_DEPLOY_ROLE_ARN --env prod --repo navapbc/leverage-inst-knowl \
   --body arn:aws:iam::293033346213:role/github-actions-lik-image-push
+gh variable set AWS_APPLY_ROLE_ARN --env prod --repo navapbc/leverage-inst-knowl \
+  --body arn:aws:iam::293033346213:role/github-actions-lik-apply
 gh variable set AWS_REGION --env prod --repo navapbc/leverage-inst-knowl --body us-east-1
 gh variable list --env prod --repo navapbc/leverage-inst-knowl
 ```
@@ -391,10 +398,27 @@ SSM value (step 3) or an OAuth redirect-URI mismatch (step 2).
 
 ## Routine redeploy (new image)
 
-1. Run the **Build and push container images** workflow → copy the new refs.
-2. `./tf.sh apply -var lik_mcp_image=… -var lik_ui_image=…`.
+Run the **Build and push container images** workflow (UI or `gh workflow run …`). After the
+`push` job builds and pushes, the `apply` job deploys automatically **when the plan is a clean
+image swap** — `Plan: 1 to add, 0 to change, 1 to destroy.` (one service) or
+`2 to add, 0 to change, 2 to destroy.` (both). The run summary shows `✅ Deployed` with the refs.
 
-No secret or DB steps needed unless config changed.
+A single-service run still deploys safely: the `apply` job resolves the *other* service's
+current image ref from Lightsail and passes both, so it never destroys the untouched service.
+
+**If the plan is anything else** (config drift, or any `to change`), the `apply` job skips the
+apply and the run summary prints the exact command to run locally after review:
+
+```bash
+cd infra && ./tf.sh apply -var-file=prod.tfvars
+```
+
+(bump the image ref(s) in your local `prod.tfvars` to the values the summary lists first).
+
+No secret or DB steps needed unless config changed. The auto-apply gate is intentionally
+conservative — it only ever fails *toward* manual review, never toward an unattended dirty apply.
+If an AWS-provider upgrade ever changes how a deployment replacement is summarized, the gate
+stops matching and every run routes to the manual path until the summary strings are updated.
 
 ## Viewing logs
 
