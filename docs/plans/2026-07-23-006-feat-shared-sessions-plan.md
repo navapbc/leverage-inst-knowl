@@ -1,7 +1,7 @@
 ---
 title: "feat: Shared sessions (open by id + Shared toggle, read-only)"
 type: feat
-status: active
+status: completed
 date: 2026-07-23
 ---
 
