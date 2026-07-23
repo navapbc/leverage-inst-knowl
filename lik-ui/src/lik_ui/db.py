@@ -140,3 +140,14 @@ class Store:
                 """,
                 (session_id, user_id),
             ).fetchone()
+
+    def delete_session(self, session_id: str, user_id: int) -> bool:
+        """Forget a session record. Scoped to the owning user so one user can't delete
+        another's. Returns whether a row was removed."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                "DELETE FROM sessions WHERE session_id = %s AND user_id = %s RETURNING session_id",
+                (session_id, user_id),
+            ).fetchone()
+            conn.commit()
+            return row is not None

@@ -2,10 +2,20 @@
 {% block title %}Choose a prior session · lik-ui{% endblock %}
 {% block content %}
   <h1>Choose a prior session</h1>
+  {% if sessions %}
+    <p class="muted-note">To remove every session at once, go to <a href="/settings">Settings</a> to delete all sessions.</p>
+  {% endif %}
   {% for s in sessions %}
-    <div class="card">
-      <a href="/chat/{{ s.session_id | urlencode }}" title="Session {{ s.session_id }}">{{ s.title or ("Session " ~ s.session_id) }}</a>
-      · <a href="/connections?agent_id={{ s.agent_id | urlencode }}">agent</a>
+    <div class="card session-row">
+      <span>
+        <a href="/chat/{{ s.session_id | urlencode }}" title="Session {{ s.session_id }}">{{ s.title or ("Session " ~ s.session_id) }}</a>
+        · <a href="/connections?agent_id={{ s.agent_id | urlencode }}">agent</a>
+      </span>
+      <form method="post" action="/sessions/delete"
+            onsubmit="return confirm('Delete this session? This permanently removes its data and cannot be undone.');">
+        <input type="hidden" name="session_id" value="{{ s.session_id }}">
+        <button class="btn danger" type="submit">Delete</button>
+      </form>
     </div>
   {% else %}
     <p>No sessions yet. <a href="/">Choose an agent</a> to start one.</p>

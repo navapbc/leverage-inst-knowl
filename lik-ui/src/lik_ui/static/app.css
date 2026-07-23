@@ -30,6 +30,16 @@ a { color: var(--accent); }
 .status-connected { color: #2f855a; }
 .status-missing { color: #c05621; }
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin: .75rem 0; background: #fff; }
+/* Advisory notice (e.g. beta / data-handling caveats): a quiet amber callout. */
+.card.notice { background: #fffaf2; border-color: #f0dcc0; }
+.card.notice > :first-child { margin-top: 0; }
+.card.notice > :last-child { margin-bottom: 0; }
+.card.notice p { margin: .5rem 0; }
+/* Quiet secondary hint line (e.g. the "delete all in Settings" pointer). */
+.muted-note { color: var(--muted); font-size: .9rem; }
+/* Sessions list row: title on the left, Delete button pinned right. */
+.card.session-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.card.session-row form { margin: 0; }
 /* Collapsible per-agent details on the agent-selection page. */
 .card > details { margin-top: .6rem; }
 .card > details > summary { cursor: pointer; color: var(--accent); }

@@ -16,9 +16,10 @@ def register_account_routes(app) -> None:
     from .app_auth import require_user
 
     @app.get("/settings", response_class=HTMLResponse)
-    async def settings_page(request: Request, deleted: str = ""):
+    async def settings_page(request: Request, deleted: str = "", sessions_deleted: str = ""):
         user = require_user(request)
-        vault_id = request.app.state.store.get_user_vault(user["id"])
+        store = request.app.state.store
+        vault_id = store.get_user_vault(user["id"])
         vault_client: VaultClient | None = request.app.state.vault_client
         credentials = []
         if vault_id and vault_client is not None:
@@ -29,7 +30,14 @@ def register_account_routes(app) -> None:
         return templates.TemplateResponse(
             request,
             "settings.html",
-            {"user": user, "vault_id": vault_id, "credentials": credentials, "deleted": bool(deleted)},
+            {
+                "user": user,
+                "vault_id": vault_id,
+                "credentials": credentials,
+                "deleted": bool(deleted),
+                "session_count": len(store.list_sessions(user["id"])),
+                "sessions_deleted": bool(sessions_deleted),
+            },
         )
 
     @app.post("/settings/vault/delete")
@@ -41,6 +49,24 @@ def register_account_routes(app) -> None:
         except Exception as exc:  # noqa: BLE001 - surface vault/SDK errors as a page, not a 500
             return HTMLResponse(f"Could not delete your vault: {exc}", status_code=502)
         return RedirectResponse("/settings?deleted=1", status_code=303)
+
+    @app.post("/settings/sessions/delete-all")
+    async def delete_all_sessions(request: Request):
+        user = require_user(request)
+        store = request.app.state.store
+        sessions_client = request.app.state.sessions_client
+        # Delete each session's platform data first, then its local row — same ordering as the
+        # single-session delete, so a session is never dropped from the list while its data
+        # lives on. On a mid-way failure the already-deleted ones stay gone and the rest remain,
+        # so a retry safely resumes. Stub/test mode has no platform session; the rows go alone.
+        try:
+            for s in store.list_sessions(user["id"]):
+                if sessions_client is not None:
+                    sessions_client.delete_session(s["session_id"])
+                store.delete_session(s["session_id"], user["id"])
+        except Exception as exc:  # noqa: BLE001 - surface session/SDK errors as a page, not a 500
+            return HTMLResponse(f"Could not delete your sessions: {exc}", status_code=502)
+        return RedirectResponse("/settings?sessions_deleted=1", status_code=303)
 
     @app.post("/settings/credential/delete")
     async def delete_credential(request: Request):
