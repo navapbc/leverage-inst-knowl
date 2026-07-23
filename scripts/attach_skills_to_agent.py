@@ -92,7 +92,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  skills now:     {current}")
     print(f"  skills planned: {merged}")
 
-    if merged == current:
+    # Compare order-insensitively: the agent's stored skill order is irrelevant to whether the
+    # targets are already pinned, and merge_skills reorders (targets last). Keying by skill_id
+    # avoids a spurious new agent version when an already-attached target isn't last.
+    def _by_id(skills):
+        return {s["skill_id"]: s for s in skills}
+
+    if _by_id(merged) == _by_id(current):
         print("already attached — no change needed")
         return 0
 
@@ -123,4 +129,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}")

@@ -127,3 +127,17 @@ def test_main_apply_idempotent_when_already_attached(tmp_path, monkeypatch):
     rc = attach.main(["--skill", "lik-a", "--agent-id", "agent_1", "--apply"])
     assert rc == 0
     assert client.beta.agents.update_calls == []  # already attached -> no write
+
+
+def test_main_apply_idempotent_regardless_of_skill_order(tmp_path, monkeypatch):
+    # Target already attached but NOT last in the agent's list must still be a no-op (order-insensitive).
+    agent = SimpleNamespace(version=7, name="A", model=SimpleNamespace(id="claude-opus-4-8"),
+                            system=None,
+                            skills=[_skill("custom", "id_a", "latest"), _skill("anthropic", "xlsx")],
+                            tools=[], mcp_servers=[])
+    client = FakeClient(agent, skills_list=[("id_a", "lik-a")])
+    _wire(monkeypatch, tmp_path, client)
+
+    rc = attach.main(["--skill", "lik-a", "--agent-id", "agent_1", "--apply"])
+    assert rc == 0
+    assert client.beta.agents.update_calls == []

@@ -24,6 +24,7 @@ importable (and unit-testable) without the dependency installed.
 from __future__ import annotations
 
 import argparse
+import io
 import os
 import sys
 from dataclasses import dataclass
@@ -95,7 +96,8 @@ def to_upload_files(pairs: list[tuple[str, Path]]) -> list[tuple[str, object, st
     files: list[tuple[str, object, str]] = []
     for arcname, path in pairs:
         content_type = _CONTENT_TYPES.get(path.suffix, "text/plain")
-        files.append((arcname, path.open("rb"), content_type))
+        # Read into memory so no OS file handle is left open for the request's lifetime.
+        files.append((arcname, io.BytesIO(path.read_bytes()), content_type))
     return files
 
 
@@ -181,4 +183,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}")
