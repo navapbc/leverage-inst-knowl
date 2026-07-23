@@ -14,7 +14,7 @@
 * Keep designs store-agnostic. A design pinned to a particular Data Source's (e.g. Confluence's) quirks would break on the next source. Code modifications must be general to different DSs.
 * Run `eval mise list` to initialize the uv and python 3.14 environment.
 * The code is under the `lik-mcp` folder, so `cd lik-mcp` before running coding tools.
-* **DB schema changes:** The project is in drafting mode with no production deployment. For schema changes, prefer dropping and recreating the DB (`docker compose down -v && docker compose up -d`) over writing idempotent migration scripts. No backward-compatibility overhead needed until a production deployment exists.
+* **DB schema changes:** There IS a production deployment (the Lightsail `lik-prod-db` instance). Do **not** drop and recreate the DB — that destroys real data. Instead, apply schema changes as explicit, non-destructive `ALTER` statements (e.g. `ALTER TABLE ... ADD COLUMN ... DEFAULT ...`). Note that `db/init.sql` uses `CREATE TABLE IF NOT EXISTS`, so re-running it will **not** add a new column to an existing table — the prod DB must be migrated separately. After any schema change, remind (and offer to help) the user update the prod DB, since applying the `ALTER` there is a required, separate step from merging the code.
 * Use `uv`
     - To activate the Python virtual environment, `source .venv/bin/activate`
     - For arbitrary Python on the CLI, run `uv run python <args>` (never `python` / `python3`).
