@@ -117,17 +117,20 @@ class Settings(BaseSettings):
 
     @property
     def agents(self) -> list[AgentOption]:
-        """Parse the roster TOML into ``AgentOption``s. A missing file yields an empty list
-        (the production guard turns that into a loud startup failure); malformed TOML raises."""
+        """Parse the roster TOML into ``AgentOption``s. A top-level ``default_environment_id``
+        applies to any agent that omits its own ``environment_id``. A missing file yields an
+        empty list (the production guard turns that into a loud startup failure); malformed
+        TOML raises."""
         path = Path(self.agents_config_path)
         if not path.is_file():
             return []
         with path.open("rb") as fh:
             data = tomllib.load(fh)
+        default_env = str(data.get("default_environment_id", "")).strip()
         options = []
         for entry in data.get("agents", []):
             agent_id = str(entry.get("agent_id", "")).strip()
-            environment_id = str(entry.get("environment_id", "")).strip()
+            environment_id = str(entry.get("environment_id", "")).strip() or default_env
             if agent_id:
                 options.append(AgentOption(agent_id=agent_id, environment_id=environment_id))
         return options

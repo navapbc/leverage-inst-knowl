@@ -54,6 +54,38 @@ def test_agents_lists_configured_agents_in_file_order(tmp_path):
     ]
 
 
+def test_agents_use_default_environment_when_omitted(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        default_environment_id = "env_default"
+
+        [[agents]]
+        agent_id = "agent_a"
+
+        [[agents]]
+        agent_id = "agent_b"
+        environment_id = "env_special"
+        """,
+    )
+    s = Settings(env="test", agents_config_path=path)
+    assert [(a.agent_id, a.environment_id) for a in s.agents] == [
+        ("agent_a", "env_default"),  # inherits the top-level default
+        ("agent_b", "env_special"),  # own environment_id overrides the default
+    ]
+
+
+def test_agents_environment_empty_when_no_default_and_none_set(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent_id = "agent_a"
+        """,
+    )
+    assert Settings(env="test", agents_config_path=path).agents[0].environment_id == ""
+
+
 def test_agents_empty_when_file_has_no_entries(tmp_path):
     assert Settings(env="test", agents_config_path=_roster(tmp_path, "")).agents == []
 

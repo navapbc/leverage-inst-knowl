@@ -2,10 +2,15 @@
 # Managed Agent id with the environment its sessions run in. The label shown in the picker
 # is read from the agent's own definition via the SDK, not stored here.
 #
+# default_environment_id applies to any agent that omits its own environment_id; an agent
+# may still set environment_id to override the default.
+#
 # To add an agent: run scripts/init_workspace.py (it appends a block here) or add one by
 # hand, then open a PR. The app reads this file once at startup, so a new agent appears
 # after a redeploy — there is no runtime reload.
 
+default_environment_id = "env_016c6vWcCUvyVUaztWhvsAQt"
+
 [[agents]]
 agent_id = "agent_01E7mqTKAdtosKpWDSLxALmq"
-environment_id = "env_016c6vWcCUvyVUaztWhvsAQt"
+# environment_id omitted -> uses default_environment_id above
