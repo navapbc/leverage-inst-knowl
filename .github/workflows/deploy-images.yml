@@ -222,5 +222,7 @@ jobs:
                 echo "lik_ui_image  = \"$UI_REF\""
                 echo '```'
               } >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::Plan is not a clean image swap — apply skipped, review and apply locally."
+              exit 1
               ;;
           esac
