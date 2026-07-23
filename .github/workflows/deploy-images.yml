@@ -170,6 +170,7 @@ jobs:
 
       - name: Terraform plan
         run: |
+          set -o pipefail  # else `| tee` masks a plan failure and it leaks into the gate
           terraform -chdir=infra plan -input=false -no-color -out=tfplan \
             -var "lik_mcp_image=$MCP_REF" \
             -var "lik_ui_image=$UI_REF" \

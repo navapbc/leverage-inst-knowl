@@ -111,6 +111,16 @@ data "aws_iam_policy_document" "apply" {
     resources = ["arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/*"]
   }
 
+  # The aws_ssm_parameter managed resource (database.tf) reads parameter metadata via
+  # ssm:DescribeParameters during plan/refresh. That action does not support resource-level
+  # ARNs, so it must be granted on "*" in its own statement.
+  statement {
+    sid       = "SsmDescribe"
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+
   # Lightsail refresh (containers + database) plus the one write the image-swap performs.
   # Lightsail does not support resource-level ARNs, so Resource must be "*".
   statement {
