@@ -159,19 +159,65 @@ def test_connections_page_lists_agent_skills(db):
     assert "skill-details-btn" in r.text  # each skill has a button to fetch its details
 
 
-def test_skill_details_endpoint_returns_name_and_description(db):
+def test_skill_details_endpoint_returns_name_description_and_instructions(db, monkeypatch):
+    """F3: the endpoint joins describe_skill's name/description with the SKILL.md fetched from
+    GitHub and an always-present source_url (the blob link)."""
+    async def fake_fetch(name, settings, client_factory=None):
+        return "# full instructions"
+
+    monkeypatch.setattr("lik_ui.agents.fetch_skill_instructions", fake_fetch)
     client = TestClient(_app(db, FakeAgentsClient([LIK]), RecordingVaultClient()), follow_redirects=False)
     _login(client)
-    r = client.get("/connections/skill?skill_id=lik-query-project-index&version=3")
+    r = client.get("/skill-details?skill_id=lik-query-project-index&version=3")
     assert r.status_code == 200
     body = r.json()
     assert body["name"] == "Skill lik-query-project-index"
     assert "v3" in body["description"]
+    assert body["instructions"] == "# full instructions"
+    assert body["source_url"] == (
+        "https://github.com/navapbc/leverage-inst-knowl/blob/main"
+        "/.claude/skills/Skill lik-query-project-index/SKILL.md"
+    )
+
+
+def test_skill_details_endpoint_degrades_when_fetch_unavailable(db, monkeypatch):
+    """R4: a failed SKILL.md fetch yields instructions: null with a non-null source_url and a
+    200 — the page shows the fallback link, never an error."""
+    async def fake_fetch(name, settings, client_factory=None):
+        return None
+
+    monkeypatch.setattr("lik_ui.agents.fetch_skill_instructions", fake_fetch)
+    client = TestClient(_app(db, FakeAgentsClient([LIK]), RecordingVaultClient()), follow_redirects=False)
+    _login(client)
+    r = client.get("/skill-details?skill_id=lik-thing&version=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["instructions"] is None
+    assert body["source_url"].startswith("https://github.com/navapbc/leverage-inst-knowl/blob/main/")
+    assert body["source_url"].endswith("/SKILL.md")
+
+
+def test_skill_details_endpoint_error_skips_fetch(db, monkeypatch):
+    """When describe_skill fails the endpoint 502s (unchanged) and never attempts the fetch."""
+    async def boom_fetch(name, settings, client_factory=None):
+        raise AssertionError("fetch must not run when describe_skill fails")
+
+    monkeypatch.setattr("lik_ui.agents.fetch_skill_instructions", boom_fetch)
+
+    class RaisingSkillClient(FakeAgentsClient):
+        def describe_skill(self, skill_id, version):
+            raise RuntimeError("skill lookup failed")
+
+    client = TestClient(_app(db, RaisingSkillClient([LIK]), RecordingVaultClient()), follow_redirects=False)
+    _login(client)
+    r = client.get("/skill-details?skill_id=x&version=1")
+    assert r.status_code == 502
+    assert "Could not load skill" in r.json()["detail"]
 
 
 def test_skill_details_requires_login(db):
     client = TestClient(_app(db, FakeAgentsClient([LIK]), RecordingVaultClient()), follow_redirects=False)
-    r = client.get("/connections/skill?skill_id=x&version=1")
+    r = client.get("/skill-details?skill_id=x&version=1")
     assert r.status_code == 303
     assert r.headers["location"] == "/login"
 

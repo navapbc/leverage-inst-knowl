@@ -9,6 +9,7 @@ status and drive the connect action for each missing source.
 from typing import Protocol
 
 from .settings import Settings
+from .skill_docs import fetch_skill_instructions, skill_source_url
 from .sources import normalize_url
 from .vault import VaultClient, ensure_user_vault
 
@@ -25,8 +26,9 @@ class AgentsClient(Protocol):
     def describe_skill(self, skill_id: str, version: str) -> dict:
         """Return a skill version's human-readable details: ``{"name": str, "description": str}``.
         The agent definition only carries a skill's id/version; its name and description live on
-        the skill version and are fetched on demand. (Full instructions/SKILL.md are not shown yet
-        — see the README TODO on the download credential limitation.)"""
+        the skill version and are fetched on demand. (The full SKILL.md is not part of this
+        lookup — the ``/skill-details`` endpoint fetches it from the public GitHub repo by
+        skill name; see ``skill_docs.py``.)"""
         ...
 
 
@@ -133,11 +135,18 @@ def register_agent_routes(app) -> None:
             },
         )
 
-    @app.get("/connections/skill")
+    @app.get("/skill-details")
     async def skill_details(request: Request, skill_id: str, version: str):
         require_user(request)  # gate behind login, same as the connections page
         try:
             details = request.app.state.agents_client.describe_skill(skill_id, version)
         except Exception as exc:  # noqa: BLE001 - surface SDK errors as JSON, not a 500
             return JSONResponse({"detail": f"Could not load skill: {exc}"}, status_code=502)
+        # The full SKILL.md is read from the public GitHub repo by skill name (which equals the
+        # skill's directory). source_url is always present (the "view on GitHub" affordance and
+        # the fallback link); instructions is None when the fetch failed — the page degrades to
+        # the fallback rather than erroring.
+        settings: Settings = request.app.state.settings
+        details["source_url"] = skill_source_url(details["name"], settings)
+        details["instructions"] = await fetch_skill_instructions(details["name"], settings)
         return JSONResponse(details)
