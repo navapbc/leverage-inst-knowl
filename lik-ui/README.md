@@ -111,16 +111,23 @@ multiple users depend on it, decide how each user's calls are authorized. Two op
    https://platform.claude.com/settings/workload-identity-federation. Keeps agents and skills
    under one org-owned identity while attributing calls to the mapped user.
 
-## TODO: optionally configure a dedicated Claude Workspace for LIK
+## DONE: dedicated Claude Workspace for LIK
 
-Consider putting LIK's Anthropic usage in its own Claude Workspace
+LIK's Anthropic usage now lives in its own Claude Workspace
 (https://platform.claude.com/settings/workspaces) rather than the org's default one. A
 dedicated workspace isolates LIK's spend, rate limits, and API keys, so its usage can be
 tracked and capped without affecting other Nava work, and access can be scoped to just the
-people who run it. Optional — skip it if the default workspace is good enough for now.
+people who run it.
 
-A workspace can be used to lock down the vault so that only admins can see the vault IDs,
-which can be used to get access to data as other users.
+**Why a separate workspace was required.** The lik-ui app uses the Claude
+Platform and stores its OAuth secrets in a "Credential vault"
+(https://platform.claude.com/workspaces/default/vaults). Vaults are visible to *everyone*
+with access to the workspace they live in — and the vault IDs can be used to get access to
+data as other users, which is an impersonation risk. In the shared `Default` workspace,
+every member could therefore see LIK's OAuth secrets. To close that gap, a separate `lik-ui`
+workspace was created that only the LIK developers and IT admins can access, so the OAuth secrets
+are protected.
+
 More details at https://platform.claude.com/docs/en/manage-claude/workspaces.
 
 ## TODO: streaming timeouts on the deployed ingress (scaling)
