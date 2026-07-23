@@ -81,11 +81,20 @@ request.
 ## TODO: show full skill instructions (SKILL.md)
 
 The connections page can show each skill's name and description, but not its full instructions
-(SKILL.md). The SDK exposes the content via `beta.skills.versions.download` (a zip archive), but
-that endpoint returns 403 "Downloading skill content is not supported with this credential type"
-for the credential lik-ui currently uses. Surfacing SKILL.md needs a credential with skill-download
-permission (likely a standard org API key rather than the managed-agent credential). Until then,
-`describe_skill` returns name and description only.
+(SKILL.md). `describe_skill` returns name and description only.
+
+**Read the instructions from GitHub, not from Managed Agents.** GitHub is the single source of truth
+for skill instructions (they are deployed *to* Managed Agents from `.claude/skills/<name>/` — see
+[`scripts/README.md`](../scripts/README.md)). Do **not** try to fetch them back via
+`beta.skills.versions.download`: that endpoint returns 403 "Downloading skill content is not supported
+with this credential type", and the download-capable credential type was not identified — it's a
+dead end and unnecessary. The full-instructions view should render the authoritative
+`.claude/skills/<name>/SKILL.md` from GitHub instead.
+
+Deferred until the fetch approach is chosen: if this repo is private, lik-ui needs a server-side
+read-only GitHub token (or the skill files bundled into its image at build time) to read the file.
+See `docs/plans/2026-07-23-001-feat-skill-instruction-deploy-pipeline-plan.md` (Deferred to Follow-Up
+Work).
 
 ## TODO: decide how users get Anthropic API access
 
