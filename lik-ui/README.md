@@ -93,11 +93,13 @@ and ref are configurable via `LIK_UI_SKILLS_REPO` (default `navapbc/leverage-ins
 
 Any fetch failure (404, non-200, timeout, or the repo later going private) degrades gracefully:
 the view shows a fallback line linking the file on GitHub so the user can open it themselves,
-never a page or endpoint error. The text is rendered escaped (via `textContent`), so Markdown/HTML
-in the file is shown literally.
+never a page or endpoint error. The `SKILL.md` is rendered as Markdown (headings/lists/links)
+client-side with the same `marked` + `DOMPurify` pipeline as the chat transcript — the endpoint
+still returns the raw text, and if the CDN libs don't load the view falls back to the literal
+text so instructions are never lost.
 
-Deferred: rendering the Markdown (headings/lists/links) instead of raw text, and caching the
-fetched file (align with the `describe`-caching TODO above if per-expand fetches become a concern).
+Deferred: caching the fetched file (align with the `describe`-caching TODO above if per-expand
+fetches become a concern).
 
 ## TODO: decide how users get Anthropic API access
 

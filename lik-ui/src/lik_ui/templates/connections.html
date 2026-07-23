@@ -57,6 +57,12 @@
     <button class="btn" type="submit" {% if not all_connected %}disabled{% endif %}>Start chatting</button>
   </form>
   <div><a href="/sessions">or continue existing chat sessions</a></div>
+  {% if skills %}
+  <!-- Markdown rendering for a skill's SKILL.md. DOMPurify sanitizes because the file comes
+       from an external repo; the same marked + DOMPurify pipeline as the chat transcript. -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  {% endif %}
   <script>
     // Prefill the session title with the agent name plus the current local time so a session
     // gets a meaningful name by default. The user can edit it before starting; if cleared,
@@ -109,10 +115,11 @@
             desc.textContent = res.d.description;
             box.appendChild(name);
             box.appendChild(desc);
-            // Full SKILL.md, fetched from the public GitHub repo. Rendered via textContent
-            // (never innerHTML) so any Markdown/HTML in the file is shown literally, not
-            // interpreted. When the fetch failed (instructions == null) show a fallback line
-            // linking the file on GitHub so the user can still open it.
+            // Full SKILL.md, fetched from the public GitHub repo and rendered as Markdown.
+            // marked parses it to HTML and DOMPurify sanitizes (the file is external content),
+            // mirroring the chat transcript; if the CDN libs didn't load we fall back to the
+            // literal text so instructions are never lost. When the fetch failed
+            // (instructions == null) show a fallback line linking the file on GitHub.
             var gh = document.createElement("a");
             gh.href = res.d.source_url;
             gh.target = "_blank";
@@ -122,10 +129,16 @@
               var link = document.createElement("p");
               link.appendChild(gh);
               box.appendChild(link);
-              var pre = document.createElement("pre");
-              pre.className = "skill-instructions";
-              pre.textContent = res.d.instructions;
-              box.appendChild(pre);
+              var md = document.createElement("div");
+              md.className = "skill-instructions";
+              if (window.marked && window.DOMPurify) {
+                md.innerHTML = window.DOMPurify.sanitize(window.marked.parse(res.d.instructions));
+              } else {
+                var pre = document.createElement("pre");
+                pre.textContent = res.d.instructions;
+                md.appendChild(pre);
+              }
+              box.appendChild(md);
             } else {
               gh.textContent = "view on GitHub";
               var fallback = document.createElement("p");
