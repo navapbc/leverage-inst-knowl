@@ -1,6 +1,8 @@
 -- lik-ui's own store. Idempotent: safe to run on an empty DB via the Docker entrypoint
--- or by hand (`psql "$CONNINFO" -f db/init.sql`). Drop-and-recreate for schema changes
--- (drafting mode, no migrations).
+-- or by hand (`psql "$CONNINFO" -f db/init.sql`). NOTE: the CREATE TABLE IF NOT EXISTS
+-- statements below only create missing tables — they do NOT add new columns to a table
+-- that already exists. The prod DB (Lightsail) holds real data, so schema changes must be
+-- applied there as explicit, non-destructive ALTERs; never drop-and-recreate prod.
 
 -- App users, keyed by their verified Google email (the app-login identity claim).
 CREATE TABLE IF NOT EXISTS users (

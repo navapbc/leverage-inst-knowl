@@ -99,13 +99,14 @@ credentials, so a viewer never acts on the owner's connected data sources.
   driven by a new `is_owner` flag passed from `chat_page`.
 - `lik-ui/src/lik_ui/templates/sessions.html` — "Open a session by id" form already navigates to
   `/chat/<id>` with `encodeURIComponent`; no change needed once server access widens.
-- `lik-ui/db/init.sql` — `sessions` table DDL. Drop-and-recreate for the schema change (drafting mode).
+- `lik-ui/db/init.sql` — `sessions` table DDL. Add the column here for fresh DBs; migrate prod with an `ALTER`.
 - Delete form in `sessions.html` (POST `/sessions/delete` + hidden `session_id` + `confirm()`) is the
   pattern to mirror for the Shared toggle form.
 
 ### Institutional Learnings
 
-- CLAUDE.md: schema changes prefer drop/recreate (`docker compose down -v && up -d`), no migrations.
+- CLAUDE.md: local dev can drop/recreate (`docker compose down -v && up -d`), but the prod DB
+  (Lightsail) holds real data — apply schema changes there as non-destructive `ALTER`s, never drop it.
 - CLAUDE.md: keep designs store-agnostic — nothing here is Confluence/Jira-specific.
 
 ---
@@ -178,8 +179,10 @@ Delete  ──POST──▶ /sessions/delete  → get_session (owner-only, uncha
 
 **Approach:**
 - Add `shared boolean NOT NULL DEFAULT false` to the `sessions` table DDL.
-- Drop-and-recreate the DB per project convention (`docker compose down -v && docker compose up -d`);
-  no migration script.
+- Local dev: recreate the DB (`docker compose down -v && docker compose up -d`) to pick up the column.
+- Prod (Lightsail): apply the same column as a non-destructive migration —
+  `ALTER TABLE sessions ADD COLUMN shared boolean NOT NULL DEFAULT false;` — since it holds real data
+  and `CREATE TABLE IF NOT EXISTS` won't add columns to the existing table.
 
 **Test scenarios:**
 - Test expectation: none — DDL only; behavior is exercised through the store tests in U2.
