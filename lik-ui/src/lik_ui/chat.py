@@ -40,6 +40,10 @@ class SessionsClient(Protocol):
         """Create a session and return its id."""
         ...
 
+    def delete_session(self, session_id: str) -> None:
+        """Delete the session on the platform, removing its retained data."""
+        ...
+
     def send_and_stream(self, session_id: str, message: str) -> Iterator[dict]:
         """Send a user message and yield normalized event dicts, e.g.
         {"type": "status", "state": "running"}, {"type": "text", "text": ...},
@@ -103,6 +107,9 @@ class AnthropicSessionsClient:
             agent=agent_id, environment_id=environment_id, vault_ids=vault_ids, title=title
         )
         return session.id
+
+    def delete_session(self, session_id: str) -> None:
+        self._client.beta.sessions.delete(session_id)
 
     @staticmethod
     def _normalize(event, *, include_user: bool = False) -> dict | None:
@@ -333,6 +340,27 @@ def register_chat_routes(app) -> None:
         return templates.TemplateResponse(
             request, "sessions.html", {"user": user, "sessions": sessions}
         )
+
+    @app.post("/sessions/delete")
+    async def delete_session(request: Request):
+        user = require_user(request)
+        form = await request.form()
+        session_id = form.get("session_id", "")
+        # Ownership check: only the owning user can delete, and only an existing row.
+        session = request.app.state.store.get_session(session_id, user["id"])
+        if not session:
+            return RedirectResponse("/sessions", status_code=303)
+        # Delete the platform session first so its retained data is actually removed; only
+        # then drop the local row, keeping the list honest (a listed session still exists on
+        # the platform). Stub/test mode has no platform session, so it deletes the row alone.
+        sessions_client: SessionsClient | None = request.app.state.sessions_client
+        if sessions_client is not None:
+            try:
+                sessions_client.delete_session(session_id)
+            except Exception as exc:  # noqa: BLE001 - surface session/SDK errors as a page, not a 500
+                return HTMLResponse(f"Could not delete that session: {exc}", status_code=502)
+        request.app.state.store.delete_session(session_id, user["id"])
+        return RedirectResponse("/sessions", status_code=303)
 
     @app.get("/chat/{session_id}", response_class=HTMLResponse)
     async def chat_page(request: Request, session_id: str):

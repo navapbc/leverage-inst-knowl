@@ -32,6 +32,12 @@ class FakeSessionsClient:
         self.created.append((agent_id, environment_id, tuple(vault_ids), title))
         return f"sess_{len(self.created)}"
 
+    def delete_session(self, session_id):
+        if self.raises:
+            raise RuntimeError("delete boom")
+        self.deleted = getattr(self, "deleted", [])
+        self.deleted.append(session_id)
+
     def send_and_stream(self, session_id, message):
         if self.raises:
             raise RuntimeError("stream boom")
@@ -256,6 +262,43 @@ def test_chat_page_lists_declared_servers_for_auto_approve(db):
     assert 'class="auto-server" value="atlassian" checked' in page
     assert 'value="atlassian" checked disabled' not in page
     assert 'class="auto-server" value="github" checked disabled' in page
+
+
+def test_delete_session_removes_row_and_deletes_platform_session(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    assert session_id in client.get("/sessions").text
+
+    r = client.post("/sessions/delete", data={"session_id": session_id})
+    assert r.status_code == 303 and r.headers["location"] == "/sessions"
+    assert sc.deleted == [session_id]  # platform data removed, honoring the delete promise
+    assert session_id not in client.get("/sessions").text  # and it's gone from the list
+
+
+def test_delete_session_surfaces_platform_error_and_keeps_row(db):
+    # A failed platform delete must not silently drop the local row: a listed session should
+    # never outlive its platform data, so we keep it and surface the error.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    sc.raises = True
+    r = client.post("/sessions/delete", data={"session_id": session_id})
+    assert r.status_code == 502
+    assert session_id in client.get("/sessions").text  # row survives the failed delete
+
+
+def test_delete_session_ignores_a_session_the_user_does_not_own(db):
+    # No platform call for a row the user doesn't own (or that doesn't exist); just redirect.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    r = client.post("/sessions/delete", data={"session_id": "sess_not_mine"})
+    assert r.status_code == 303 and r.headers["location"] == "/sessions"
+    assert getattr(sc, "deleted", []) == []
 
 
 def test_resume_does_not_create_a_new_session(db):
