@@ -113,7 +113,7 @@ class Store:
                 """
                 INSERT INTO sessions (session_id, user_id, agent_id, title)
                 VALUES (%s, %s, %s, %s)
-                RETURNING session_id, user_id, agent_id, title, created_at
+                RETURNING session_id, user_id, agent_id, title, shared, created_at
                 """,
                 (session_id, user_id, agent_id, title),
             ).fetchone()
@@ -124,22 +124,46 @@ class Store:
         with self.db.connection() as conn:
             return conn.execute(
                 """
-                SELECT session_id, user_id, agent_id, title, created_at
+                SELECT session_id, user_id, agent_id, title, shared, created_at
                 FROM sessions WHERE user_id = %s ORDER BY created_at DESC
                 """,
                 (user_id,),
             ).fetchall()
 
     def get_session(self, session_id: str, user_id: int) -> dict | None:
-        """Scoped to the owning user so one user can't open another's session."""
+        """Scoped to the owning user so one user can't open another's session. Use this to
+        gate writes and management (send, confirm, delete, share toggle)."""
         with self.db.connection() as conn:
             return conn.execute(
                 """
-                SELECT session_id, user_id, agent_id, title, created_at
+                SELECT session_id, user_id, agent_id, title, shared, created_at
                 FROM sessions WHERE session_id = %s AND user_id = %s
                 """,
                 (session_id, user_id),
             ).fetchone()
+
+    def get_accessible_session(self, session_id: str, user_id: int) -> dict | None:
+        """Read access: the row if this user owns it OR the owner marked it shared. Use this
+        to gate read-only views (open, history, resume); never to gate a write."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                """
+                SELECT session_id, user_id, agent_id, title, shared, created_at
+                FROM sessions WHERE session_id = %s AND (user_id = %s OR shared = true)
+                """,
+                (session_id, user_id),
+            ).fetchone()
+
+    def set_session_shared(self, session_id: str, user_id: int, shared: bool) -> bool:
+        """Flip a session's shared flag. Owner-scoped so one user can't share another's
+        session. Returns whether a row was updated."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                "UPDATE sessions SET shared = %s WHERE session_id = %s AND user_id = %s RETURNING session_id",
+                (shared, session_id, user_id),
+            ).fetchone()
+            conn.commit()
+            return row is not None
 
     def delete_session(self, session_id: str, user_id: int) -> bool:
         """Forget a session record. Scoped to the owning user so one user can't delete

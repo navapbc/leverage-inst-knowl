@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id     bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     agent_id    text        NOT NULL,
     title       text,
+    -- When true, any authenticated user who knows the session_id gets read-only access
+    -- (view transcript, attach to an in-flight turn). Writes stay owner-only.
+    shared      boolean     NOT NULL DEFAULT false,
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id, created_at DESC);
