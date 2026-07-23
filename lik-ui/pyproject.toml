@@ -28,10 +28,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-# Ship the server-rendered templates and static assets inside the installed package —
-# a non-editable `pip install .` (the container) omits non-Python files otherwise.
+# Ship the server-rendered templates, static assets, and the agent roster inside the
+# installed package — a non-editable `pip install .` (the container) omits non-Python
+# files otherwise, which would leave the app with an empty roster at startup.
 [tool.setuptools.package-data]
-lik_ui = ["templates/*.html", "static/*"]
+lik_ui = ["templates/*.html", "static/*", "agents.toml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]  # "." so tests can import sibling test modules (from tests.X import ...)

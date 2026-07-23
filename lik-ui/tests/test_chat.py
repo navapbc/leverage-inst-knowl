@@ -1,5 +1,6 @@
 """Chat: session create/resume and SSE streaming. The Managed Agents session is faked."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -64,7 +65,7 @@ class FakeAgentsClient:
 def _app(db, sessions_client, vc=None):
     vc = vc or RecordingVaultClient()
     oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
-    settings = Settings(env="test", agents_config="agent_1:env_1")
+    settings = Settings(env="test", agents_config_path=Path(__file__).parent / "fixtures" / "agents.toml")
     return build_app(settings, store=Store(db), app_oidc=oidc, vault_client=vc,
                      agents_client=FakeAgentsClient(), sessions_client=sessions_client)
 
@@ -509,7 +510,7 @@ def test_history_empty_in_stub_mode(db):
     session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
     # Stub mode: no sessions client -> empty history, transcript just starts blank.
     app = build_app(
-        Settings(env="test", agents_config="agent_1:env_1"),
+        Settings(env="test", agents_config_path=Path(__file__).parent / "fixtures" / "agents.toml"),
         store=Store(db), app_oidc=FakeOidc({"email": "alice@navapbc.com", "email_verified": True}),
         vault_client=RecordingVaultClient(), sessions_client=None,
     )

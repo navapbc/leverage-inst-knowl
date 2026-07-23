@@ -1,5 +1,6 @@
 """Agent selection and required-connection resolution."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -107,7 +108,7 @@ def test_describe_maps_permission_policy_per_server():
 
 def _app(db, agents_client, vc):
     oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
-    settings = Settings(env="test", agents_config="agent_1:env_1")
+    settings = Settings(env="test", agents_config_path=Path(__file__).parent / "fixtures" / "agents.toml")
     return build_app(settings, store=Store(db), app_oidc=oidc, vault_client=vc, agents_client=agents_client)
 
 

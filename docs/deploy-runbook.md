@@ -142,8 +142,7 @@ cd infra
 >      lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID \
 >      lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL lik-ui/LIK_UI_GITHUB_CLIENT_ID \
 >      lik-ui/LIK_UI_GITHUB_CLIENT_SECRET lik-ui/LIK_UI_GITHUB_RESOURCE_URL lik-ui/LIK_UI_SLACK_CLIENT_ID \
->      lik-ui/LIK_UI_SLACK_CLIENT_SECRET lik-ui/LIK_UI_SLACK_RESOURCE_URL lik-ui/LIK_UI_ANTHROPIC_API_KEY \
->      lik-ui/LIK_UI_AGENTS_CONFIG; do
+>      lik-ui/LIK_UI_SLACK_CLIENT_SECRET lik-ui/LIK_UI_SLACK_RESOURCE_URL lik-ui/LIK_UI_ANTHROPIC_API_KEY; do
 >      AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 --type SecureString \
 >        --name "/ik-arch/prod/$n" --value PLACEHOLDER_REPLACE_ME; done
 >    ```
@@ -186,9 +185,15 @@ This keeps secrets off the command line (out of shell history / `ps`) and avoids
 special-char quoting breakage (a `)` trips the mise zsh hook, same as the DB password) — while
 only asking you to edit a single file.
 
+**The agent roster is no longer in SSM.** It lives in the checked-in `lik-ui/src/lik_ui/agents.toml`,
+shipped inside the container image. Add/remove agents there via PR (or run
+`scripts/init_workspace.py`, which appends to it), then rebuild the image and redeploy. The old
+`/ik-arch/prod/lik-ui/LIK_UI_AGENTS_CONFIG` SSM parameter is now orphaned and can be deleted
+out-of-band: `AWS_PROFILE=lik mise exec -- aws ssm delete-parameter --region us-east-1 --name /ik-arch/prod/lik-ui/LIK_UI_AGENTS_CONFIG`.
+
 **Which params must be real vs. can stay placeholder:** the app's prod fail-closed guard only
 requires `LIK_UI_SESSION_SECRET`, `LIK_UI_APP_OAUTH_CLIENT_ID`, `LIK_UI_APP_OAUTH_CLIENT_SECRET`,
-`LIK_UI_ANTHROPIC_API_KEY`, `LIK_UI_AGENTS_CONFIG`, plus lik-mcp's `LIK_OAUTH_CLIENT_ID`. The
+`LIK_UI_ANTHROPIC_API_KEY`, plus lik-mcp's `LIK_OAUTH_CLIENT_ID` (and a non-empty `agents.toml`). The
 per-connection groups (`LIK_UI_LIKMCP_*`, `LIK_UI_GDRIVEMCP_*`, `LIK_UI_GITHUB_*`) are only
 needed for the connections you actually enable — leave the others as `PLACEHOLDER_REPLACE_ME`
 (they must *exist* so Terraform's data sources resolve, but that connection simply won't work
@@ -210,7 +215,7 @@ echo "Edit this file: $SF"
 
 **Step B — edit `$SF`** in your editor: replace each `…` with the real value; delete or
 `#`-comment the connection lines you're not setting yet (leave the boot-required ones —
-`APP_OAUTH_*`, `ANTHROPIC_API_KEY`, `AGENTS_CONFIG`, `SESSION_SECRET`, `LIK_OAUTH_CLIENT_ID`).
+`APP_OAUTH_*`, `ANTHROPIC_API_KEY`, `SESSION_SECRET`, `LIK_OAUTH_CLIENT_ID`).
 Generate `LIK_UI_SESSION_SECRET` with `openssl rand -hex 32`.
 
 **Step C — push, then shred.** Run `infra/set-ssm-secrets.sh` against the file. It writes each
@@ -239,7 +244,7 @@ AWS_PROFILE=lik mise exec -- aws ssm get-parameters-by-path --path /ik-arch/prod
   | grep -B1 PLACEHOLDER_REPLACE_ME | grep '"Name"'
 ```
 
-Any `LIK_UI_APP_*`, `LIK_UI_ANTHROPIC_API_KEY`, `LIK_UI_AGENTS_CONFIG`, `LIK_UI_SESSION_SECRET`,
+Any `LIK_UI_APP_*`, `LIK_UI_ANTHROPIC_API_KEY`, `LIK_UI_SESSION_SECRET`,
 or `LIK_OAUTH_CLIENT_ID` still listed here will make the container fail its prod guard at boot.
 
 ### 4. Build and push images ✅ done (`:lik-mcp-prod.app.2`, `:lik-ui-prod.app.1`)
@@ -410,7 +415,7 @@ AWS_PROFILE=lik mise exec -- aws lightsail get-container-log \
 > *"<url> has no dynamic client registration and no configured client."*
 
 **Why this matters for this deploy:** the agent
-`agent_016uQNVgNEVtcAmvwKtskh8d` (from `LIK_UI_AGENTS_CONFIG`) was authored pointing at the
+`agent_016uQNVgNEVtcAmvwKtskh8d` (from the roster in `lik-ui/src/lik_ui/agents.toml`) was authored pointing at the
 old `https://leverage-inst-knowl.onrender.com/mcp` deployment. After migrating to Lightsail,
 its declared lik-mcp server URL must be updated to the Lightsail URL:
 

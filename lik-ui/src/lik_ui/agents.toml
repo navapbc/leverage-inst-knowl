@@ -1,0 +1,11 @@
+# lik-ui agent roster. Each [[agents]] block is one selectable agent, pairing its Claude
+# Managed Agent id with the environment its sessions run in. The label shown in the picker
+# is read from the agent's own definition via the SDK, not stored here.
+#
+# To add an agent: run scripts/init_workspace.py (it appends a block here) or add one by
+# hand, then open a PR. The app reads this file once at startup, so a new agent appears
+# after a redeploy — there is no runtime reload.
+
+[[agents]]
+agent_id = "agent_01E7mqTKAdtosKpWDSLxALmq"
+environment_id = "env_016c6vWcCUvyVUaztWhvsAQt"

@@ -1,0 +1,4 @@
+# Test roster used by the chat/route tests. Not the shipped roster.
+[[agents]]
+agent_id = "agent_1"
+environment_id = "env_1"

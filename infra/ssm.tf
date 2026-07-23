@@ -32,7 +32,8 @@ locals {
     "LIK_UI_SLACK_CLIENT_SECRET",
     "LIK_UI_SLACK_RESOURCE_URL",
     "LIK_UI_ANTHROPIC_API_KEY",
-    "LIK_UI_AGENTS_CONFIG",
+    # Note: the agent roster is NOT here — it lives in the checked-in src/lik_ui/agents.toml,
+    # shipped inside the container image (not an SSM value).
   ]
 }
 

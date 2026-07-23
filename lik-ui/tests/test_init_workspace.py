@@ -148,19 +148,62 @@ def test_env_payload_name_override():
 
 # --- format_ssm_block -------------------------------------------------------------------
 
-def test_ssm_block_shape_and_no_trailing_space():
-    block = iw.format_ssm_block("sk-ant-realkey", "agent_new", "env_new")
+def test_ssm_block_is_api_key_only_no_trailing_space():
+    block = iw.format_ssm_block("sk-ant-realkey")
     lines = block.split("\n")
-    assert lines[0] == "$P/lik-ui/LIK_UI_ANTHROPIC_API_KEY=sk-ant-realkey"
-    assert lines[1] == "$P/lik-ui/LIK_UI_AGENTS_CONFIG=agent_new:env_new"
+    assert lines == ["$P/lik-ui/LIK_UI_ANTHROPIC_API_KEY=sk-ant-realkey"]
+    assert "LIK_UI_AGENTS_CONFIG" not in block  # the roster is no longer an SSM value
     for line in lines:
         assert line == line.rstrip()  # set-ssm-secrets.sh takes value verbatim; no trailing space
 
 
 def test_ssm_block_placeholder_when_no_key():
-    block = iw.format_ssm_block(None, "agent_new", "env_new")
+    block = iw.format_ssm_block(None)
     assert "LIK_UI_ANTHROPIC_API_KEY=sk-ant-…" in block
-    assert "LIK_UI_AGENTS_CONFIG=agent_new:env_new" in block
+    assert "LIK_UI_AGENTS_CONFIG" not in block
+
+
+# --- format_agent_block / append_agent_to_config ----------------------------------------
+
+def test_agent_block_is_valid_toml():
+    import tomllib
+
+    parsed = tomllib.loads(iw.format_agent_block("agent_x", "env_y"))
+    assert parsed == {"agents": [{"agent_id": "agent_x", "environment_id": "env_y"}]}
+
+
+def test_append_preserves_existing_and_adds_new(tmp_path):
+    import tomllib
+
+    path = tmp_path / "agents.toml"
+    path.write_text('# roster\n[[agents]]\nagent_id = "agent_a"\nenvironment_id = "env_a"\n')
+    iw.append_agent_to_config("agent_b", "env_b", path=path)
+
+    parsed = tomllib.loads(path.read_text())
+    assert parsed["agents"] == [
+        {"agent_id": "agent_a", "environment_id": "env_a"},
+        {"agent_id": "agent_b", "environment_id": "env_b"},
+    ]
+    assert "# roster" in path.read_text()  # leading comment survives the append
+
+
+def test_append_to_file_without_trailing_newline(tmp_path):
+    import tomllib
+
+    path = tmp_path / "agents.toml"
+    path.write_text('[[agents]]\nagent_id = "agent_a"\nenvironment_id = "env_a"')  # no trailing \n
+    iw.append_agent_to_config("agent_b", "env_b", path=path)
+    parsed = tomllib.loads(path.read_text())
+    assert [a["agent_id"] for a in parsed["agents"]] == ["agent_a", "agent_b"]
+
+
+def test_append_to_empty_or_missing_file(tmp_path):
+    import tomllib
+
+    path = tmp_path / "agents.toml"  # does not exist yet
+    iw.append_agent_to_config("agent_only", "env_only", path=path)
+    parsed = tomllib.loads(path.read_text())
+    assert parsed["agents"] == [{"agent_id": "agent_only", "environment_id": "env_only"}]
 
 
 # --- redact -----------------------------------------------------------------------------
@@ -214,12 +257,18 @@ def test_create_resources_reraises_non_409():
 
 # --- main integration (dry-run + placeholder guard) -------------------------------------
 
-def test_main_dry_run_prints_ssm_block_and_creates_nothing(capsys, monkeypatch):
+def test_main_dry_run_prints_block_and_writes_nothing(capsys, monkeypatch, tmp_path):
     monkeypatch.delenv("LIK_UI_ANTHROPIC_API_KEY", raising=False)  # deterministic placeholder key line
+    # Point the roster at a temp file and confirm dry-run never touches it.
+    roster = tmp_path / "agents.toml"
+    monkeypatch.setattr(iw, "AGENTS_CONFIG_PATH", roster)
     rc = iw.main(["--dry-run"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "LIK_UI_AGENTS_CONFIG=agent_<new>:env_<new>" in out
+    assert '[[agents]]\nagent_id = "agent_<new>"\nenvironment_id = "env_<new>"' in out
+    assert "LIK_UI_ANTHROPIC_API_KEY" in out
+    assert "LIK_UI_AGENTS_CONFIG" not in out  # roster is no longer an SSM value
+    assert not roster.exists()  # dry-run writes nothing
 
 
 def test_main_dry_run_notes_uncaptured_placeholder(capsys, monkeypatch):
