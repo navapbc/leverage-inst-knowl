@@ -20,8 +20,8 @@ on:
       service:
         description: Which service(s) to build and push
         type: choice
-        options: [both, lik-mcp, lik-ui]
-        default: both
+        options: [lik-ui, lik-mcp, both]
+        default: lik-ui
 
 permissions:
   id-token: write   # required for OIDC
