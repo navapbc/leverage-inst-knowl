@@ -60,6 +60,15 @@ LIK_UI_DB_PORT=5433 uv run pytest   # compose publishes Postgres on 5433
 The suite refuses to run unless `LIK_UI_DB_NAME` ends in `_test` (it truncates tables),
 and it targets the compose default database `likuidb_test`.
 
+> **Gotcha:** if your `.env` sets `LIK_UI_DB_NAME` to a non-`_test` name (e.g. `likuidb_local`
+> for running the app locally), pytest picks it up and **silently skips every DB-backed test**
+> — you'll see a green run that actually covered almost nothing. Override the name on the
+> command line so the suite hits the test database:
+>
+> ```
+> LIK_UI_DB_NAME=likuidb_test LIK_UI_DB_PORT=5433 uv run pytest
+> ```
+
 ## Smoke test
 
 After a deploy (especially a domain/URL change), verify the OAuth paths end-to-end against
