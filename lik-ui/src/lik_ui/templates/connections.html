@@ -131,11 +131,15 @@
               box.appendChild(link);
               var md = document.createElement("div");
               md.className = "skill-instructions";
+              // Drop the leading YAML frontmatter (name/description, already shown above): its
+              // closing "---" would otherwise read as a setext heading underline and render the
+              // whole block as a giant heading.
+              var body = res.d.instructions.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
               if (window.marked && window.DOMPurify) {
-                md.innerHTML = window.DOMPurify.sanitize(window.marked.parse(res.d.instructions));
+                md.innerHTML = window.DOMPurify.sanitize(window.marked.parse(body));
               } else {
                 var pre = document.createElement("pre");
-                pre.textContent = res.d.instructions;
+                pre.textContent = body;
                 md.appendChild(pre);
               }
               box.appendChild(md);
