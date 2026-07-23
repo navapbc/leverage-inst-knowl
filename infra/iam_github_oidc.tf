@@ -107,6 +107,8 @@ data "aws_iam_policy_document" "apply" {
     actions = [
       "ssm:GetParameter",
       "ssm:GetParameters",
+      # The aws_ssm_parameter managed resource (database.tf) reads its tags during refresh.
+      "ssm:ListTagsForResource",
     ]
     resources = ["arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/*"]
   }
