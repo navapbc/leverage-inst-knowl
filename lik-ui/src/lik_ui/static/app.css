@@ -35,6 +35,8 @@ a { color: var(--accent); }
 .card.notice > :first-child { margin-top: 0; }
 .card.notice > :last-child { margin-bottom: 0; }
 .card.notice p { margin: .5rem 0; }
+/* Quiet secondary hint line (e.g. the "delete all in Settings" pointer). */
+.muted-note { color: var(--muted); font-size: .9rem; }
 /* Sessions list row: title on the left, Delete button pinned right. */
 .card.session-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .card.session-row form { margin: 0; }

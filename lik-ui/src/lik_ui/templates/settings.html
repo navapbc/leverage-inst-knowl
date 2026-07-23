@@ -6,6 +6,23 @@
   {% if deleted %}
     <p class="status-connected">✓ Your vault was deleted.</p>
   {% endif %}
+  {% if sessions_deleted %}
+    <p class="status-connected">✓ All your sessions were deleted.</p>
+  {% endif %}
+
+  <div class="card">
+    <h2>Sessions</h2>
+    <p>Your sessions hold every conversation you've had, along with any files you uploaded.
+       Deleting them removes that data from the platform. This cannot be undone.</p>
+    {% if session_count %}
+      <form method="post" action="/settings/sessions/delete-all"
+            onsubmit="return confirm('Delete all {{ session_count }} of your sessions and everything in them? This permanently removes their data and cannot be undone.');">
+        <button class="btn danger" type="submit">Delete all sessions</button>
+      </form>
+    {% else %}
+      <p>You have no sessions to delete.</p>
+    {% endif %}
+  </div>
 
   <div class="card">
     <h2>Credential vault</h2>

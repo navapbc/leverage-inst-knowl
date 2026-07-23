@@ -2,6 +2,9 @@
 {% block title %}Choose a prior session · lik-ui{% endblock %}
 {% block content %}
   <h1>Choose a prior session</h1>
+  {% if sessions %}
+    <p class="muted-note">To remove every session at once, go to <a href="/settings">Settings</a> to delete all sessions.</p>
+  {% endif %}
   {% for s in sessions %}
     <div class="card session-row">
       <span>
