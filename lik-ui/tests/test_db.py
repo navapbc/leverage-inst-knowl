@@ -27,3 +27,42 @@ def test_sessions_are_scoped_to_their_user(store):
     # b cannot open a's session
     assert store.get_session(sess["session_id"], b["id"]) is None
     assert store.get_session(sess["session_id"], a["id"])["session_id"] == "sess_1"
+
+
+def test_new_session_is_private_by_default(store):
+    a = store.upsert_user("a@navapbc.com")
+    sess = store.create_session(a["id"], "agent_1", "sess_1")
+    assert sess["shared"] is False
+    assert store.get_session("sess_1", a["id"])["shared"] is False
+
+
+def test_shared_session_is_readable_by_non_owner(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    store.create_session(a["id"], "agent_1", "sess_1", title="First")
+    # Private: only the owner can reach it via the read accessor.
+    assert store.get_accessible_session("sess_1", b["id"]) is None
+    assert store.get_accessible_session("sess_1", a["id"])["session_id"] == "sess_1"
+    # Once shared, a different user can reach it read-only.
+    assert store.set_session_shared("sess_1", a["id"], True) is True
+    assert store.get_accessible_session("sess_1", b["id"])["session_id"] == "sess_1"
+    # But it still does not appear in b's own list (no per-user copy).
+    assert store.list_sessions(b["id"]) == []
+    # Un-sharing revokes the non-owner's access again.
+    assert store.set_session_shared("sess_1", a["id"], False) is True
+    assert store.get_accessible_session("sess_1", b["id"]) is None
+
+
+def test_get_accessible_session_unknown_id_is_none(store):
+    a = store.upsert_user("a@navapbc.com")
+    assert store.get_accessible_session("nope", a["id"]) is None
+
+
+def test_set_session_shared_is_owner_scoped(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    store.create_session(a["id"], "agent_1", "sess_1")
+    # A non-owner cannot share someone else's session; nothing changes.
+    assert store.set_session_shared("sess_1", b["id"], True) is False
+    assert store.get_session("sess_1", a["id"])["shared"] is False
+    assert store.get_accessible_session("sess_1", b["id"]) is None

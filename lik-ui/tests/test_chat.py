@@ -68,9 +68,9 @@ class FakeAgentsClient:
         }
 
 
-def _app(db, sessions_client, vc=None):
+def _app(db, sessions_client, vc=None, email="alice@navapbc.com"):
     vc = vc or RecordingVaultClient()
-    oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
+    oidc = FakeOidc({"email": email, "email_verified": True})
     settings = Settings(env="test", agents_config_path=Path(__file__).parent / "fixtures" / "agents.toml")
     return build_app(settings, store=Store(db), app_oidc=oidc, vault_client=vc,
                      agents_client=FakeAgentsClient(), sessions_client=sessions_client)
@@ -581,3 +581,85 @@ def test_chat_requires_login(db):
     r = client.get("/chat?agent_id=agent_1")
     assert r.status_code == 303
     assert r.headers["location"] == "/login"
+
+
+def _owner_id(db):
+    return Store(db).get_user_by_email("alice@navapbc.com")["id"]
+
+
+def _owner_and_viewer(db, sc):
+    """alice (owner) and bob (a different logged-in user) over the same store, plus alice's
+    freshly-created session id."""
+    owner = TestClient(_app(db, sc, email="alice@navapbc.com"), follow_redirects=False)
+    _login(owner)
+    session_id = owner.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    viewer = TestClient(_app(db, sc, email="bob@navapbc.com"), follow_redirects=False)
+    _login(viewer)
+    return owner, viewer, session_id
+
+
+def test_shared_session_opens_read_only_for_non_owner(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    # Private by default: the viewer can't reach it.
+    assert viewer.get(f"/chat/{session_id}").status_code == 404
+    # Once the owner shares it, the viewer opens a read-only page: no composer, a notice.
+    assert Store(db).set_session_shared(session_id, _owner_id(db), True)
+    page = viewer.get(f"/chat/{session_id}")
+    assert page.status_code == 200
+    assert 'id="composer"' not in page.text
+    assert "read-only" in page.text.lower()
+    # The owner still gets the send box.
+    assert 'id="composer"' in owner.get(f"/chat/{session_id}").text
+    # The viewer's transcript is flagged read-only so chat.js suppresses tool Approve/Deny.
+    assert 'data-can-write="false"' in page.text
+    assert 'data-can-write="true"' in owner.get(f"/chat/{session_id}").text
+
+
+def test_non_owner_can_read_but_not_write_shared_session(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    # Read path is open to the viewer.
+    assert viewer.get(f"/chat/{session_id}/history").status_code == 200
+    # Write paths stay owner-only — a 404 means the route never reached the sessions client.
+    assert viewer.get(f"/chat/{session_id}/stream?message=hi").status_code == 404
+    assert viewer.get(f"/chat/{session_id}/confirm?tool_use_id=t&result=allow").status_code == 404
+
+
+def test_private_and_unknown_ids_are_not_found_for_non_owner(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    assert viewer.get(f"/chat/{session_id}").status_code == 404  # private, not shared
+    assert viewer.get("/chat/bogus").status_code == 404          # unknown id
+
+
+def test_owner_toggles_sharing_on_and_off(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    # Turn sharing on (checkbox checked -> "shared" present).
+    r = owner.post(f"/chat/{session_id}/share", data={"shared": "on"})
+    assert r.status_code == 303 and r.headers["location"] == f"/chat/{session_id}"
+    assert viewer.get(f"/chat/{session_id}").status_code == 200
+    # Turn it off (checkbox unchecked -> "shared" absent) revokes the viewer's access.
+    r = owner.post(f"/chat/{session_id}/share", data={})
+    assert r.status_code == 303
+    assert viewer.get(f"/chat/{session_id}").status_code == 404
+
+
+def test_non_owner_cannot_share_anothers_session(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    viewer.post(f"/chat/{session_id}/share", data={"shared": "on"})
+    # The flag never flipped: still private to everyone but the owner.
+    assert Store(db).get_session(session_id, _owner_id(db))["shared"] is False
+    assert viewer.get(f"/chat/{session_id}").status_code == 404
+
+
+def test_share_checkbox_shows_only_for_owner(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert 'action="/chat/' in owner.get(f"/chat/{session_id}").text  # owner sees the share form
+    assert "/share" in owner.get(f"/chat/{session_id}").text
+    assert "/share" not in viewer.get(f"/chat/{session_id}").text     # viewer does not

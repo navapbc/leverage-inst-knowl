@@ -20,4 +20,10 @@
   {% else %}
     <p>No sessions yet. <a href="/">Choose an agent</a> to start one.</p>
   {% endfor %}
+  <form class="session-row" style="margin-top: 1rem"
+        onsubmit="var id = this.session_id.value.trim(); if (!id) return false; window.location = '/chat/' + encodeURIComponent(id); return false;">
+    <label for="open-session-id">Open a session by id</label>
+    <input id="open-session-id" name="session_id" type="text" placeholder="Session id" required>
+    <button class="btn" type="submit">Open</button>
+  </form>
 {% endblock %}
