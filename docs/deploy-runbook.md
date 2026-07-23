@@ -291,7 +291,8 @@ get the deployment working, then transfer it to `navapbc` before real users depe
 > For Slack specifically, see "Adding the Slack MCP connection (later)" below for the full
 > procedure.
 
-Transfer ownership at https://github.com/settings/applications/3731288
+DONE: Transfer ownership at https://github.com/settings/applications/3731288
+7/23: Nava IT added 'lik-ui-prod' to the 'navapbc' GitHub org's OAuth app -- https://github.com/settings/applications/
 
 ### 3. Populate SSM secrets ✅ done (no placeholders remain)
 
