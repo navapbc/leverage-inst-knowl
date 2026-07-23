@@ -95,7 +95,7 @@ jobs:
 
       - name: Upload image ref
         if: steps.gate.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: image-ref-${{ matrix.name }}
           path: image-ref/${{ matrix.name }}.txt
@@ -130,7 +130,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Download image refs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: image-ref-*
           path: image-refs
