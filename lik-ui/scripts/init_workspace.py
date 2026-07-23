@@ -1,10 +1,12 @@
 """One-shot initializer for the ``lik-ui`` Claude Workspace.
 
 Creates the Knowledge Search **agent** and its **environment** in the ``lik-ui`` workspace
-from the definitions hardcoded below, then prints the ``LIK_UI_*`` lines to paste into
-``infra/ssm-secrets.example`` (consumed by ``infra/set-ssm-secrets.sh``). It needs only a
-``lik-ui``-scoped API key and has no runtime dependency on the org ``Default`` workspace or
-on any source resource IDs — the source definitions are baked in as constants.
+from the definitions hardcoded below, then appends the new agent to the checked-in roster
+``src/lik_ui/agents.toml`` (commit it and redeploy to offer the agent) and prints the
+``LIK_UI_ANTHROPIC_API_KEY`` line to paste into ``infra/ssm-secrets.example`` (consumed by
+``infra/set-ssm-secrets.sh``). It needs only a ``lik-ui``-scoped API key and has no runtime
+dependency on the org ``Default`` workspace or on any source resource IDs — the source
+definitions are baked in as constants.
 
 The API key itself is NOT created here: Anthropic does not expose programmatic API-key
 creation (Console-only, by design), so create it by hand in the Console for the ``lik-ui``
@@ -26,13 +28,18 @@ workspace that currently owns the source agent+env — the org ``Default`` works
 
 Paste the two JSON objects into ``AGENT_DEFINITION`` / ``ENV_DEFINITION`` below (keep only
 the create-relevant keys — see the field lists), then flip ``DEFINITIONS_CAPTURED`` to True.
-Nothing here logs the API key; it prints only a redacted hint plus the SSM block to paste.
+Nothing here logs the API key; it prints only a redacted hint plus the API-key SSM line.
 """
 
 import argparse
 import sys
+from pathlib import Path
 
 import anthropic
+
+# The checked-in roster this script appends to. Resolved against the script's own location
+# (the source tree), NOT the installed package: the flow is append here -> commit -> redeploy.
+AGENTS_CONFIG_PATH = Path(__file__).resolve().parents[1] / "src" / "lik_ui" / "agents.toml"
 
 # --- Hardcoded source definitions -------------------------------------------------------
 # Snapshotted from the LIK Knowledge Search agent and its environment (see the capture
@@ -206,14 +213,28 @@ def create_resources(client, agent_payload: dict, env_payload: dict) -> tuple[st
     return agent.id, env.id
 
 
-def format_ssm_block(api_key: str | None, agent_id: str, env_id: str, prefix: str = SSM_PREFIX) -> str:
-    """The two lines to paste into infra/ssm-secrets.example. No quotes, no trailing
-    spaces — set-ssm-secrets.sh takes the value as everything after the first '='."""
+def format_ssm_block(api_key: str | None, prefix: str = SSM_PREFIX) -> str:
+    """The API-key line to paste into infra/ssm-secrets.example. No quotes, no trailing
+    space — set-ssm-secrets.sh takes the value as everything after the first '='. The agent
+    roster is no longer an SSM value; it lives in agents.toml (see append_agent_to_config)."""
     key_value = api_key or "sk-ant-…  # create in the Console for the lik-ui workspace"
-    return (
-        f"{prefix}/LIK_UI_ANTHROPIC_API_KEY={key_value}\n"
-        f"{prefix}/LIK_UI_AGENTS_CONFIG={agent_id}:{env_id}"
-    )
+    return f"{prefix}/LIK_UI_ANTHROPIC_API_KEY={key_value}"
+
+
+def format_agent_block(agent_id: str, env_id: str) -> str:
+    """One ``[[agents]]`` TOML block for the roster file."""
+    return f'[[agents]]\nagent_id = "{agent_id}"\nenvironment_id = "{env_id}"\n'
+
+
+def append_agent_to_config(agent_id: str, env_id: str, path: Path = AGENTS_CONFIG_PATH) -> Path:
+    """Append a ``[[agents]]`` block to the roster file, separated from existing content by
+    one blank line. Text append, not parse-and-rewrite, so existing entries and comments are
+    left untouched. Returns the written path."""
+    block = format_agent_block(agent_id, env_id)
+    existing = path.read_text() if path.is_file() else ""
+    prefix = existing.rstrip("\n") + "\n\n" if existing.strip() else ""
+    path.write_text(prefix + block)
+    return path
 
 
 def preflight(client) -> None:
@@ -261,8 +282,10 @@ def main(argv=None) -> int:
         if not DEFINITIONS_CAPTURED:
             print("[note] definitions are still PLACEHOLDER (DEFINITIONS_CAPTURED=False).")
         print(f"target key: {redact(target_key)}")
+        _hr(f"would append to {AGENTS_CONFIG_PATH}")
+        print(format_agent_block("agent_<new>", "env_<new>"), end="")
         _hr("paste into infra/ssm-secrets.example")
-        print(format_ssm_block(target_key, "agent_<new>", "env_<new>"))
+        print(format_ssm_block(target_key))
         return 0
 
     if not DEFINITIONS_CAPTURED:
@@ -286,8 +309,13 @@ def main(argv=None) -> int:
         )
     print(f"created agent {agent_id} and environment {env_id}")
 
+    append_agent_to_config(agent_id, env_id)
+    _hr(f"appended to {AGENTS_CONFIG_PATH}")
+    print(format_agent_block(agent_id, env_id), end="")
+    print("commit this file and redeploy to offer the new agent.")
+
     _hr("paste into infra/ssm-secrets.example")
-    print(format_ssm_block(target_key, agent_id, env_id))
+    print(format_ssm_block(target_key))
     return 0
 
 

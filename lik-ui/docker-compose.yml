@@ -20,6 +20,7 @@ services:
 
   lik-ui:
     build: .
+    # The agent roster ships in the image (src/lik_ui/agents.toml) — no env var needed.
     environment:
       LIK_UI_ENV: local
       LIK_UI_DB_HOST: db

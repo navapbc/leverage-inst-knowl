@@ -7,8 +7,16 @@ never logged. See ``settings.require_production_config`` for the fail-closed gua
 refuses to start a real deployment with auth/vault config missing.
 """
 
+import tomllib
+from pathlib import Path
+
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The roster file ships inside this package (see pyproject package-data), so resolving it
+# relative to this module works both from source (tests) and from the installed package
+# (the pip-installed container). Overridable via LIK_UI_AGENTS_CONFIG_PATH.
+_DEFAULT_AGENTS_CONFIG_PATH = Path(__file__).parent / "agents.toml"
 
 
 class AgentOption(BaseModel):
@@ -98,9 +106,10 @@ class Settings(BaseSettings):
     skills_ref: str = "main"
 
     # --- Agent registry ------------------------------------------------------------
-    # Agents to offer, as ``agent_id:environment_id`` pairs, comma-separated; exposed as a
+    # Agents to offer live in a checked-in TOML file (``[[agents]]`` blocks), exposed as a
     # list via ``agents``. Each agent's label is read from its own definition via the SDK.
-    agents_config: str = ""
+    # The path defaults to the packaged ``agents.toml``; tests override it with a temp file.
+    agents_config_path: Path = _DEFAULT_AGENTS_CONFIG_PATH
 
     @property
     def allowed_hosts(self) -> list[str]:
@@ -108,10 +117,20 @@ class Settings(BaseSettings):
 
     @property
     def agents(self) -> list[AgentOption]:
+        """Parse the roster TOML into ``AgentOption``s. A top-level ``default_environment_id``
+        applies to any agent that omits its own ``environment_id``. A missing file yields an
+        empty list (the production guard turns that into a loud startup failure); malformed
+        TOML raises."""
+        path = Path(self.agents_config_path)
+        if not path.is_file():
+            return []
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+        default_env = str(data.get("default_environment_id", "")).strip()
         options = []
-        for item in self.agents_config.split(","):
-            agent_id, _, environment_id = item.partition(":")
-            agent_id, environment_id = agent_id.strip(), environment_id.strip()
+        for entry in data.get("agents", []):
+            agent_id = str(entry.get("agent_id", "")).strip()
+            environment_id = str(entry.get("environment_id", "")).strip() or default_env
             if agent_id:
                 options.append(AgentOption(agent_id=agent_id, environment_id=environment_id))
         return options
@@ -140,10 +159,11 @@ class Settings(BaseSettings):
                 "LIK_UI_APP_OAUTH_CLIENT_ID": self.app_oauth_client_id,
                 "LIK_UI_APP_OAUTH_CLIENT_SECRET": self.app_oauth_client_secret,
                 "LIK_UI_ANTHROPIC_API_KEY": self.anthropic_api_key,
-                "LIK_UI_AGENTS_CONFIG": self.agents_config,
             }.items()
             if not value
         ]
+        if not self.agents:
+            missing.append(f"a non-empty agent roster in {self.agents_config_path}")
         if missing:
             raise RuntimeError(
                 f"LIK_UI_ENV={self.env!r} requires {', '.join(missing)} to be set. "

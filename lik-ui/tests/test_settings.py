@@ -1,3 +1,5 @@
+import textwrap
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -18,32 +20,116 @@ def test_conninfo_builds_libpq_string():
     assert "host=h port=5555 dbname=likuidb_test user=u password=p" in s.conninfo
 
 
-def test_agents_empty_without_agent_id():
-    assert Settings(env="test").agents == []
+def _roster(tmp_path, body: str):
+    """Write a roster TOML to a temp file and return its path."""
+    path = tmp_path / "agents.toml"
+    path.write_text(textwrap.dedent(body))
+    return path
 
 
-def test_agents_lists_configured_agent():
-    s = Settings(env="test", agents_config="agent_x:env_y")
-    agents = s.agents
-    assert len(agents) == 1
-    assert agents[0].agent_id == "agent_x"
-    assert agents[0].environment_id == "env_y"
+def test_shipped_roster_parses_to_at_least_one_agent():
+    # The default packaged agents.toml must be valid and non-empty (guards the seeded file).
+    agents = Settings(env="test").agents
+    assert len(agents) >= 1
+    assert all(a.agent_id and a.environment_id for a in agents)
 
 
-def test_agents_parses_multiple_pairs():
-    s = Settings(env="test", agents_config="agent_x:env_x, agent_y:env_y")
-    agents = s.agents
-    assert [(a.agent_id, a.environment_id) for a in agents] == [
+def test_agents_lists_configured_agents_in_file_order(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent_id = "agent_x"
+        environment_id = "env_x"
+
+        [[agents]]
+        agent_id = "agent_y"
+        environment_id = "env_y"
+        """,
+    )
+    s = Settings(env="test", agents_config_path=path)
+    assert [(a.agent_id, a.environment_id) for a in s.agents] == [
         ("agent_x", "env_x"),
         ("agent_y", "env_y"),
     ]
 
 
+def test_agents_use_default_environment_when_omitted(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        default_environment_id = "env_default"
+
+        [[agents]]
+        agent_id = "agent_a"
+
+        [[agents]]
+        agent_id = "agent_b"
+        environment_id = "env_special"
+        """,
+    )
+    s = Settings(env="test", agents_config_path=path)
+    assert [(a.agent_id, a.environment_id) for a in s.agents] == [
+        ("agent_a", "env_default"),  # inherits the top-level default
+        ("agent_b", "env_special"),  # own environment_id overrides the default
+    ]
+
+
+def test_agents_environment_empty_when_no_default_and_none_set(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent_id = "agent_a"
+        """,
+    )
+    assert Settings(env="test", agents_config_path=path).agents[0].environment_id == ""
+
+
+def test_agents_empty_when_file_has_no_entries(tmp_path):
+    assert Settings(env="test", agents_config_path=_roster(tmp_path, "")).agents == []
+
+
+def test_agents_empty_when_file_missing(tmp_path):
+    assert Settings(env="test", agents_config_path=tmp_path / "nope.toml").agents == []
+
+
+def test_agents_skips_entry_missing_agent_id(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        environment_id = "env_orphan"
+
+        [[agents]]
+        agent_id = "agent_ok"
+        environment_id = "env_ok"
+        """,
+    )
+    s = Settings(env="test", agents_config_path=path)
+    assert [(a.agent_id, a.environment_id) for a in s.agents] == [("agent_ok", "env_ok")]
+
+
 def test_require_production_config_raises_when_unconfigured():
-    s = Settings(env="prod")  # missing session secret, oauth, api key, agent
+    s = Settings(env="prod")  # missing session secret, oauth, api key
     with pytest.raises(RuntimeError) as exc:
         s.require_production_config()
     assert "LIK_UI_SESSION_SECRET" in str(exc.value)
+
+
+def test_require_production_config_raises_on_empty_roster(tmp_path):
+    # All secrets present, but the roster file is empty -> fail closed, naming the roster.
+    s = Settings(
+        env="prod",
+        session_secret="s",
+        app_oauth_client_id="id",
+        app_oauth_client_secret="secret",
+        anthropic_api_key="sk-ant-x",
+        agents_config_path=_roster(tmp_path, ""),
+    )
+    with pytest.raises(RuntimeError) as exc:
+        s.require_production_config()
+    assert "roster" in str(exc.value)
 
 
 def test_require_production_config_passes_when_stub():

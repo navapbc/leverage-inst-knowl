@@ -8,4 +8,6 @@ __pycache__/
 
 # build artifacts
 *.egg-info/
+build/
+dist/
 docker-compose.override.yml
