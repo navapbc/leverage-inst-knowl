@@ -95,7 +95,7 @@
         btn.disabled = true;
         box.hidden = false;
         box.textContent = "Loading…";
-        fetch("/connections/skill?" + params.toString())
+        fetch("/skill-details?" + params.toString())
           .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
           .then(function (res) {
             if (!res.ok) {
@@ -109,6 +109,30 @@
             desc.textContent = res.d.description;
             box.appendChild(name);
             box.appendChild(desc);
+            // Full SKILL.md, fetched from the public GitHub repo. Rendered via textContent
+            // (never innerHTML) so any Markdown/HTML in the file is shown literally, not
+            // interpreted. When the fetch failed (instructions == null) show a fallback line
+            // linking the file on GitHub so the user can still open it.
+            var gh = document.createElement("a");
+            gh.href = res.d.source_url;
+            gh.target = "_blank";
+            gh.rel = "noopener";
+            if (res.d.instructions != null) {
+              gh.textContent = "view on GitHub";
+              var link = document.createElement("p");
+              link.appendChild(gh);
+              box.appendChild(link);
+              var pre = document.createElement("pre");
+              pre.className = "skill-instructions";
+              pre.textContent = res.d.instructions;
+              box.appendChild(pre);
+            } else {
+              gh.textContent = "view on GitHub";
+              var fallback = document.createElement("p");
+              fallback.appendChild(document.createTextNode("Full instructions unavailable — "));
+              fallback.appendChild(gh);
+              box.appendChild(fallback);
+            }
           })
           .catch(function () { box.textContent = "Could not load skill."; })
           .finally(function () { btn.disabled = false; });

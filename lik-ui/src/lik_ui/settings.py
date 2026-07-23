@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     # --- Anthropic / Managed Agents ------------------------------------------------
     anthropic_api_key: str = ""
 
+    # --- Skill instructions source (public GitHub repo) ----------------------------
+    # A skill's full SKILL.md is fetched from this repo's raw content by skill name;
+    # the repo is public, so no token is needed. Point at a fork/branch to preview
+    # without a code change. The path is always .claude/skills/<name>/SKILL.md.
+    skills_repo: str = "navapbc/leverage-inst-knowl"
+    skills_ref: str = "main"
+
     # --- Agent registry ------------------------------------------------------------
     # Agents to offer, as ``agent_id:environment_id`` pairs, comma-separated; exposed as a
     # list via ``agents``. Each agent's label is read from its own definition via the SDK.

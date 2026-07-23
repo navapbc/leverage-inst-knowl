@@ -78,23 +78,26 @@ one call, but the agent definition (system prompt, model, declared servers) chan
 If the agent list grows, cache these results (e.g. a short TTL) rather than fetching per
 request.
 
-## TODO: show full skill instructions (SKILL.md)
+## DONE: show full skill instructions (SKILL.md)
 
-The connections page can show each skill's name and description, but not its full instructions
-(SKILL.md). `describe_skill` returns name and description only.
+Expanding a skill's "Details" on the connections page shows its full `SKILL.md` alongside the
+name and description. The instructions come from **GitHub**, the single source of truth (skills
+are deployed *to* Managed Agents from `.claude/skills/<name>/` — see
+[`scripts/README.md`](../scripts/README.md)), not from Managed Agents:
+`beta.skills.versions.download` is a dead end (it 403s with "Downloading skill content is not
+supported with this credential type"). `skill_docs.py` fetches the raw
+`.claude/skills/<name>/SKILL.md` from the **public** repo with a plain unauthenticated GET —
+addressed by skill *name*, which the deploy pipeline guarantees equals the directory. The repo
+and ref are configurable via `LIK_UI_SKILLS_REPO` (default `navapbc/leverage-inst-knowl`) and
+`LIK_UI_SKILLS_REF` (default `main`).
 
-**Read the instructions from GitHub, not from Managed Agents.** GitHub is the single source of truth
-for skill instructions (they are deployed *to* Managed Agents from `.claude/skills/<name>/` — see
-[`scripts/README.md`](../scripts/README.md)). Do **not** try to fetch them back via
-`beta.skills.versions.download`: that endpoint returns 403 "Downloading skill content is not supported
-with this credential type", and the download-capable credential type was not identified — it's a
-dead end and unnecessary. The full-instructions view should render the authoritative
-`.claude/skills/<name>/SKILL.md` from GitHub instead.
+Any fetch failure (404, non-200, timeout, or the repo later going private) degrades gracefully:
+the view shows a fallback line linking the file on GitHub so the user can open it themselves,
+never a page or endpoint error. The text is rendered escaped (via `textContent`), so Markdown/HTML
+in the file is shown literally.
 
-Deferred until the fetch approach is chosen: if this repo is private, lik-ui needs a server-side
-read-only GitHub token (or the skill files bundled into its image at build time) to read the file.
-See `docs/plans/2026-07-23-001-feat-skill-instruction-deploy-pipeline-plan.md` (Deferred to Follow-Up
-Work).
+Deferred: rendering the Markdown (headings/lists/links) instead of raw text, and caching the
+fetched file (align with the `describe`-caching TODO above if per-expand fetches become a concern).
 
 ## TODO: decide how users get Anthropic API access
 
