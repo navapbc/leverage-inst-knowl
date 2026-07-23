@@ -20,6 +20,19 @@
     - To run `pytest`, use `uv run pytest`.
     - To install Python dependencies, use `uv pip install`.
 
+## Production environment (AWS / diagnostics)
+
+* **Tooling runs via mise** (`aws`, `terraform`, `node`, `python`, `uv` are not on PATH otherwise — bare
+  `which aws` returns "not found"). Prefix with `mise exec --`, e.g. `mise exec -- aws ...`. A harmless
+  `mise:2: command not found: _bootstrap_mise` line may print to stderr; ignore it.
+* **AWS is `AWS_PROFILE=lik`** (account 293033346213, us-east-1). If a call fails with "session has
+  expired", run `AWS_PROFILE=lik mise exec -- aws login` (opens a browser) and retry. Secrets live in SSM
+  under `/ik-arch/prod/` (e.g. `LIK_UI_ANTHROPIC_API_KEY`; agent IDs are in `LIK_UI_AGENTS_CONFIG`).
+* **Diagnosing OAuth / MCP-auth / session failures:** chat transcripts and credentials are NOT stored in
+  this repo — they live on the Anthropic Managed Agents platform, queried via the Python `anthropic` SDK
+  (`beta.sessions` / `beta.vaults`). See `docs/oauth.md` → "Diagnosing a failing connection" for the
+  procedure, and its "Provider-specific challenges" for known issues (e.g. Atlassian forced re-auth).
+
 ## Help user be efficient
 
 * When presenting options, enable the user to type in a single letter or number to choose the option.
