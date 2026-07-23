@@ -629,3 +629,34 @@ def test_private_and_unknown_ids_are_not_found_for_non_owner(db):
     owner, viewer, session_id = _owner_and_viewer(db, sc)
     assert viewer.get(f"/chat/{session_id}").status_code == 404  # private, not shared
     assert viewer.get("/chat/bogus").status_code == 404          # unknown id
+
+
+def test_owner_toggles_sharing_on_and_off(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    # Turn sharing on (checkbox checked -> "shared" present).
+    r = owner.post(f"/chat/{session_id}/share", data={"shared": "on"})
+    assert r.status_code == 303 and r.headers["location"] == f"/chat/{session_id}"
+    assert viewer.get(f"/chat/{session_id}").status_code == 200
+    # Turn it off (checkbox unchecked -> "shared" absent) revokes the viewer's access.
+    r = owner.post(f"/chat/{session_id}/share", data={})
+    assert r.status_code == 303
+    assert viewer.get(f"/chat/{session_id}").status_code == 404
+
+
+def test_non_owner_cannot_share_anothers_session(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    viewer.post(f"/chat/{session_id}/share", data={"shared": "on"})
+    # The flag never flipped: still private to everyone but the owner.
+    assert Store(db).get_session(session_id, _owner_id(db))["shared"] is False
+    assert viewer.get(f"/chat/{session_id}").status_code == 404
+
+
+def test_share_checkbox_shows_only_for_owner(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert 'action="/chat/' in owner.get(f"/chat/{session_id}").text  # owner sees the share form
+    assert "/share" in owner.get(f"/chat/{session_id}").text
+    assert "/share" not in viewer.get(f"/chat/{session_id}").text     # viewer does not

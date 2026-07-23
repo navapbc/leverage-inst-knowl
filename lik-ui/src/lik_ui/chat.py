@@ -362,6 +362,17 @@ def register_chat_routes(app) -> None:
         request.app.state.store.delete_session(session_id, user["id"])
         return RedirectResponse("/sessions", status_code=303)
 
+    @app.post("/chat/{session_id}/share")
+    async def share_session(request: Request, session_id: str):
+        """Owner toggles read-only sharing. The checkbox posts ``shared`` only when checked,
+        so its absence means "make private". ``set_session_shared`` is owner-scoped, so a
+        non-owner's post changes nothing. Redirect back to the session either way."""
+        user = require_user(request)
+        form = await request.form()
+        shared = form.get("shared") is not None
+        request.app.state.store.set_session_shared(session_id, user["id"], shared)
+        return RedirectResponse(f"/chat/{session_id}", status_code=303)
+
     @app.get("/chat/{session_id}", response_class=HTMLResponse)
     async def chat_page(request: Request, session_id: str):
         user = require_user(request)

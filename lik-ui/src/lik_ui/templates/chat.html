@@ -5,7 +5,14 @@
   <h1>Chat Session: {{ session.title }}</h1>
   <p><a href="/connections?agent_id={{ session.agent_id | urlencode }}">{{ agent_label }} — Agent connections</a></p>
 
-  {% if not is_owner %}
+  {% if is_owner %}
+    <form method="post" action="/chat/{{ session.session_id | urlencode }}/share" class="share-form">
+      <label>
+        <input type="checkbox" name="shared" onchange="this.form.submit()" {% if session.shared %}checked{% endif %}>
+        Share read-only — anyone signed in who has this session's id can view it
+      </label>
+    </form>
+  {% else %}
     <p class="muted-note">You're viewing a shared session read-only. Only its owner can send messages.</p>
   {% endif %}
 
