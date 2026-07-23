@@ -611,6 +611,9 @@ def test_shared_session_opens_read_only_for_non_owner(db):
     assert "read-only" in page.text.lower()
     # The owner still gets the send box.
     assert 'id="composer"' in owner.get(f"/chat/{session_id}").text
+    # The viewer's transcript is flagged read-only so chat.js suppresses tool Approve/Deny.
+    assert 'data-can-write="false"' in page.text
+    assert 'data-can-write="true"' in owner.get(f"/chat/{session_id}").text
 
 
 def test_non_owner_can_read_but_not_write_shared_session(db):

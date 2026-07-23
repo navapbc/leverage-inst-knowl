@@ -6,6 +6,9 @@
   const input = document.getElementById("message");
   const sessionId = transcript.dataset.sessionId;
   const agentId = transcript.dataset.agentId;
+  // False for a read-only viewer of a shared session: suppress write affordances (composer is
+  // absent, and paused tool calls render without Approve/Deny buttons the viewer can't use).
+  const canWrite = transcript.dataset.canWrite !== "false";
 
   function bubble(cls, text) {
     const el = document.createElement("div");
@@ -171,7 +174,7 @@
         stampDecision(b, prior.result, prior.auto, prior.server);  // refresh replay
       } else {
         b.classList.add("awaiting");
-        b.appendChild(confirmActions(b, event));
+        if (canWrite) b.appendChild(confirmActions(b, event));
       }
     }
     return b;

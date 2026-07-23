@@ -37,7 +37,8 @@
 
   <div id="transcript"
        data-session-id="{{ session.session_id }}"
-       data-agent-id="{{ session.agent_id }}"></div>
+       data-agent-id="{{ session.agent_id }}"
+       data-can-write="{{ 'true' if is_owner else 'false' }}"></div>
 
   {% if is_owner %}
     <form id="composer">
