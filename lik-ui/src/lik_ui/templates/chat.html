@@ -5,11 +5,15 @@
   <h1>Chat Session: {{ session.title }}</h1>
   <p><a href="/connections?agent_id={{ session.agent_id | urlencode }}">{{ agent_label }} — Agent connections</a></p>
 
+  {% if not is_owner %}
+    <p class="muted-note">You're viewing a shared session read-only. Only its owner can send messages.</p>
+  {% endif %}
+
   <div id="chat-controls">
     <label><input type="checkbox" id="toggle-tools"> Show tool use</label>
     <label><input type="checkbox" id="toggle-mcp"> Show MCP tool use</label>
   </div>
-  {% if servers %}
+  {% if is_owner and servers %}
     <div id="auto-approve">
       <span class="auto-approve-label">Auto-approve tool calls this session from:</span>
       {% for srv in servers %}
@@ -28,10 +32,12 @@
        data-session-id="{{ session.session_id }}"
        data-agent-id="{{ session.agent_id }}"></div>
 
-  <form id="composer">
-    <input id="message" name="message" autocomplete="off" placeholder="Ask the agent…" style="width:75%">
-    <button class="btn" type="submit">Send</button>
-  </form>
+  {% if is_owner %}
+    <form id="composer">
+      <input id="message" name="message" autocomplete="off" placeholder="Ask the agent…" style="width:75%">
+      <button class="btn" type="submit">Send</button>
+    </form>
+  {% endif %}
 
   <!-- Markdown rendering for agent replies. DOMPurify sanitizes because tool results can
        echo arbitrary content from the connected sources (Confluence/Jira). -->

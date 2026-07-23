@@ -365,9 +365,12 @@ def register_chat_routes(app) -> None:
     @app.get("/chat/{session_id}", response_class=HTMLResponse)
     async def chat_page(request: Request, session_id: str):
         user = require_user(request)
-        session = request.app.state.store.get_session(session_id, user["id"])
+        # Read access: the owner, or anyone when the owner marked the session shared. A
+        # non-owner gets a read-only view (composer/controls hidden below via is_owner).
+        session = request.app.state.store.get_accessible_session(session_id, user["id"])
         if not session:
             return HTMLResponse("Session not found.", status_code=404)
+        is_owner = session["user_id"] == user["id"]
         # Show the agent's display name and its declared MCP servers; both come from the
         # agent's own definition via the SDK. Each server carries its permission_policy so the
         # auto-approve checklist can lock a server that already always-allows server-side (its
@@ -386,7 +389,8 @@ def register_chat_routes(app) -> None:
                 pass
         return templates.TemplateResponse(
             request, "chat.html",
-            {"user": user, "session": session, "agent_label": agent_label, "servers": servers},
+            {"user": user, "session": session, "agent_label": agent_label,
+             "servers": servers, "is_owner": is_owner},
         )
 
     @app.get("/chat/{session_id}/history")
@@ -395,7 +399,7 @@ def register_chat_routes(app) -> None:
         opens. The status lets the page reflect a turn still in flight (e.g. a queued
         retry after a reload). Empty/idle in stub mode so the transcript starts blank."""
         user = require_user(request)
-        session = request.app.state.store.get_session(session_id, user["id"])
+        session = request.app.state.store.get_accessible_session(session_id, user["id"])
         if not session:
             return JSONResponse({"detail": "Session not found."}, status_code=404)
 
@@ -417,7 +421,8 @@ def register_chat_routes(app) -> None:
         stream its remaining events, so a queued/running turn isn't left silent until a
         manual refresh. No-op (just ``done``) in stub mode or once the turn has ended."""
         user = require_user(request)
-        session = request.app.state.store.get_session(session_id, user["id"])
+        # Read-only attach: a shared-session viewer can watch an in-flight turn, but never sends.
+        session = request.app.state.store.get_accessible_session(session_id, user["id"])
         if not session:
             return HTMLResponse("Session not found.", status_code=404)
 

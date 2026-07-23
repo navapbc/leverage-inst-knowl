@@ -427,15 +427,19 @@
     streamTurn(url, result === "allow" ? "⚙ Approved — resuming…" : "Denied — resuming…");
   }
 
-  composer.addEventListener("submit", function (e) {
-    e.preventDefault();
-    const message = input.value.trim();
-    if (!message) return;
-    bubble("user", "You: " + message);
-    input.value = "";
-    streamTurn("/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message),
-               "⏳ Queued — waiting for the agent…");
-  });
+  // The composer is absent for a read-only viewer of a shared session (owner-only in the
+  // template). History replay and resume below still run so the viewer sees the transcript.
+  if (composer) {
+    composer.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+      bubble("user", "You: " + message);
+      input.value = "";
+      streamTurn("/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message),
+                 "⏳ Queued — waiting for the agent…");
+    });
+  }
 
   reconcile().then(function (status) {
     // A turn already in flight when the page loads (e.g. a queued retry after a reload) has
