@@ -14,3 +14,7 @@ default_environment_id = "env_016c6vWcCUvyVUaztWhvsAQt"
 [[agents]]
 agent_id = "agent_01E7mqTKAdtosKpWDSLxALmq"
 # environment_id omitted -> uses default_environment_id above
+
+[[agents]]
+agent_id = "agent_016uQNVgNEVtcAmvwKtskh8d"
+# environment_id omitted -> uses default_environment_id above
