@@ -2,6 +2,13 @@
 {% block title %}Choose an agent · lik-ui{% endblock %}
 {% block content %}
   <h1>Choose an agent</h1>
+  <div class="card notice">
+    <strong>Before you start</strong>
+    <p>This service runs on the Claude Managed Agents platform, which is currently in
+       <strong>beta</strong>. Data you send here is <strong>not covered by Zero Data Retention</strong>,
+       so your conversations and any files you upload are retained by the platform.</p>
+    <p>You retain control over this data: you can delete sessions at any time.</p>
+  </div>
   {% for a in agents %}
     <div class="card">
       <strong>{{ a.label }}</strong>
