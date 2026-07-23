@@ -1,0 +1,12 @@
+[project]
+name = "lik-skill-deploy"
+version = "0.0.0"
+description = "Deploy .claude/skills/ directories to Claude Managed Agents."
+requires-python = ">=3.14"
+dependencies = ["anthropic>=0.40"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
