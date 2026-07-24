@@ -115,7 +115,12 @@ class AnthropicSessionsClient:
         return session.id
 
     def delete_session(self, session_id: str) -> None:
-        self._client.beta.sessions.delete(session_id)
+        import anthropic
+
+        try:
+            self._client.beta.sessions.delete(session_id)
+        except anthropic.NotFoundError:
+            pass  # already gone on the platform (workspace switch / prior delete) — idempotent
 
     @staticmethod
     def _normalize(event, *, include_user: bool = False) -> dict | None:
@@ -443,7 +448,7 @@ def register_chat_routes(app) -> None:
             # client it's gone so it can send the user back to the sessions list.
             request.app.state.store.delete_session(session["session_id"], user["id"])
             return JSONResponse(
-                {"detail": "This session no longer exists and has been removed.", "gone": True},
+                {"detail": "Session is not in the current workspace; session removed.", "gone": True},
                 status_code=410,
             )
         except Exception as exc:  # noqa: BLE001 - a history-fetch failure shouldn't block chatting
