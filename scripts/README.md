@@ -32,22 +32,24 @@ environment.
 ## `deploy_agents.py` — publish agents + environments (recurring)
 
 Deploys the agent and environment specs under `claude_platform/`, resolving each **by name**
-(create if absent, else update in place). An agent's `skills` are listed by name and translated to
-platform `skill_id`s at deploy time (reusing `deploy_skills.find_existing_skill_id`), pinned to
-`latest` — so the skill must be deployed first. Environments are always synced so an agent's
+(create if absent, else update in place). An agent's `skills` are listed by name; deploy_agents
+**publishes exactly those skills first** (via `deploy_skills.deploy_skill` — create or new version),
+then attaches them at `latest`. So only the skills an agent actually references are published — no
+separate skills step, no blanket `--skill all`. Environments are always synced so an agent's
 environment exists.
 
-Normally run by the **Deploy agents to Managed Agents** GitHub Action (manual dispatch, choose which
-agent), which runs `deploy_skills.py --skill all` first. To run locally against the real API:
+Normally run by the **Deploy agents to Claude platform** GitHub Action (manual dispatch, choose which
+agent). To run locally against the real API:
 
 ```sh
-# deploy skills first, then agents (agents reference skills by name):
-ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_skills.py --skill all
 ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_agents.py --agent all
 # or a single agent (filename stem under claude_platform/agents/):
 ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_agents.py --agent lik-query-project-index
-# --dry-run prints the plan (still queries the platform to decide create-vs-update) without mutating.
+# --dry-run prints the plan (still queries the platform to decide create-vs-update) without publishing.
 ```
+
+To publish a skill on its own — independent of any agent — use `deploy_skills.py` (or the
+**Deploy skills to Claude platform** workflow) directly.
 
 An agent references skills by **name**, not `skill_id` — no platform ids live in the repo. lik-ui
 likewise resolves agent/environment names to ids at startup, so the roster (`lik-ui`'s `agents.toml`)

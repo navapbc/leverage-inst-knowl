@@ -4,21 +4,22 @@ GitHub is the source of truth for agent *definitions* the same way it is for ski
 docs/plans/2026-07-24-001-feat-agent-spec-deploy-pipeline-plan.md). Each agent is a raw
 platform-format YAML under `claude_platform/agents/`; each environment is a raw-format YAML under
 `claude_platform/environments/`. This script resolves each resource **by name** (create if absent,
-else update in place) and, for agents, translates a skill *name* into its platform `skill_id` before
-the SDK call — so no ids live in the repo.
+else update in place). An agent references its skills *by name*; this script deploys exactly those
+skills first (via `deploy_skills.deploy_skill` — create or new version) and attaches them at
+`latest`, so no ids live in the repo and only the skills an agent actually uses are published.
 
-Run from the repo root (deploy skills first so referenced skills exist — the CI workflow does this):
+Run from the repo root:
 
     ANTHROPIC_API_KEY=sk-ant-... uv run --project scripts python scripts/deploy_agents.py --agent all
 
 `--agent` accepts `all` (every spec under `claude_platform/agents/`) or a single agent spec name
 (the filename stem). Environments are always synced (all specs under `claude_platform/environments/`),
 so an agent's environment exists regardless of which agent is selected. `--dry-run` prints the planned
-actions (still queries the platform to decide create-vs-update) without mutating.
+actions (still queries the platform to decide create-vs-update) without publishing anything.
 
-Skill-name resolution reuses `deploy_skills.find_existing_skill_id`, so the two scripts agree on how a
-name maps to a platform id. The Anthropic SDK is imported lazily (via `deploy_skills.build_client`) so
-the pure helpers below stay importable and unit-testable without the dependency.
+Skill deployment reuses `deploy_skills.deploy_skill` / `select_skill_dirs`, so agents and the
+standalone skill deploy agree on packaging and id resolution. The Anthropic SDK is imported lazily
+(via `deploy_skills.build_client`) so the pure helpers below stay importable and unit-testable.
 """
 
 from __future__ import annotations
@@ -101,21 +102,25 @@ def find_existing_environment(client, name: str):
     return _match_by_name(list(client.beta.environments.list()), name)
 
 
-def resolve_skills(client, skills_spec) -> list[dict]:
+def resolve_skills(client, skills_spec, *, deploy: bool = True) -> list[dict]:
     """Translate a spec's by-name ``skills`` list into platform skill refs pinned to ``latest``.
 
-    Each entry must be ``{name: <skill dir name>}``. Errors if a referenced skill isn't on the
-    platform yet — deploy it first with deploy_skills.py (the CI workflow runs that step first)."""
+    Each entry must be ``{name: <skill dir name>}``. When ``deploy`` is true (a real run), the
+    referenced skill is published first — ``deploy_skills.deploy_skill`` creates it or adds a new
+    version — and its resulting id is used, so deploying an agent also deploys exactly the skills it
+    references (and nothing else). Errors if a referenced skill has no directory under
+    ``claude_platform/skills/``. When ``deploy`` is false (dry run), nothing is published: the id is
+    resolved from the platform if the skill already exists, else shown as a placeholder."""
     resolved: list[dict] = []
     for entry in skills_spec or []:
         name = entry.get("name") if isinstance(entry, dict) else None
         if not name:
             raise ValueError(f"skill entry must reference a skill by name: {entry!r}")
-        skill_id = ds.find_existing_skill_id(client, name)
-        if skill_id is None:
-            raise ValueError(
-                f"skill '{name}' not found on the platform — deploy it first with deploy_skills.py"
-            )
+        if deploy:
+            skill_dir = ds.select_skill_dirs(name)[0]  # validates the skill exists in the repo
+            skill_id = ds.deploy_skill(client, skill_dir).skill_id
+        else:
+            skill_id = ds.find_existing_skill_id(client, name) or "<will-be-created>"
         resolved.append({"type": "custom", "skill_id": skill_id, "version": "latest"})
     return resolved
 
@@ -146,7 +151,9 @@ def deploy_agent(client, spec_path: Path, *, apply: bool = True) -> DeployResult
     agent's current version so the new version does not drop fields."""
     spec = read_spec(spec_path)
     name = spec["name"]
-    payload = {**spec, "skills": resolve_skills(client, spec.get("skills"))}
+    # Deploy exactly the skills this agent references (create/version), then attach at latest.
+    # In a dry run nothing is published.
+    payload = {**spec, "skills": resolve_skills(client, spec.get("skills"), deploy=apply)}
     existing = find_existing_agent(client, name)
     if not apply:
         return DeployResult(

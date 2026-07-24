@@ -57,14 +57,35 @@ class FakeEnvironments:
         return SimpleNamespace(id=env_id, name=kwargs.get("name"))
 
 
+class FakeSkills:
+    """Records create / versions.create and answers list() from a seeded set (mirrors
+    test_deploy_skills.FakeSkills) — deploy_agents now publishes referenced skills itself."""
+
+    def __init__(self, existing=None):
+        # existing: list of (skill_id, display_title)
+        self._existing = [SimpleNamespace(id=i, display_title=t) for i, t in (existing or [])]
+        self.create_calls = []
+        self.version_calls = []
+        self.versions = SimpleNamespace(create=self._version_create)
+
+    def list(self):
+        return list(self._existing)
+
+    def create(self, *, files, display_title):
+        self.create_calls.append({"files": files, "display_title": display_title})
+        return SimpleNamespace(id="skill_new", latest_version=111)
+
+    def _version_create(self, skill_id, *, files):
+        self.version_calls.append({"skill_id": skill_id, "files": files})
+        return SimpleNamespace(version=222)
+
+
 class FakeClient:
     def __init__(self, *, agents=None, environments=None, skills_list=None):
         self.beta = SimpleNamespace(
             agents=FakeAgents(agents),
             environments=FakeEnvironments(environments),
-            skills=SimpleNamespace(
-                list=lambda: [SimpleNamespace(id=i, display_title=t) for i, t in (skills_list or [])]
-            ),
+            skills=FakeSkills(skills_list),
         )
 
 
@@ -97,17 +118,25 @@ config:
 """
 
 
-def _wire(tmp_path: Path, monkeypatch, *, agent=AGENT_YAML, env=ENV_YAML):
+def _wire(tmp_path: Path, monkeypatch, *, agent=AGENT_YAML, env=ENV_YAML, skill="lik-query-project-index"):
     agents_root = tmp_path / "agents"
     envs_root = tmp_path / "environments"
+    skills_root = tmp_path / "skills"
     agents_root.mkdir()
     envs_root.mkdir()
+    skills_root.mkdir()
     if agent is not None:
         (agents_root / "lik-query-project-index.yaml").write_text(agent, encoding="utf-8")
     if env is not None:
         (envs_root / "lik-ui.yaml").write_text(env, encoding="utf-8")
+    if skill is not None:
+        # The skill the agent references, so deploy_agents can publish it (dir name == SKILL.md name).
+        sdir = skills_root / skill
+        sdir.mkdir()
+        (sdir / "SKILL.md").write_text(f"---\nname: {skill}\ndescription: test\n---\n# {skill}\n", encoding="utf-8")
     monkeypatch.setattr(da, "AGENTS_ROOT", agents_root)
     monkeypatch.setattr(da, "ENVIRONMENTS_ROOT", envs_root)
+    monkeypatch.setattr(da.ds, "SKILLS_ROOT", skills_root)
     return agents_root, envs_root
 
 
@@ -148,25 +177,48 @@ def test_match_by_name_ambiguous_raises():
         da._match_by_name(items, "A")
 
 
-# --- resolve_skills (name -> id substitution) --------------------------------------------------
+# --- resolve_skills (deploy referenced skills + name -> id substitution) -----------------------
 
 
-def test_resolve_skills_substitutes_ids():
+def test_resolve_skills_publishes_new_skill_and_substitutes_id(tmp_path, monkeypatch):
+    _wire(tmp_path, monkeypatch)
+    client = FakeClient(skills_list=[])  # skill not on platform yet -> create
+    out = da.resolve_skills(client, [{"name": "lik-query-project-index"}])
+    assert out == [{"type": "custom", "skill_id": "skill_new", "version": "latest"}]
+    assert client.beta.skills.create_calls  # the referenced skill was published
+
+
+def test_resolve_skills_publishes_new_version_when_skill_exists(tmp_path, monkeypatch):
+    _wire(tmp_path, monkeypatch)
     client = FakeClient(skills_list=[("skill_abc", "lik-query-project-index")])
     out = da.resolve_skills(client, [{"name": "lik-query-project-index"}])
     assert out == [{"type": "custom", "skill_id": "skill_abc", "version": "latest"}]
+    assert client.beta.skills.version_calls  # new version, not a duplicate create
+    assert client.beta.skills.create_calls == []
 
 
-def test_resolve_skills_missing_skill_fails_fast():
-    client = FakeClient(skills_list=[("skill_abc", "some-other-skill")])
+def test_resolve_skills_missing_repo_dir_fails_fast(tmp_path, monkeypatch):
+    _wire(tmp_path, monkeypatch)
+    client = FakeClient(skills_list=[])
     with pytest.raises(ValueError):
-        da.resolve_skills(client, [{"name": "lik-query-project-index"}])
+        da.resolve_skills(client, [{"name": "no-such-skill-in-repo"}])
+    assert client.beta.skills.create_calls == []  # nothing published
 
 
-def test_resolve_skills_entry_without_name_fails():
+def test_resolve_skills_entry_without_name_fails(tmp_path, monkeypatch):
+    _wire(tmp_path, monkeypatch)
     client = FakeClient(skills_list=[])
     with pytest.raises(ValueError):
         da.resolve_skills(client, [{"skill_id": "skill_abc"}])
+
+
+def test_resolve_skills_dry_run_does_not_publish(tmp_path, monkeypatch):
+    _wire(tmp_path, monkeypatch)
+    client = FakeClient(skills_list=[("skill_abc", "lik-query-project-index")])
+    out = da.resolve_skills(client, [{"name": "lik-query-project-index"}], deploy=False)
+    assert out == [{"type": "custom", "skill_id": "skill_abc", "version": "latest"}]
+    assert client.beta.skills.create_calls == []
+    assert client.beta.skills.version_calls == []
 
 
 # --- deploy_agent: create vs update ------------------------------------------------------------
@@ -204,13 +256,15 @@ def test_deploy_existing_agent_updates_preserving_version(tmp_path, monkeypatch)
     assert call["skills"] == [{"type": "custom", "skill_id": "skill_abc", "version": "latest"}]
 
 
-def test_deploy_agent_missing_skill_makes_no_write(tmp_path, monkeypatch):
-    agents_root, _ = _wire(tmp_path, monkeypatch)
-    client = FakeClient(agents=[], skills_list=[])  # skill not on platform
+def test_deploy_agent_missing_skill_dir_makes_no_write(tmp_path, monkeypatch):
+    # The referenced skill has no directory under claude_platform/skills/ -> fail fast, nothing written.
+    agents_root, _ = _wire(tmp_path, monkeypatch, skill=None)  # no skill dir in the repo
+    client = FakeClient(agents=[], skills_list=[])
     with pytest.raises(ValueError):
         da.deploy_agent(client, agents_root / "lik-query-project-index.yaml")
     assert client.beta.agents.create_calls == []
     assert client.beta.agents.update_calls == []
+    assert client.beta.skills.create_calls == []
 
 
 def test_deploy_agent_dry_run_makes_no_write(tmp_path, monkeypatch):
@@ -257,6 +311,8 @@ def test_main_syncs_envs_then_selected_agent(tmp_path, monkeypatch):
     # environment created before the agent
     assert client.beta.environments.create_calls[0]["name"] == "lik-ui"
     assert client.beta.agents.create_calls[0]["name"] == "LIK Query: Project Index"
+    # the agent's referenced skill was published as part of the same run
+    assert client.beta.skills.version_calls  # skill existed -> new version published
 
 
 def test_main_dry_run_mutates_nothing(tmp_path, monkeypatch):
@@ -268,3 +324,5 @@ def test_main_dry_run_mutates_nothing(tmp_path, monkeypatch):
     assert rc == 0
     assert client.beta.agents.create_calls == []
     assert client.beta.environments.create_calls == []
+    assert client.beta.skills.create_calls == []  # dry run publishes no skills either
+    assert client.beta.skills.version_calls == []
