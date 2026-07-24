@@ -13,7 +13,7 @@
 # here naming it, and open a PR. The app reads this file once at startup, so a new agent appears after
 # a redeploy — there is no runtime reload.
 
-default_environment = "lik-ui"
+default_environment = "lik-ui-env"
 
 [[agents]]
 agent = "LIK Query: Project Index"

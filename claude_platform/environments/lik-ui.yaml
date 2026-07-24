@@ -5,7 +5,7 @@
 # is `limited` with `allow_mcp_servers` so an agent bound to this environment can reach the MCP
 # servers it declares. The agent<->environment pairing is not stored here — it lives in lik-ui's
 # roster (agents.toml), which is what pairs an offered agent with the environment its sessions run in.
-name: lik-ui
+name: lik-ui-env
 description: null
 config:
   type: cloud
