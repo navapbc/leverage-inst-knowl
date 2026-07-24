@@ -8,22 +8,22 @@ A company's knowledge is scattered across many data sources — storage (Google 
 
 ## The idea
 
-Leave the knowledge where it already lives, in the **Data Sources** — each stays authoritative for the knowledge it holds, and each keeps controlling who may see what. On top, add a **Discovery Layer**: material *derived* from those sources whose only job is to make knowledge fast to find and reuse — **without** copying everything into one place and **without** becoming a competing authority.
+Leave the knowledge where it already lives, in the **Data Sources** — each stays authoritative for the knowledge it holds, and each keeps controlling who may see what. On top, add a **Discovery Layer**: material — mostly *derived* from those sources — whose only job is to make knowledge fast to find and reuse — **without** copying everything into one place and **without** becoming a competing authority.
 
 Its outputs come in three kinds:
 
-- **Most of it (stored as "DL records")** — summaries, indexes, and pointers written back into a Data Source and marked `discovery-layer` to show they're derived, never mistaken for originals. Without this prepared material, every tool would re-search the full sources from scratch on each question — the slow, costly repetition the Discovery Layer exists to remove.
+- **Most of it (stored as "DL records")** — summaries, indexes, and pointers written back into a Data Source and marked `discovery-layer` to flag their role: an entry point an AI agent looks at first. Most are generated automatically from the sources, though a person may curate or edit one. Without this prepared material, every tool would re-search the full sources from scratch on each question — the slow, costly repetition the Discovery Layer exists to remove.
 - **The Catalog** — an index to look up where a topic's material lives, and the first place to start answering a question. It's built only from the DL records — not the full sources — so it's the coarse, topic-level map of what exists and where across many systems. Without it, a tool would have to search every system just to learn what exists before it could begin.
 - **Confirmation signals** — people vouching that the source behind an answer was right, or flagging it wrong. Without them, future answers couldn't favor the sources people have already confirmed or steer clear of ones flagged wrong — so the system would never grow more trustworthy the more it's used.
 
-Almost all of this is **disposable** — recomputed from the sources on demand, so it's never backed up; rebuild or discard it freely. The only parts kept safe are those **produced through use** — the answers people save and the confirmations they leave — because nothing can regenerate them.
+Almost all of this is **disposable** — recomputed from the sources on demand, so it's never backed up; rebuild or discard it freely. The parts kept safe are those a person **touched by hand** — a DL record someone edited or verified, the answers people save, and the confirmations they leave — because nothing can regenerate them. (These live in a Data Source or DL's own store, which backs them up.)
 
 ## The value
 
 - **Faster, cheaper answers** — work is computed once and reused by every tool, instead of every tool re-searching every data source on every question.
 - **More trustworthy answers** — answers cite their sources, carry content-freshness signals, and accumulate confirmations from the people who used them.
 - **Knowledge stays governed** — each original data source keeps controlling who can see what; the Discovery Layer never becomes a back door to restricted data.
-- **Low ongoing cost** — almost everything is rebuilt or discarded on demand; only what's produced through use is kept, so there's little to maintain.
+- **Low ongoing cost** — almost everything is rebuilt or discarded on demand; only what a person touched by hand is kept — hand-edited records, saved answers, confirmations — so there's little to maintain.
 
 ## Guiding principles
 
@@ -33,7 +33,7 @@ Every design choice traces back to these.
 - **Loosely coupled** — keep the pieces independent so any one — a store, a source, a tool — can be swapped without rewriting the rest, and no single vendor becomes hard to leave.
 - **Intuitive** — lean on standards (e.g., MCP) and common patterns rather than bespoke mechanisms, so people and tools pick it up quickly.
 - **Flexible** — adaptable to a wide range of questions, data, and tools: many small, specialized skills instead of one rigid system.
-- **Knowledge stays authoritative where it lives** — each piece of knowledge stays authoritative in the data source that owns it. Everything the Discovery Layer produces is derived material — DL records, summaries, indexes, pointers, and signals — none of it is the authoritative original.
+- **Knowledge stays authoritative where it lives** — each piece of knowledge stays authoritative in the data source that owns it. The Discovery Layer isn't a place to author authoritative knowledge for its own sake; its outputs — DL records, summaries, indexes, pointers, and signals — exist to make that knowledge faster to find. Its safety comes from where those outputs live (governed and backed up by the source) and from always citing what they point to, not from a rule that they can never contain original content.
 - **Secure by default** — least privilege, deny when unsure, and access always enforced by the *original data source*, never by the Discovery Layer's own metadata. A wrong entry can misdirect a lookup but can never unlock a door.
 - **Build on existing sign-in** — access reuses the existing Google SSO (single sign-on) and its group permissions instead of standing up a new identity system. (Sources that don't already use Google groups need a one-time mapping — see <u>Architecture</u>.)
 - **Earn each step** — add each capability only once the previous one's limits prove it's needed; spend follows evidence, not ambition.
