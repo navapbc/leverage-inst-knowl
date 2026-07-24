@@ -1,4 +1,4 @@
-# Deploy agent + environment specs under `claude_platform/` to Claude Managed Agents.
+# Deploy agent + environment specs under `claude_platform/` to Claude Managed Agents platform.
 # Manually dispatched (like deploy-skills.yml / deploy-images.yml) — a maintainer chooses which agent
 # to publish after the spec change has been reviewed and merged. Resources are resolved by name
 # (create-if-absent, else update in place); agents reference skills by name. Skills are deployed FIRST
@@ -9,7 +9,7 @@
 #   - Secret ANTHROPIC_API_KEY = a standard org API key (sk-ant-api03-...) scoped to the workspace
 #     that holds the agents/skills. Not an admin key. (Shared with deploy-skills.yml.)
 
-name: Deploy agents to Managed Agents
+name: Deploy agents to Claude platform
 
 on:
   workflow_dispatch:
