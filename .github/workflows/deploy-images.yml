@@ -12,7 +12,7 @@
 # Auth is GitHub OIDC (no stored AWS keys). Both IAM roles' trust is scoped to this repo's
 # `prod` environment (see infra/iam_github_oidc.tf).
 
-name: Build and push container images
+name: Build and deploy images
 
 on:
   workflow_dispatch:
