@@ -157,6 +157,49 @@ the managed Lightsail ingress to ECS/EC2 behind an ALB (configurable idle timeou
 switching the browser transport to WebSockets is a lighter mitigation if staying on
 Lightsail. See `../domain-name.md` (Caveat: real-time streaming and timeouts).
 
+## TODO: auto-archive or delete stale chat sessions
+
+Today a session lives forever: `SessionsClient.create_session` mints a Managed Agents
+session and `db.py` keeps a local row (`session_id`, `user_id`, `agent_id`, `title`,
+`shared`, `created_at`), and nothing prunes either side until a user deletes a chat by hand.
+The sessions list grows without bound. Consider a policy that automatically **archives** or
+**deletes** a session after some period of inactivity (or age).
+
+Archive vs. delete on the platform — both are real, distinct operations on `beta.sessions`
+(we currently only call `delete_session`):
+
+- **Archive** (`beta.sessions.archive`) — blocks new events but **keeps the full transcript**;
+  the session can be excluded from the list view (the list endpoint takes an
+  `include_archived` filter). Reversibility (unarchive/reopen) is **not documented** — verify
+  before relying on it. Requires the session to be `idle`.
+- **Delete** (`beta.sessions.delete`) — permanently removes the record, its events, and the
+  associated sandbox. Not recoverable. Also requires `idle`.
+
+Reasons to prefer archiving over deleting:
+
+- **Retention / auditability.** Keeps the conversation history for later replay or review
+  instead of destroying it.
+- **List hygiene.** Hides old chats from the picker without losing them, so the list stays
+  usable as sessions accumulate.
+- **Reversible-ish.** Delete is final; archive at least preserves the data even if reopening
+  isn't guaranteed.
+
+What is *not* a strong reason here: **runtime cost.** Managed Agents bill session *runtime*
+(per session-hour while `running`); idle sessions are free and there's no documented per-session
+storage charge. A chat session sits idle between turns, so archiving it saves ~nothing on
+runtime — this is about tidiness and retention, not spend. There's also no documented platform
+TTL/auto-expiry, so any expiry is ours to implement.
+
+Design notes if we build this:
+
+- A time-based policy needs a notion of "last activity." The `sessions` row only has
+  `created_at` (age), not a last-activity timestamp — key off `created_at`, or add an
+  `updated_at`/`last_active_at` column (non-destructive `ALTER`, per the DB-schema rules in
+  `CLAUDE.md`) touched on each turn.
+- Decide archive-then-delete (grace period) vs. straight delete, and whether it's a background
+  sweep or lazy-on-list. Keep the local row and the platform session in sync — the code already
+  handles `SessionNotFound` for platform sessions that vanish out-of-band.
+
 ## Configuration
 
 All config is `LIK_UI_`-prefixed; see `.env.example`. Outside `local`/`test`, the app
