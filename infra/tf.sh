@@ -10,8 +10,8 @@
 #
 # Usage (from anywhere; it cd's into infra/):
 #   ./tf.sh plan
-#   ./tf.sh apply -var-file=prod.tfvars
-#   ./tf.sh apply -var 'lik_mcp_image=:lik-mcp-prod.app.2' -var 'lik_ui_image=:lik-ui-prod.app.1'
+#   ./tf.sh apply -auto-approve                          # images auto-resolved to latest
+#   LIK_MCP_IMAGE=:lik-mcp-prod.app.2 LIK_UI_IMAGE=:lik-ui-prod.app.1 ./tf.sh apply   # pin images
 #   ./tf.sh output
 #   AWS_PROFILE=other ./tf.sh plan      # override the profile if needed
 #
@@ -27,7 +27,47 @@ export AWS_PROFILE
 creds="$(mise exec -- aws configure export-credentials --format process)"
 AWS_ACCESS_KEY_ID="$(printf '%s' "$creds"     | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin)["AccessKeyId"])')"
 AWS_SECRET_ACCESS_KEY="$(printf '%s' "$creds" | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin)["SecretAccessKey"])')"
-AWS_SESSION_TOKEN="$(printf '%s' "$creds"     | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin)["SessionToken"])')"
-export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+# SessionToken is only present for temporary credentials (SSO / assume-role); a long-term
+# IAM-user profile omits it, so default to empty rather than KeyError-ing.
+AWS_SESSION_TOKEN="$(printf '%s' "$creds"     | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin).get("SessionToken",""))')"
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+[ -n "$AWS_SESSION_TOKEN" ] && export AWS_SESSION_TOKEN || unset AWS_SESSION_TOKEN
 
-exec mise exec -- terraform "$@"
+# Only `apply` consumes the image/domain vars; resolve them (and guard) only then, so
+# `plan`/`output`/`destroy` don't fail when no images exist yet. Extra args (e.g.
+# -var-file, -auto-approve) are passed through after the injected vars.
+if [ "${1:-}" = "apply" ]; then
+    shift
+
+    : "${UI_CUSTOM_DOMAIN_URL:=https://ui.lik.navapbc.com}"
+    : "${MCP_CUSTOM_DOMAIN_URL:=https://mcp.lik.navapbc.com}"
+    echo "Using UI_CUSTOM_DOMAIN_URL=$UI_CUSTOM_DOMAIN_URL"
+    echo "Using MCP_CUSTOM_DOMAIN_URL=$MCP_CUSTOM_DOMAIN_URL"
+
+    latest_image() {
+        mise exec -- aws lightsail get-container-images --service-name "$1" \
+            --query 'containerImages[0].image' --output text
+    }
+
+    : "${ENV_SUFFIX:=prod}"
+    : "${LIK_MCP_IMAGE:=$(latest_image lik-mcp-$ENV_SUFFIX)}"
+    : "${LIK_UI_IMAGE:=$(latest_image lik-ui-$ENV_SUFFIX)}"
+
+    [ -n "$LIK_MCP_IMAGE" ] && [ "$LIK_MCP_IMAGE" != "None" ] || { echo "ERROR: LIK_MCP_IMAGE is empty" >&2; exit 1; }
+    [ -n "$LIK_UI_IMAGE" ]  && [ "$LIK_UI_IMAGE" != "None" ]  || { echo "ERROR: LIK_UI_IMAGE is empty"  >&2; exit 1; }
+
+    echo "Using LIK_MCP_IMAGE=$LIK_MCP_IMAGE"
+    echo "Using LIK_UI_IMAGE=$LIK_UI_IMAGE"
+
+    # Terraform applies variables in the order they appear in the argument list,
+    # so -var-file and -var arguments in $@ will override the defaults
+    exec mise exec -- terraform apply \
+        -var "ui_custom_domain_url=$UI_CUSTOM_DOMAIN_URL" \
+        -var "mcp_custom_domain_url=$MCP_CUSTOM_DOMAIN_URL" \
+        -var "lik_mcp_image=$LIK_MCP_IMAGE" \
+        -var "lik_ui_image=$LIK_UI_IMAGE" \
+        "$@"
+else
+    exec mise exec -- terraform "$@"
+fi
+
