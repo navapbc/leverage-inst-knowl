@@ -1,4 +1,6 @@
-# Test roster used by the chat/route tests. Not the shipped roster.
+# Test roster used by the chat/route tests. Not the shipped roster. Name-based: the fake agents
+# client resolves these names to agent_1 / env_1 at startup (see FakeAgentsClient in test_agents.py).
+default_environment = "Test Env"
+
 [[agents]]
-agent_id = "agent_1"
-environment_id = "env_1"
+agent = "Test Agent"

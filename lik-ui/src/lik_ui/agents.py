@@ -8,13 +8,23 @@ status and drive the connect action for each missing source.
 
 from typing import Protocol
 
-from .settings import Settings
+from .settings import AgentOption, Settings
 from .skill_docs import fetch_skill_instructions, skill_source_url
 from .sources import normalize_url
 from .vault import VaultClient, ensure_user_vault
 
 
 class AgentsClient(Protocol):
+    def resolve_agent_id(self, name: str) -> str:
+        """Return the platform id of the agent whose name equals ``name``. Raises if there is no
+        match or more than one — by-name resolution must be unambiguous."""
+        ...
+
+    def resolve_environment_id(self, name: str) -> str:
+        """Return the platform id of the environment whose name equals ``name``. Raises if there is
+        no match or more than one."""
+        ...
+
     def describe(self, agent_id: str) -> dict:
         """Return the agent's details in a single lookup: ``{"name": str | None,
         "servers": [{"name", "url", "permission_policy"}, ...], "system": str | None,
@@ -39,6 +49,23 @@ class AnthropicAgentsClient:
         import anthropic
 
         self._client = anthropic.Anthropic(api_key=api_key)
+
+    @staticmethod
+    def _resolve_id_by_name(items, name: str, kind: str) -> str:
+        """Return the single item's id whose ``name`` equals ``name``. Raises on zero or multiple
+        matches — by-name resolution must be unambiguous, and a silent miss would blank the picker."""
+        matches = [it for it in items if getattr(it, "name", None) == name]
+        if not matches:
+            raise ValueError(f"no {kind} named {name!r} on the platform — deploy it first")
+        if len(matches) > 1:
+            raise ValueError(f"multiple {kind}s named {name!r} on the platform — names must be unique")
+        return matches[0].id
+
+    def resolve_agent_id(self, name: str) -> str:
+        return self._resolve_id_by_name(list(self._client.beta.agents.list()), name, "agent")
+
+    def resolve_environment_id(self, name: str) -> str:
+        return self._resolve_id_by_name(list(self._client.beta.environments.list()), name, "environment")
 
     @staticmethod
     def _server_policies(agent) -> dict:
@@ -85,6 +112,22 @@ def build_agents_client(settings: Settings) -> AgentsClient | None:
     return AnthropicAgentsClient(settings.anthropic_api_key)
 
 
+def resolve_agent_options(settings: Settings, agents_client: AgentsClient | None) -> list[AgentOption]:
+    """Resolve the name roster (``settings.agent_roster``) into ``AgentOption``s with concrete
+    platform ids, once at startup. Returns an empty list when there is no client (local/test stub),
+    so the app still boots. Any unresolved name raises — in production that surfaces as a loud
+    startup failure rather than a silently empty agent picker. Downstream code (routes, session
+    creation) consumes the resulting ids exactly as before."""
+    if agents_client is None:
+        return []
+    options: list[AgentOption] = []
+    for entry in settings.agent_roster:
+        agent_id = agents_client.resolve_agent_id(entry.agent_name)
+        environment_id = agents_client.resolve_environment_id(entry.environment_name)
+        options.append(AgentOption(agent_id=agent_id, environment_id=environment_id))
+    return options
+
+
 def resolve_connections(servers: list[dict], connected_urls: set[str]) -> list[dict]:
     """For each server the agent declares, mark whether the user's vault already has a
     matching credential. Compare on the normalized URL: the vault platform stores the
@@ -107,8 +150,8 @@ def register_agent_routes(app) -> None:
     @app.get("/connections", response_class=HTMLResponse)
     async def connections(request: Request, agent_id: str):
         user = require_user(request)
-        settings: Settings = request.app.state.settings
-        agent = next((a for a in settings.agents if a.agent_id == agent_id), None)
+        # Resolved at startup (name→id); the URL surface is still keyed by the concrete agent_id.
+        agent = next((a for a in request.app.state.agents if a.agent_id == agent_id), None)
         if not agent:
             return HTMLResponse("Unknown agent.", status_code=404)
 

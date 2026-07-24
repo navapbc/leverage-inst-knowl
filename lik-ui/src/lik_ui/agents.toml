@@ -1,19 +1,20 @@
-# lik-ui agent roster. Each [[agents]] block is one selectable agent, pairing its Claude
-# Managed Agent id with the environment its sessions run in. The label shown in the picker
+# lik-ui agent roster. Each [[agents]] block is one selectable agent, referenced by NAME (not a
+# platform id): the agent's name and the environment its sessions run in. lik-ui resolves those
+# names to concrete ids at startup via the Claude SDK, so no platform ids live in this file — the
+# roster survives re-initializing into a new workspace without any id rewrite. GitHub is the source
+# of truth for the agent/environment definitions themselves (claude_platform/agents,
+# claude_platform/environments), deployed by scripts/deploy_agents.py. The label shown in the picker
 # is read from the agent's own definition via the SDK, not stored here.
 #
-# default_environment_id applies to any agent that omits its own environment_id; an agent
-# may still set environment_id to override the default.
+# default_environment applies to any agent that omits its own environment; an agent may still set
+# environment to override the default.
 #
-# To add an agent: run scripts/init_workspace.py (it appends a block here) or add one by
-# hand, then open a PR. The app reads this file once at startup, so a new agent appears
-# after a redeploy — there is no runtime reload.
+# To add an agent: add its spec under claude_platform/agents/, deploy it, then add a [[agents]] block
+# here naming it, and open a PR. The app reads this file once at startup, so a new agent appears after
+# a redeploy — there is no runtime reload.
 
-default_environment_id = "env_01T28NToQVoE9iCgttkpTCZE"
-# "env_016c6vWcCUvyVUaztWhvsAQt"
+default_environment = "lik-ui"
 
 [[agents]]
-# Knowledge Search Agent
-agent_id = "agent_01H4exabGcK57yKD2cC1hcHs"
-# agent_id = "agent_016uQNVgNEVtcAmvwKtskh8d"
-# environment_id omitted -> uses default_environment_id above
+agent = "LIK Query: Project Index"
+# environment omitted -> uses default_environment above

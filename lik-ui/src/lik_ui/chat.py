@@ -329,8 +329,7 @@ def register_chat_routes(app) -> None:
     @app.get("/chat")
     async def new_chat(request: Request, agent_id: str, title: str = ""):
         user = require_user(request)
-        settings: Settings = request.app.state.settings
-        agent = next((a for a in settings.agents if a.agent_id == agent_id), None)
+        agent = next((a for a in request.app.state.agents if a.agent_id == agent_id), None)
         if not agent:
             return HTMLResponse("Unknown agent.", status_code=404)
 

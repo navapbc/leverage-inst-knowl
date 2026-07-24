@@ -3,6 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from lik_ui.agents import AnthropicAgentsClient, resolve_connections
@@ -26,6 +27,13 @@ class FakeAgentsClient:
         self.model = model
         self.skills = skills or []
         self.version = version
+
+    def resolve_agent_id(self, name):
+        # The test roster names resolve to the fixed ids the route tests key off of.
+        return "agent_1"
+
+    def resolve_environment_id(self, name):
+        return "env_1"
 
     def describe(self, agent_id):
         if self.raises:
@@ -240,3 +248,61 @@ def test_connections_requires_login(db):
     r = client.get("/connections?agent_id=agent_1")
     assert r.status_code == 303
     assert r.headers["location"] == "/login"
+
+
+# --- name -> id resolution at startup ----------------------------------------------------------
+
+
+def test_resolve_agent_options_maps_roster_names_to_ids(tmp_path):
+    """The name roster resolves to AgentOptions carrying the ids the fake returns, in file order."""
+    from lik_ui.agents import resolve_agent_options
+    from lik_ui.settings import Settings
+
+    path = tmp_path / "agents.toml"
+    path.write_text('default_environment = "Env"\n\n[[agents]]\nagent = "Test Agent"\n')
+    settings = Settings(env="test", agents_config_path=path)
+    options = resolve_agent_options(settings, FakeAgentsClient([LIK]))
+    assert [(o.agent_id, o.environment_id) for o in options] == [("agent_1", "env_1")]
+
+
+def test_resolve_agent_options_empty_without_client(tmp_path):
+    """No agents client (local/test stub) -> empty resolved list, so the app still boots."""
+    from lik_ui.agents import resolve_agent_options
+    from lik_ui.settings import Settings
+
+    path = tmp_path / "agents.toml"
+    path.write_text('[[agents]]\nagent = "Test Agent"\nenvironment = "Env"\n')
+    settings = Settings(env="test", agents_config_path=path)
+    assert resolve_agent_options(settings, None) == []
+
+
+def test_resolve_agent_options_unresolved_name_raises(tmp_path):
+    """A roster name with no platform match raises (loud startup failure, not a blank picker)."""
+    from types import SimpleNamespace
+
+    from lik_ui.agents import AnthropicAgentsClient, resolve_agent_options
+    from lik_ui.settings import Settings
+
+    client = AnthropicAgentsClient.__new__(AnthropicAgentsClient)
+    client._client = SimpleNamespace(
+        beta=SimpleNamespace(
+            agents=SimpleNamespace(list=lambda: []),  # no agents on the platform
+            environments=SimpleNamespace(list=lambda: [SimpleNamespace(id="env_1", name="Env")]),
+        )
+    )
+    path = tmp_path / "agents.toml"
+    path.write_text('[[agents]]\nagent = "Missing Agent"\nenvironment = "Env"\n')
+    settings = Settings(env="test", agents_config_path=path)
+    with pytest.raises(ValueError):
+        resolve_agent_options(settings, client)
+
+
+def test_resolve_id_by_name_ambiguous_raises():
+    """Two platform resources sharing a name is an error — by-name resolution must be unambiguous."""
+    from types import SimpleNamespace
+
+    from lik_ui.agents import AnthropicAgentsClient
+
+    items = [SimpleNamespace(id="1", name="Dup"), SimpleNamespace(id="2", name="Dup")]
+    with pytest.raises(ValueError):
+        AnthropicAgentsClient._resolve_id_by_name(items, "Dup", "agent")
