@@ -18,7 +18,7 @@
     <form method="post" action="/chat/{{ session.session_id | urlencode }}/share" class="share-form">
       <label>
         <input type="checkbox" name="shared" onchange="this.form.submit()" {% if session.shared %}checked{% endif %}>
-        Share read-only — anyone signed in who has this session's id can view it
+        Share read-only — allow any signed-in user who has this session's id to view it
       </label>
     </form>
   {% else %}
