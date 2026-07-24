@@ -3,6 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from lik_ui.app import build_app
@@ -695,3 +696,30 @@ def test_chat_history_deletes_stale_session_when_platform_gone(db):
     # Row removed: a second history load can't find the session at all.
     assert client.get(f"/chat/{session_id}/history").status_code == 404
     assert Store(db).get_session(session_id, _owner_id(db)) is None
+
+
+def test_delete_session_is_idempotent_when_platform_session_gone():
+    """Deleting a session already gone on the platform (e.g. old workspace) is a no-op, not
+    an error — so bulk 'delete all' doesn't abort on the first stale session."""
+    import anthropic
+    import httpx
+
+    client = AnthropicSessionsClient(api_key="test-key")
+
+    def _gone(session_id):
+        raise anthropic.NotFoundError(
+            f"Session not found: {session_id}",
+            response=httpx.Response(404, request=httpx.Request("DELETE", "https://api.anthropic.com/v1/sessions/x")),
+            body=None,
+        )
+
+    client._client = SimpleNamespace(beta=SimpleNamespace(sessions=SimpleNamespace(delete=_gone)))
+    client.delete_session("sesn_gone")  # must not raise
+
+    # A non-404 error still propagates (we only swallow "already gone").
+    def _boom(session_id):
+        raise RuntimeError("boom")
+
+    client._client.beta.sessions.delete = _boom
+    with pytest.raises(RuntimeError):
+        client.delete_session("sesn_x")
