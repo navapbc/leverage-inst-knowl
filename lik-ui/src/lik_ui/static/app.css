@@ -92,8 +92,13 @@ details.skills .skill-instructions pre { white-space: pre-wrap; overflow-wrap: a
   border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem;
   max-height: 24rem; overflow-y: auto; }
 
+/* Collapsed box grouping the per-session settings to reduce clutter. */
+.session-settings { margin: .5rem 0; }
+.session-settings > summary { cursor: pointer; color: var(--accent); font-size: .9rem; }
+.session-settings > *:not(summary) { margin-top: .5rem; }
+
 /* Tool-visibility toggles: hide tool bubbles by kind based on the container's class. */
-#chat-controls { display: flex; gap: 1rem; margin: .5rem 0; color: var(--muted); font-size: .9rem; }
+#chat-controls { display: flex; gap: 1rem; margin: .5rem 0; font-size: .9rem; }
 #chat-controls label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
 #transcript.hide-builtin-tools .card.tool.builtin { display: none; }
 #transcript.hide-mcp-tools .card.tool.mcp { display: none; }
