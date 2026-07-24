@@ -8,6 +8,7 @@
 
 * **Never commit or push to `main` without asking first.** All changes go through a branch and PR. Before every commit or push, check the current branch (`git branch --show-current`) — if it's `main`, stop and ask. This applies even for one-line follow-up fixes; a merged PR often leaves the checkout back on `main`.
 * Prefix all skill names with `lik-` (e.g. `lik-query-project-index`). Applies to the skill directory under `claude_platform/skills/` and its `name:` frontmatter.
+* Managed Agents resources are GitHub-sourced under `claude_platform/`: `skills/` (skill dirs), `agents/` and `environments/` (the platform's raw export YAML). Agents reference skills, and lik-ui references agents/environments, **by name** — no platform ids in the repo. Deploy skills via `deploy-skills.yml` and agents+environments via `deploy-agents.yml` (both manual dispatch); see `scripts/README.md`.
 * Wrap `SKILL.md` prose at a 120-character line limit. Exceptions that stay on one line: YAML frontmatter values (e.g. the `description`), table rows, and fenced code.
 * The software is being implemented based on the docs in the `v0.4` folder.
     - As code is being written ensure it aligns with the goals and intent of those docs.
@@ -28,7 +29,8 @@
   `mise:2: command not found: _bootstrap_mise` line may print to stderr; ignore it.
 * **AWS is `AWS_PROFILE=lik`** (account 293033346213, us-east-1). If a call fails with "session has
   expired", run `AWS_PROFILE=lik mise exec -- aws login` (opens a browser) and retry. Secrets live in SSM
-  under `/ik-arch/prod/` (e.g. `LIK_UI_ANTHROPIC_API_KEY`; agent IDs are in `lik-ui/src/lik_ui/agents.toml`).
+  under `/ik-arch/prod/` (e.g. `LIK_UI_ANTHROPIC_API_KEY`; the agent roster in `lik-ui/src/lik_ui/agents.toml`
+  lists agents by name, resolved to ids at startup).
 * **Diagnosing OAuth / MCP-auth / session failures:** chat transcripts and credentials are NOT stored in
   this repo — they live on the Anthropic Managed Agents platform, queried via the Python `anthropic` SDK
   (`beta.sessions` / `beta.vaults`). See `docs/oauth.md` → "Diagnosing a failing connection" for the

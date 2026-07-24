@@ -186,8 +186,10 @@ special-char quoting breakage (a `)` trips the mise zsh hook, same as the DB pas
 only asking you to edit a single file.
 
 **The agent roster is no longer in SSM.** It lives in the checked-in `lik-ui/src/lik_ui/agents.toml`,
-shipped inside the container image. Add/remove agents there via PR (or run
-`scripts/init_workspace.py`, which appends to it), then rebuild the image and redeploy. The old
+shipped inside the container image. The roster lists agents **by name** (not platform ids); lik-ui
+resolves those names to ids at startup via the SDK. Add/remove agents by editing it via PR (the agent
+and environment definitions themselves live under `claude_platform/` and deploy via
+`.github/workflows/deploy-agents.yml`), then rebuild the image and redeploy. The old
 `/ik-arch/prod/lik-ui/LIK_UI_AGENTS_CONFIG` SSM parameter is now orphaned and can be deleted
 out-of-band: `AWS_PROFILE=lik mise exec -- aws ssm delete-parameter --region us-east-1 --name /ik-arch/prod/lik-ui/LIK_UI_AGENTS_CONFIG`.
 
@@ -433,10 +435,10 @@ AWS_PROFILE=lik mise exec -- aws lightsail get-container-log \
 > agent declares a URL that lik-ui has no client for, the connect fails with
 > *"<url> has no dynamic client registration and no configured client."*
 
-**Why this matters for this deploy:** the agent
-`agent_016uQNVgNEVtcAmvwKtskh8d` (from the roster in `lik-ui/src/lik_ui/agents.toml`) was authored pointing at the
-old `https://leverage-inst-knowl.onrender.com/mcp` deployment. After migrating to Lightsail,
-its declared lik-mcp server URL must be updated to the Lightsail URL:
+**Why this matters for this deploy:** the agent's spec
+(`claude_platform/agents/lik-query-project-index.yaml`) declares the lik-mcp server URL. If it was
+authored pointing at an old deployment (e.g. `https://leverage-inst-knowl.onrender.com/mcp`), update
+the `mcp_servers` URL in that spec and redeploy via `deploy-agents.yml` — for example the Lightsail URL:
 
 ```
 https://lik-mcp-prod.bf6j3fzhc5rxe.us-east-1.cs.amazonlightsail.com/mcp

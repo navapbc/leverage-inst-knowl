@@ -1,8 +1,14 @@
-# Skill deploy tooling
+# Managed Agents deploy tooling
 
-Operational scripts that publish the repo's skill directories (`claude_platform/skills/<name>/`) to Claude
-Managed Agents. GitHub is the source of truth for skill instructions; these scripts push them to the
-platform. See `docs/plans/2026-07-23-001-feat-skill-instruction-deploy-pipeline-plan.md`.
+Operational scripts that publish the repo's `claude_platform/` specs to Claude Managed Agents. GitHub
+is the source of truth; these scripts push definitions to the platform:
+
+- `claude_platform/skills/<name>/` — skill directories → `deploy_skills.py`
+- `claude_platform/agents/<name>.yaml`, `claude_platform/environments/<name>.yaml` — agent and
+  environment specs (the platform's raw export YAML) → `deploy_agents.py`
+
+See `docs/plans/2026-07-23-001-feat-skill-instruction-deploy-pipeline-plan.md` (skills) and
+`docs/plans/2026-07-24-001-feat-agent-spec-deploy-pipeline-plan.md` (agents).
 
 ## `deploy_skills.py` — publish a skill version (recurring)
 
@@ -23,16 +29,35 @@ ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_skills.py --skill lik-qu
 agents/skills (not an admin key). In CI it comes from the `ANTHROPIC_API_KEY` secret on the `prod`
 environment.
 
-## `attach_skills_to_agent.py` — pin skills to an agent (one-time bootstrap)
+## `deploy_agents.py` — publish agents + environments (recurring)
 
-Attaches skills to a Managed Agent at `version: "latest"` so deploys roll out automatically. Run
-this **once per new skill**, not on every deploy — once an agent references a skill at `latest`, new
-versions from `deploy_skills.py` are picked up with no further attach step.
+Deploys the agent and environment specs under `claude_platform/`, resolving each **by name**
+(create if absent, else update in place). An agent's `skills` are listed by name and translated to
+platform `skill_id`s at deploy time (reusing `deploy_skills.find_existing_skill_id`), pinned to
+`latest` — so the skill must be deployed first. Environments are always synced so an agent's
+environment exists.
+
+Normally run by the **Deploy agents to Managed Agents** GitHub Action (manual dispatch, choose which
+agent), which runs `deploy_skills.py --skill all` first. To run locally against the real API:
 
 ```sh
-ANTHROPIC_API_KEY=sk-ant-api03-... LIK_AGENT_ID=agent_01... \
-  uv run python attach_skills_to_agent.py --skill all
+# deploy skills first, then agents (agents reference skills by name):
+ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_skills.py --skill all
+ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_agents.py --agent all
+# or a single agent (filename stem under claude_platform/agents/):
+ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_agents.py --agent lik-query-project-index
+# --dry-run prints the plan (still queries the platform to decide create-vs-update) without mutating.
 ```
+
+An agent references skills by **name**, not `skill_id` — no platform ids live in the repo. lik-ui
+likewise resolves agent/environment names to ids at startup, so the roster (`lik-ui`'s `agents.toml`)
+and specs stay id-free and survive re-initializing into a new workspace.
+
+## Bootstrapping a fresh workspace
+
+`lik-ui/scripts/init_workspace.py` runs both deploy scripts (skills, then agents) against a target
+workspace key and prints the SSM key line + next steps. Use it when standing up a new workspace; it
+orchestrates the same code CI uses.
 
 ## Two platform upload rules (both enforced by `deploy_skills.py`)
 
