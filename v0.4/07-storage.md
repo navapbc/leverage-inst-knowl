@@ -53,6 +53,13 @@ The home for DL's structured data — the **Catalog** and **confirmation signals
 
 **Served through scoped tools, never raw SQL.** The MCP service exposes **intent-named tools** — e.g., `confirm_source`, `register_catalog_entry` — each enforcing its own rules *at write time* (rate-limiting, de-duplication, "reject a confirmation whose citation doesn't resolve"). A generic `run_sql` would hand that enforcement back to the caller and forfeit the reason for moving off a page.
 
+**Vector-DB variant for the Catalog (opt-in).** The Catalog store may instead be a vector DB (or Postgres with `pgvector`) that embeds each DL record's text, so a consumer can match a *fuzzy* question by similarity rather than only by exact key. It sits behind the same scoped MCP tools — `register_catalog_entry` still writes rows; a similarity-search capability is added alongside keyed lookup. The variant carries extra obligations implementers must meet (semantics in <u>Architecture</u> §3):
+- **Keyed lookup still required** — exact `(entry_type, subject)` retrieval via metadata filtering stays the floor; similarity is additive, and no consumer may assume it exists.
+- **Embed DL-record text only** — never raw Data-Source content, which would rebuild the index-based-copy custody risk of the Level 0 tools (<u>Strategy</u> Level 0).
+- **Access-group pre-filter** — restrict candidates to the caller's groups (the row-level-security predicate above) *before* similarity ranking; an unfiltered hit leaks record text, not just a pointer.
+- **Partition by sensitivity** — keep `restricted` and `cleared` vectors in separate indexes; embeddings can leak the content they encode, so a mixed index takes on its most-restricted member's sensitivity.
+- **Re-embed on re-derivation** — refresh a record's vector when its content-state changes, or the similarity match goes stale (freshness handled as in <u>Architecture</u> §2).
+
 **Two writer modes:**
 - **Service-only** — Catalog rows, written by the skill's service identity with no user in the loop.
 - **Service + user assertion** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the tool needs the user's token both to attribute the write and to rate-limit per person.
