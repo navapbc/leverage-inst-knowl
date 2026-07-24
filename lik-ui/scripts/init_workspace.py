@@ -124,13 +124,17 @@ SSM_PREFIX = "$P/lik-ui"
 # Deploy steps that pick up the new values, printed after the SSM block. The agent roster
 # is committed in agents.toml (above); only the API key goes through SSM. Steps 2-3 run from
 # infra/ (see infra/ssm-secrets.example's header for the $P path-prefix substitution); the
-# roster is baked into the image at build time, so step 4 rebuilds+redeploys via CI.
+# roster is baked into the image at build time, so step 5 rebuilds+redeploys via CI. Step 4
+# repoints the CI skill-deploy secret at this workspace, or deploy-skills.yml would publish
+# to the old one.
 NEXT_STEPS = (
     "1. Commit + merge the updated src/lik_ui/agents.toml (the new roster entry above).\n"
     "2. Copy infra/ssm-secrets.example to a temp file and set its LIK_UI_ANTHROPIC_API_KEY\n"
     "   line to the one above.\n"
     "3. From infra/:  ./set-ssm-secrets.sh COPY_OF_ssm-secrets.example\n"
-    "4. Run the \"Build and deploy images\" GitHub Action for lik-ui\n"
+    "4. Update the GitHub prod-environment secret so skill deploys (deploy-skills.yml) target\n"
+    "   this workspace:  gh secret set ANTHROPIC_API_KEY --env prod   (paste the same key).\n"
+    "5. Run the \"Build and deploy images\" GitHub Action for lik-ui\n"
     "   (gh workflow run deploy-images.yml -f service=lik-ui). It rebuilds the image with the\n"
     "   updated agents.toml and redeploys the app."
 )
