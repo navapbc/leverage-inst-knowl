@@ -76,7 +76,14 @@ def select_agent_specs(selection: str) -> list[Path]:
 
 
 def select_environment_specs() -> list[Path]:
-    """Every environment spec under the environments root (empty list if the dir is absent)."""
+    """Every environment spec under the environments root (empty list if the dir is absent).
+
+    Intentionally returns *all* environments, unscoped by ``--agent``. Unlike skills — which an agent
+    spec references by name, so deploy can publish exactly the ones it uses — the agent↔environment
+    pairing is not in the agent spec; it lives only in lik-ui's roster (``agents.toml``), which this
+    script deliberately does not read. Syncing all environment specs keeps this script decoupled from
+    the roster while guaranteeing any agent's environment exists. Environments are few and rarely
+    change, so the over-sync is cheap."""
     if not ENVIRONMENTS_ROOT.is_dir():
         return []
     return sorted(ENVIRONMENTS_ROOT.glob("*.yaml"))
@@ -128,21 +135,61 @@ def resolve_skills(client, skills_spec, *, deploy: bool = True) -> list[dict]:
 # --- deploy ------------------------------------------------------------------------------------
 
 
+def _as_plain_dict(resource) -> dict:
+    """Normalize a platform resource (SDK pydantic model, dict, or a test SimpleNamespace) to a plain
+    dict for comparison. Keeps null/empty values (no exclude_none) so 'field is absent' and 'field is
+    set' compare correctly."""
+    if hasattr(resource, "model_dump"):
+        return resource.model_dump(mode="json")
+    if isinstance(resource, dict):
+        return dict(resource)
+    return {k: v for k, v in vars(resource).items() if not k.startswith("_")}
+
+
+def _spec_matches_current(spec: dict, current) -> bool:
+    """True when every field the spec declares already matches the current platform resource.
+
+    A recursive *subset* match: fields the platform adds beyond what the spec declares (e.g. a
+    `packages` block the spec omits) are ignored, so platform-side defaults don't read as changes.
+    A missing field on the current side is treated as ``None`` so ``description: null`` matches an
+    absent description. Lists are compared exactly. This is what lets a no-op re-deploy report
+    "unchanged" instead of a misleading "updated"."""
+    cur = _as_plain_dict(current)
+
+    def subset(desired, actual) -> bool:
+        if isinstance(desired, dict):
+            if not isinstance(actual, dict):
+                return False
+            return all(subset(v, actual.get(k)) for k, v in desired.items())
+        if isinstance(desired, list):
+            return list(desired) == list(actual or [])
+        return desired == actual
+
+    return subset(spec, cur)
+
+
 def deploy_environment(client, spec_path: Path, *, apply: bool = True) -> DeployResult:
-    """Create the environment if absent, else update it in place. Matched by ``name``."""
+    """Create the environment if absent; if present, update it only when a field the spec declares
+    actually differs from the current platform state — otherwise report ``unchanged`` and skip the
+    call, so a no-op re-deploy doesn't claim it changed something. Matched by ``name``."""
     spec = read_spec(spec_path)
     name = spec["name"]
     existing = find_existing_environment(client, name)
+
+    if existing is None:
+        if not apply:
+            return DeployResult("environment", name, "<new>", None, "would-create")
+        env = client.beta.environments.create(**spec)
+        return DeployResult("environment", name, env.id, None, "created")
+
+    # Present already — only touch it if the spec's declared fields don't already match.
+    current = client.beta.environments.retrieve(existing.id)
+    if _spec_matches_current(spec, current):
+        return DeployResult("environment", name, existing.id, None, "unchanged")
     if not apply:
-        return DeployResult(
-            "environment", name, getattr(existing, "id", "<new>"), None,
-            "would-update" if existing else "would-create",
-        )
-    if existing:
-        client.beta.environments.update(existing.id, **spec)
-        return DeployResult("environment", name, existing.id, None, "updated")
-    env = client.beta.environments.create(**spec)
-    return DeployResult("environment", name, env.id, None, "created")
+        return DeployResult("environment", name, existing.id, None, "would-update")
+    client.beta.environments.update(existing.id, **spec)
+    return DeployResult("environment", name, existing.id, None, "updated")
 
 
 def deploy_agent(client, spec_path: Path, *, apply: bool = True) -> DeployResult:
@@ -198,7 +245,9 @@ def main(argv: list[str] | None = None) -> int:
 
     apply = not args.dry_run
     results: list[DeployResult] = []
-    # Environments first (always all) so an agent's environment exists before/when it's deployed.
+    # Environments first, and intentionally ALL of them (not scoped to --agent or agents.toml) — see
+    # select_environment_specs — so whichever environment an agent is paired with in lik-ui's roster
+    # already exists on the platform.
     for path in env_specs:
         results.append(deploy_environment(client, path, apply=apply))
     for path in agent_specs:

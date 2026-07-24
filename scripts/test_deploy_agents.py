@@ -40,13 +40,22 @@ class FakeAgents:
 
 class FakeEnvironments:
     def __init__(self, existing=None):
-        # existing: list of (env_id, name)
-        self._existing = [SimpleNamespace(id=i, name=n) for i, n in (existing or [])]
+        # existing: list of (env_id, name) or (env_id, name, current_dict). current_dict is what
+        # retrieve() returns for the unchanged/updated comparison; defaults to just the name.
+        self._existing = []
+        self._current = {}
+        for item in (existing or []):
+            eid, ename = item[0], item[1]
+            self._existing.append(SimpleNamespace(id=eid, name=ename))
+            self._current[eid] = item[2] if len(item) > 2 else {"name": ename}
         self.create_calls = []
         self.update_calls = []
 
     def list(self):
         return list(self._existing)
+
+    def retrieve(self, env_id):
+        return self._current[env_id]
 
     def create(self, **kwargs):
         self.create_calls.append(kwargs)
@@ -288,14 +297,36 @@ def test_deploy_new_environment_creates(tmp_path, monkeypatch):
     assert client.beta.environments.create_calls[0]["name"] == "lik-ui"
 
 
-def test_deploy_existing_environment_updates(tmp_path, monkeypatch):
+def test_deploy_existing_environment_updates_when_a_declared_field_differs(tmp_path, monkeypatch):
     _, envs_root = _wire(tmp_path, monkeypatch)
-    client = FakeClient(environments=[("env_1", "lik-ui")])
+    # Current networking.type differs from the spec (limited) -> a real change -> update.
+    current = {"name": "lik-ui", "description": None, "config": {"type": "cloud", "networking": {"type": "strict"}}}
+    client = FakeClient(environments=[("env_1", "lik-ui", current)])
     result = da.deploy_environment(client, envs_root / "lik-ui.yaml")
     assert result.action == "updated"
     assert result.resource_id == "env_1"
     assert client.beta.environments.create_calls == []
     assert client.beta.environments.update_calls[0]["env_id"] == "env_1"
+
+
+def test_deploy_unchanged_environment_reports_unchanged_and_skips_update(tmp_path, monkeypatch):
+    _, envs_root = _wire(tmp_path, monkeypatch)
+    # Current already matches every field the spec declares (plus platform extras that are ignored).
+    current = {
+        "name": "lik-ui",
+        "description": None,
+        "config": {
+            "type": "cloud",
+            "networking": {"type": "limited", "allow_mcp_servers": True},
+            "packages": {"type": "packages", "apt": []},  # platform extra the spec omits -> ignored
+        },
+    }
+    client = FakeClient(environments=[("env_1", "lik-ui", current)])
+    result = da.deploy_environment(client, envs_root / "lik-ui.yaml")
+    assert result.action == "unchanged"
+    assert result.resource_id == "env_1"
+    assert client.beta.environments.update_calls == []  # no-op: not touched
+    assert client.beta.environments.create_calls == []
 
 
 # --- main: env-first ordering + selection ------------------------------------------------------
