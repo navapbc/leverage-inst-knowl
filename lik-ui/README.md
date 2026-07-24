@@ -91,11 +91,11 @@ request.
 
 Expanding a skill's "Details" on the connections page shows its full `SKILL.md` alongside the
 name and description. The instructions come from **GitHub**, the single source of truth (skills
-are deployed *to* Managed Agents from `.claude/skills/<name>/` — see
+are deployed *to* Managed Agents from `claude_platform/skills/<name>/` — see
 [`scripts/README.md`](../scripts/README.md)), not from Managed Agents:
 `beta.skills.versions.download` is a dead end (it 403s with "Downloading skill content is not
 supported with this credential type"). `skill_docs.py` fetches the raw
-`.claude/skills/<name>/SKILL.md` from the **public** repo with a plain unauthenticated GET —
+`claude_platform/skills/<name>/SKILL.md` from the **public** repo with a plain unauthenticated GET —
 addressed by skill *name*, which the deploy pipeline guarantees equals the directory. The repo
 and ref are configurable via `LIK_UI_SKILLS_REPO` (default `navapbc/leverage-inst-knowl`) and
 `LIK_UI_SKILLS_REF` (default `main`).

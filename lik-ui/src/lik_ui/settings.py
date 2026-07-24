@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     # --- Skill instructions source (public GitHub repo) ----------------------------
     # A skill's full SKILL.md is fetched from this repo's raw content by skill name;
     # the repo is public, so no token is needed. Point at a fork/branch to preview
-    # without a code change. The path is always .claude/skills/<name>/SKILL.md.
+    # without a code change. The path is always claude_platform/skills/<name>/SKILL.md.
     skills_repo: str = "navapbc/leverage-inst-knowl"
     skills_ref: str = "main"
 

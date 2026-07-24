@@ -115,7 +115,7 @@ To get the skills (`lik-sync-catalog-from-project-indexes`, `lik-query-project-i
 automatically, run **Claude Code** against the `ik-arch` folder from within Claude Desktop.
 **Claude Cowork** does **not** load the skills.
 
-> **Deploying skills to Managed Agents.** The same `.claude/skills/<name>/` directories are the
+> **Deploying skills to Managed Agents.** The same `claude_platform/skills/<name>/` directories are the
 > single source of truth; GitHub is authoritative. To publish them to the hosted Managed Agents
 > platform, run the **Deploy skills to Managed Agents** GitHub Action (manual dispatch, choose which
 > skill) — see [`scripts/README.md`](../scripts/README.md). Editing skills never requires the Claude

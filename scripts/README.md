@@ -1,6 +1,6 @@
 # Skill deploy tooling
 
-Operational scripts that publish the repo's skill directories (`.claude/skills/<name>/`) to Claude
+Operational scripts that publish the repo's skill directories (`claude_platform/skills/<name>/`) to Claude
 Managed Agents. GitHub is the source of truth for skill instructions; these scripts push them to the
 platform. See `docs/plans/2026-07-23-001-feat-skill-instruction-deploy-pipeline-plan.md`.
 

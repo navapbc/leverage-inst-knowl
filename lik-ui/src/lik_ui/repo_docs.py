@@ -2,7 +2,7 @@
 
 The repo is public, so files are read with a plain unauthenticated GET of GitHub's raw
 content — no token, no OAuth. A doc is addressed by its repo-relative ``path`` (e.g.
-``faq.md`` or ``.claude/skills/<name>/SKILL.md``).
+``faq.md`` or ``claude_platform/skills/<name>/SKILL.md``).
 
 The fetch degrades gracefully: any failure (404, non-200, timeout, network error) returns
 ``None`` rather than raising, so callers can fall back to a "view on GitHub" link without the

@@ -177,7 +177,7 @@ def test_skill_details_endpoint_returns_name_description_and_instructions(db, mo
     assert body["instructions"] == "# full instructions"
     assert body["source_url"] == (
         "https://github.com/navapbc/leverage-inst-knowl/blob/main"
-        "/.claude/skills/Skill lik-query-project-index/SKILL.md"
+        "/claude_platform/skills/Skill lik-query-project-index/SKILL.md"
     )
 
 
