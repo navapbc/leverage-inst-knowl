@@ -12,11 +12,15 @@ class FakeVaultClient:
         self.deleted = []
         self.deleted_credentials: list[tuple[str, str]] = []
         self.credentials: list[dict] = []
+        self.missing: set[str] = set()  # vault ids to report as gone (simulate workspace switch)
 
     def create_vault(self, display_name: str, metadata: dict) -> str:
         self.calls += 1
         self.last_metadata = metadata
         return f"vlt_{self.calls}"
+
+    def vault_exists(self, vault_id: str) -> bool:
+        return vault_id not in self.missing
 
     def list_credentials(self, vault_id: str) -> list[dict]:
         return self.credentials
@@ -68,6 +72,43 @@ def test_delete_user_vault_noop_when_absent(store):
     user = store.upsert_user("n@navapbc.com")
     assert delete_user_vault(store, vc, user) is False
     assert vc.deleted == []
+
+
+def test_ensure_user_vault_reprovisions_when_stored_vault_missing(store):
+    """After the app's key is repointed at another Claude Workspace, the stored vault id no
+    longer exists there; ensure_user_vault drops the stale mapping and provisions a fresh vault
+    instead of returning the dead id (which would later 404 with 'Vault not found')."""
+    vc = FakeVaultClient()
+    user = store.upsert_user("switch@navapbc.com")
+    first = ensure_user_vault(store, vc, user)  # vlt_1, mapping stored
+    vc.missing.add(first)  # simulate: gone in the current workspace
+
+    fresh = ensure_user_vault(store, vc, user)
+    assert fresh != first
+    assert vc.calls == 2  # a new vault was created
+    assert store.get_user_vault(user["id"]) == fresh
+
+
+def test_anthropic_vault_exists_true_and_false():
+    """vault_exists is True when retrieve succeeds and False on a 404 NotFoundError."""
+    import anthropic
+    import httpx
+
+    client = AnthropicVaultClient(api_key="test-key")
+    client._client = SimpleNamespace(
+        beta=SimpleNamespace(vaults=SimpleNamespace(retrieve=lambda vid: SimpleNamespace(id=vid)))
+    )
+    assert client.vault_exists("vlt_1") is True
+
+    def _raise(vid):
+        raise anthropic.NotFoundError(
+            "Vault not found.",
+            response=httpx.Response(404, request=httpx.Request("GET", "https://api.anthropic.com/v1/vaults/x")),
+            body=None,
+        )
+
+    client._client.beta.vaults.retrieve = _raise
+    assert client.vault_exists("vlt_missing") is False
 
 
 class _FakeCredentialsAPI:

@@ -20,6 +20,12 @@ from .settings import Settings
 from .vault import ensure_user_vault
 
 
+class SessionNotFound(Exception):
+    """The platform session no longer exists in the current workspace — e.g. the app's API
+    key was repointed at a different Claude Workspace (sessions are workspace-scoped), or the
+    session was deleted out-of-band. Lets callers drop the stale local row instead of erroring."""
+
+
 def _blocks_to_text(blocks) -> str:
     """Flatten a tool-result content block list to display text. Text blocks contribute
     their text; non-text blocks (image/document/search_result) are noted by kind so the
@@ -255,14 +261,25 @@ class AnthropicSessionsClient:
         yield from self._stream(session_id, [event])
 
     def list_events(self, session_id: str) -> Iterator[dict]:
-        for event in self._client.beta.sessions.events.list(session_id, order="asc"):
-            if normalized := self._normalize(event, include_user=True):
-                if normalized["type"] == "status":
-                    continue  # live-only; a past turn's "running" means nothing on replay
-                yield normalized
+        import anthropic
+
+        try:
+            events = self._client.beta.sessions.events.list(session_id, order="asc")
+            for event in events:
+                if normalized := self._normalize(event, include_user=True):
+                    if normalized["type"] == "status":
+                        continue  # live-only; a past turn's "running" means nothing on replay
+                    yield normalized
+        except anthropic.NotFoundError as exc:
+            raise SessionNotFound(session_id) from exc
 
     def status(self, session_id: str) -> str:
-        session = self._client.beta.sessions.retrieve(session_id)
+        import anthropic
+
+        try:
+            session = self._client.beta.sessions.retrieve(session_id)
+        except anthropic.NotFoundError as exc:
+            raise SessionNotFound(session_id) from exc
         status = (getattr(session, "status", "") or "").lower()
         # A turn submitted but not yet started sits with the session status still "idle"
         # while the user message waits unprocessed (``processed_at`` null) — the platform
@@ -420,6 +437,15 @@ def register_chat_routes(app) -> None:
         try:
             events = list(sessions_client.list_events(session["session_id"]))
             status = sessions_client.status(session["session_id"])
+        except SessionNotFound:
+            # Platform session is gone (workspace switch or out-of-band delete). Drop the
+            # stale local row (owner-scoped) so it stops listing and erroring, and tell the
+            # client it's gone so it can send the user back to the sessions list.
+            request.app.state.store.delete_session(session["session_id"], user["id"])
+            return JSONResponse(
+                {"detail": "This session no longer exists and has been removed.", "gone": True},
+                status_code=410,
+            )
         except Exception as exc:  # noqa: BLE001 - a history-fetch failure shouldn't block chatting
             return JSONResponse(
                 {"detail": f"Could not load history: {exc}"}, status_code=502

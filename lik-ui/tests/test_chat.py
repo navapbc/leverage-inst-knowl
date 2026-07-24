@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from lik_ui.app import build_app
-from lik_ui.chat import AnthropicSessionsClient
+from lik_ui.chat import AnthropicSessionsClient, SessionNotFound
 from lik_ui.db import Store
 from lik_ui.settings import Settings
 from tests.test_app_auth import FakeOidc, _start_login_and_get_state
@@ -14,15 +14,19 @@ from tests.test_oauth_connector import RecordingVaultClient
 
 
 class FakeSessionsClient:
-    def __init__(self, events=None, raises=False, history=None, session_status="idle", resume=None):
+    def __init__(self, events=None, raises=False, history=None, session_status="idle", resume=None,
+                 not_found=False):
         self.created = []
         self.events = events if events is not None else [{"type": "text", "text": "Hello"}, {"type": "done"}]
         self.raises = raises
         self.history = history or []
         self.session_status = session_status
         self.resume = resume if resume is not None else [{"type": "text", "text": "resumed"}, {"type": "done"}]
+        self.not_found = not_found  # simulate a platform session gone from the current workspace
 
     def status(self, session_id):
+        if self.not_found:
+            raise SessionNotFound(session_id)
         return self.session_status
 
     def resume_stream(self, session_id):
@@ -49,6 +53,8 @@ class FakeSessionsClient:
         yield from self.events
 
     def list_events(self, session_id):
+        if self.not_found:
+            raise SessionNotFound(session_id)
         yield from self.history
 
 
@@ -672,3 +678,20 @@ def test_share_checkbox_shows_only_for_owner(db):
     assert 'action="/chat/' in owner.get(f"/chat/{session_id}").text  # owner sees the share form
     assert "/share" in owner.get(f"/chat/{session_id}").text
     assert "/share" not in viewer.get(f"/chat/{session_id}").text     # viewer does not
+
+
+def test_chat_history_deletes_stale_session_when_platform_gone(db):
+    """After the workspace switch, an old session's platform record is gone. Loading its
+    history self-heals: the stale local row is deleted and the client is told it's gone."""
+    sc = FakeSessionsClient(not_found=True)
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    r = client.get(f"/chat/{session_id}/history")
+    assert r.status_code == 410
+    assert r.json()["gone"] is True
+
+    # Row removed: a second history load can't find the session at all.
+    assert client.get(f"/chat/{session_id}/history").status_code == 404
+    assert Store(db).get_session(session_id, _owner_id(db)) is None

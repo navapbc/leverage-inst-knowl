@@ -348,6 +348,9 @@ class RecordingVaultClient:
         self.vault_calls += 1
         return "vlt_1"
 
+    def vault_exists(self, vault_id) -> bool:
+        return True
+
     def delete_vault(self, vault_id) -> None:
         self.deleted.append(vault_id)
         self.credentials = [c for c in self.credentials if c["vault_id"] != vault_id]
