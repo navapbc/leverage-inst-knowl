@@ -11,6 +11,8 @@ page erroring. ``repo_doc_source_url`` builds that human-facing blob link with n
 This is the single fetch contract for the app; ``skill_docs`` is a thin wrapper over it.
 """
 
+from collections.abc import Callable
+
 import httpx
 
 from .settings import Settings
@@ -31,7 +33,11 @@ def repo_doc_source_url(path: str, settings: Settings) -> str:
 
 
 async def fetch_repo_doc(
-    path: str, settings: Settings, client_factory=None, *, timeout: float = _DEFAULT_TIMEOUT
+    path: str,
+    settings: Settings,
+    client_factory: Callable[[], httpx.AsyncClient] | None = None,
+    *,
+    timeout: float = _DEFAULT_TIMEOUT,
 ) -> str | None:
     """Return a repo doc's text from the public repo, or ``None`` on any failure.
 

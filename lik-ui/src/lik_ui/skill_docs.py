@@ -7,6 +7,10 @@ path (skill fetches are just a repo doc at the skill's path). See ``repo_docs`` 
 public-repo, graceful-``None`` behavior.
 """
 
+from collections.abc import Callable
+
+import httpx
+
 from .repo_docs import fetch_repo_doc, raw_doc_url, repo_doc_source_url
 from .settings import Settings
 
@@ -24,6 +28,8 @@ def skill_source_url(name: str, settings: Settings) -> str:
     return repo_doc_source_url(_skill_path(name), settings)
 
 
-async def fetch_skill_instructions(name: str, settings: Settings, client_factory=None) -> str | None:
+async def fetch_skill_instructions(
+    name: str, settings: Settings, client_factory: Callable[[], httpx.AsyncClient] | None = None
+) -> str | None:
     """Return a skill's ``SKILL.md`` text from the public repo, or ``None`` on any failure."""
     return await fetch_repo_doc(_skill_path(name), settings, client_factory)
