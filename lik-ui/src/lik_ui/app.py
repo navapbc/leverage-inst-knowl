@@ -95,6 +95,7 @@ def build_app(
     from .agents import register_agent_routes
     from .app_auth import register_auth_routes
     from .chat import register_chat_routes
+    from .faq import register_faq_routes
     from .oauth_connector import register_connection_routes
 
     register_auth_routes(app)
@@ -102,5 +103,6 @@ def build_app(
     register_agent_routes(app)
     register_chat_routes(app)
     register_account_routes(app)
+    register_faq_routes(app)
 
     return app
