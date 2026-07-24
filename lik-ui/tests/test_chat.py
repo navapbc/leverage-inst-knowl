@@ -616,6 +616,15 @@ def test_shared_session_opens_read_only_for_non_owner(db):
     assert 'data-can-write="true"' in owner.get(f"/chat/{session_id}").text
 
 
+def test_chat_page_shows_delete_button_only_to_the_owner(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert "Delete session" in owner.get(f"/chat/{session_id}").text
+    # A shared-session viewer gets the read-only view without a delete control.
+    assert "Delete session" not in viewer.get(f"/chat/{session_id}").text
+
+
 def test_non_owner_can_read_but_not_write_shared_session(db):
     sc = FakeSessionsClient()
     owner, viewer, session_id = _owner_and_viewer(db, sc)

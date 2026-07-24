@@ -35,6 +35,10 @@ a { color: var(--accent); }
 .card.notice > :first-child { margin-top: 0; }
 .card.notice > :last-child { margin-bottom: 0; }
 .card.notice p { margin: .5rem 0; }
+/* Chat page header: title on the left, Delete session button pinned right. */
+.chat-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.chat-header h1 { margin: 0; }
+.chat-header form { margin: 0; flex: none; }
 /* Quiet secondary hint line (e.g. the "delete all in Settings" pointer). */
 .muted-note { color: var(--muted); font-size: .9rem; }
 /* Sessions list row: title on the left, Delete button pinned right. */
