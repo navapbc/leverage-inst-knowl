@@ -1,6 +1,6 @@
 <svg width="900" height="620" viewBox="0 0 900 620" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title>The idea</title>
-  <desc>The idea: leave knowledge in the Data Sources, which each stay authoritative for what they hold and control who may see what. On top, add a Discovery Layer — derived material whose only job is to make knowledge fast to find and reuse, without copying everything into one place and without becoming a competing authority. Its outputs come in three kinds, sorted by where each lives and who keeps it safe. The Data Sources hold two kinds of DS record: primary DS records (primary knowledge — the authoritative originals) and DL records (discovery-layer records — summaries, indexes, and pointers, derived and not authoritative). Most of the Discovery Layer lives inside the Data Sources as these DL records, which the source stores and backs up and which are rebuilt on demand. Two parts live in the Layer's own store: the Catalog — an index from topic to where its material lives, built only from the DL records, recomputable and needing no backup; and confirmation signals — people vouching the cited source was right or flagging it wrong, which can't be re-derived and are the one part the Discovery Layer must back up itself.</desc>
+  <desc>The idea: leave knowledge in the Data Sources, which each stay authoritative for what they hold and control who may see what. On top, add a Discovery Layer — derived material whose only job is to make knowledge fast to find and reuse, without copying everything into one place and without becoming a competing authority. Its outputs come in three kinds, sorted by where each lives and who keeps it safe. The Data Sources hold two kinds of DS record: primary DS records (primary knowledge — the authoritative originals) and DL records (discovery-layer records — summaries, indexes, and pointers marked as an AI's first entry point; mostly derived and not the authoritative original, though a person may edit one). Most of the Discovery Layer lives inside the Data Sources as these DL records, which the source stores and backs up and which are mostly rebuilt on demand, though a copy a person edited or verified is kept. Two parts live in the Layer's own store: the Catalog — an index from topic to where its material lives, built only from the DL records, recomputable and needing no backup; and confirmation signals — people vouching the cited source was right or flagging it wrong, which can't be re-derived and are the one part the Discovery Layer must back up itself.</desc>
 
   <defs>
     <marker id="aDark" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#1B4A6B"/></marker>
@@ -16,7 +16,7 @@
   <!-- ===== DISCOVERY LAYER'S OWN STORE (top) ===== -->
   <rect x="40" y="86" width="620" height="252" rx="8" fill="#E8F3FA" stroke="#B0D0E8" stroke-width="1.5"/>
   <text x="350" y="110" text-anchor="middle" font-size="14" font-weight="700" fill="#1B4A6B">Discovery Layer</text>
-  <text x="350" y="127" text-anchor="middle" font-size="9.5" font-style="italic" fill="#5A8BA8">derived material · only job: make knowledge fast to find &amp; reuse · never a competing authority</text>
+  <text x="350" y="127" text-anchor="middle" font-size="9.5" font-style="italic" fill="#5A8BA8">mostly derived material · only job: make knowledge fast to find &amp; reuse · never a competing authority</text>
   <text x="350" y="144" text-anchor="middle" font-size="9" font-weight="700" fill="#5A8BA8">Two parts live in the Layer's own store (most of it lives below, in the Data Sources):</text>
 
   <!-- Catalog -->
@@ -63,8 +63,8 @@
   <rect x="58" y="472" width="392" height="112" rx="6" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
   <text x="254" y="494" text-anchor="middle" font-size="12" font-weight="700" fill="#1E6B32">DL records  —  most of the Discovery Layer</text>
   <text x="254" y="512" text-anchor="middle" font-size="9" fill="#4A8A5A">summaries · indexes · pointers · marked discovery-layer</text>
-  <text x="254" y="530" text-anchor="middle" font-size="9" font-weight="700" fill="#C0660E">derived — NOT authoritative</text>
-  <text x="254" y="547" text-anchor="middle" font-size="9" fill="#4A8A5A">the Data Source stores &amp; backs them up · rebuilt on demand</text>
+  <text x="254" y="530" text-anchor="middle" font-size="9" font-weight="700" fill="#C0660E">an AI's first entry point — not the authoritative original</text>
+  <text x="254" y="547" text-anchor="middle" font-size="9" fill="#4A8A5A">the Data Source stores &amp; backs them up · mostly rebuilt on demand</text>
   <text x="254" y="568" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78AA82">without them, every tool re-searches the full sources from scratch</text>
 
   <!-- Primary DS records: primary knowledge, authoritative -->

@@ -1,6 +1,6 @@
-<svg width="900" height="730" viewBox="0 0 900 730" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+<svg width="900" height="756" viewBox="0 0 900 756" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title>Data flows</title>
-  <desc>Diagram of the five data flows in the architecture. The Data Sources (authoritative) hold both the primary DS records and most of the Discovery Layer as DL records; the Discovery Layer's own store holds the Catalog and the Confirmation store. (1) Populate and refresh — a DL-creation skill reads Data Sources and writes DL records into them plus Catalog rows, all via MCP; (2) Query and retrieval — a Query skill finds a known DL record directly or reads the Catalog and follows pointers to the DL record in the Data Sources; (3) Confirmations — users mark a cited source right or wrong, kept and backed up by the Layer's own confirmation store; (4) Durable updates — all permanent new knowledge and corrections go to Data Sources; (5) Saved synthesis — a user writes a cross-source artifact (a DL record) under their own SSO, then a service account registers its Catalog pointer as a human-owned row. Everything reads and writes through MCP under a verified identity.</desc>
+  <desc>Diagram of the six data flows in the architecture. The Data Sources (authoritative) hold both the primary DS records and most of the Discovery Layer as DL records; the Discovery Layer's own store holds the Catalog and the Confirmation store. (1) DL population — a DL-creation skill reads Data Sources and writes DL records into them, tagged discovery-layer, all via MCP; (2) Query and retrieval — a Query skill finds a known DL record directly or reads the Catalog and follows pointers to the DL record in the Data Sources; (3) Confirmations — users mark a cited source right or wrong, kept and backed up by the Layer's own confirmation store; (4) Durable updates — all permanent new knowledge and corrections go to Data Sources; (5) Saved synthesis — a user writes a cross-source artifact under their own SSO, acting as a DL record when marked an entry point at save or a plain DS record otherwise; if it's an entry point, a service account may register its Catalog pointer as a human-owned row. (6) Cataloging — a separate Catalog-registration skill (the registrar) discovers those discovery-layer-tagged records and registers each in the Catalog, validating that pointers resolve and stamping freshness. Everything reads and writes through MCP under a verified identity.</desc>
 
   <defs>
     <marker id="aGreen" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#2D8B57"/></marker>
@@ -12,14 +12,15 @@
     <marker id="aBlue" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#2A7EAA"/></marker>
     <marker id="aBlueRev" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto-start-reverse"><path d="M7,0 L0,3.5 L7,7 Z" fill="#2A7EAA"/></marker>
     <marker id="aOrange" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#C0660E"/></marker>
+    <marker id="aTeal" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#0E7C86"/></marker>
   </defs>
 
   <!-- Background -->
-  <rect width="900" height="730" fill="#F5F7FA"/>
+  <rect width="900" height="756" fill="#F5F7FA"/>
 
   <!-- Title -->
   <text x="450" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#1B4A6B">Data flows</text>
-  <text x="450" y="50" text-anchor="middle" font-size="11" font-style="italic" fill="#5A8BA8">Five flows move knowledge between Data Sources, the Discovery Layer, and the people and tools that use it.</text>
+  <text x="450" y="50" text-anchor="middle" font-size="11" font-style="italic" fill="#5A8BA8">Six flows move knowledge between Data Sources, the Discovery Layer, and the people and tools that use it.</text>
 
   <!-- ===== USERS ===== -->
   <rect x="70" y="66" width="430" height="56" rx="8" fill="#EAECEE" stroke="#A0A8B0" stroke-width="1.5"/>
@@ -46,12 +47,19 @@
   <rect x="88" y="238" width="394" height="28" rx="6" fill="#FFFFFF" stroke="#9B59B6" stroke-width="1.5"/>
   <text x="285" y="256" text-anchor="middle" font-size="10" font-weight="700" fill="#6C2A6A">Confirmation store  <tspan font-size="8.5" font-weight="400" font-style="italic" fill="#8E44AD">— kept &amp; backed up by the Layer</tspan></text>
 
-  <!-- ===== DL-CREATION SKILL ===== -->
-  <rect x="540" y="150" width="320" height="92" rx="8" fill="#E9F7EF" stroke="#2D8B57" stroke-width="2"/>
-  <text x="700" y="173" text-anchor="middle" font-size="12" font-weight="700" fill="#1A5E34">DL-creation skill  <tspan font-size="9" font-weight="400" fill="#2D8B57">(one per source/team)</tspan></text>
-  <text x="700" y="190" text-anchor="middle" font-size="9" fill="#2D8B57">reads sources · computes outputs</text>
-  <text x="700" y="205" text-anchor="middle" font-size="9" fill="#2D8B57">writes DL records + Catalog rows</text>
-  <text x="700" y="222" text-anchor="middle" font-size="8.5" fill="#52BE80" font-style="italic">runs staleness checks · service identity</text>
+  <!-- ===== DL-CREATION SKILL (producer) ===== -->
+  <rect x="540" y="150" width="282" height="72" rx="8" fill="#E9F7EF" stroke="#2D8B57" stroke-width="2"/>
+  <text x="681" y="171" text-anchor="middle" font-size="12" font-weight="700" fill="#1A5E34">DL-creation skill  <tspan font-size="9" font-weight="400" fill="#2D8B57">(one per source/team)</tspan></text>
+  <text x="681" y="187" text-anchor="middle" font-size="9" fill="#2D8B57">reads sources · computes outputs</text>
+  <text x="681" y="201" text-anchor="middle" font-size="9" fill="#2D8B57">writes &amp; tags DL records</text>
+  <text x="681" y="214" text-anchor="middle" font-size="8.5" fill="#52BE80" font-style="italic">re-derives its own content · service identity</text>
+
+  <!-- ===== CATALOG-REGISTRATION SKILL (registrar) ===== -->
+  <rect x="540" y="234" width="282" height="72" rx="8" fill="#EAF3FA" stroke="#2A7EAA" stroke-width="2"/>
+  <text x="681" y="255" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Catalog-registration skill  <tspan font-size="8.5" font-weight="400" fill="#2A7EAA">(registrar)</tspan></text>
+  <text x="681" y="271" text-anchor="middle" font-size="9" fill="#2A7EAA">discovers discovery-layer records</text>
+  <text x="681" y="285" text-anchor="middle" font-size="9" fill="#2A7EAA">registers them · writes Catalog rows</text>
+  <text x="681" y="298" text-anchor="middle" font-size="8.5" fill="#5A8BA8" font-style="italic">validates pointers · stamps freshness</text>
 
   <!-- ===== MCP ===== -->
   <rect x="14" y="352" width="846" height="46" rx="6" fill="#2A7EAA"/>
@@ -72,9 +80,9 @@
   <text x="95" y="583" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">the Data Source</text>
   <text x="355" y="524" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">DL records — most of the Discovery Layer</text>
   <text x="355" y="542" text-anchor="middle" font-size="9" fill="#4A8A5A">indexes · summaries · retrieval hints · freshness signals</text>
-  <text x="355" y="558" text-anchor="middle" font-size="9" fill="#4A8A5A">marked discovery-layer · derived, not authoritative</text>
-  <text x="355" y="574" text-anchor="middle" font-size="9" fill="#4A8A5A">the Data Source stores &amp; backs them up · rebuilt on demand</text>
-  <text x="355" y="594" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78AA82">recovered by re-derivation, not backup</text>
+  <text x="355" y="558" text-anchor="middle" font-size="9" fill="#4A8A5A">marked discovery-layer · an AI's first entry point · not authoritative</text>
+  <text x="355" y="574" text-anchor="middle" font-size="9" fill="#4A8A5A">the Data Source stores &amp; backs them up · mostly rebuilt on demand</text>
+  <text x="355" y="594" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78AA82">version-history revert is recovery · hand-edited copies kept</text>
 
   <!-- Primary DS records sub-box -->
   <rect x="572" y="500" width="272" height="128" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
@@ -90,18 +98,22 @@
   <!-- MCP <-> Data Sources -->
   <line x1="437" y1="398" x2="437" y2="430" stroke="#1B4A6B" stroke-width="2" marker-end="url(#aNavy)" marker-start="url(#aNavyRev)"/>
 
-  <!-- ===== FLOW 1: POPULATE & REFRESH (green) ===== -->
-  <!-- DL-creation writes Catalog rows -->
-  <line x1="540" y1="200" x2="484" y2="210" stroke="#2D8B57" stroke-width="2" marker-end="url(#aGreen)"/>
-  <text x="512" y="196" text-anchor="middle" font-size="8" fill="#2D8B57">writes Catalog</text>
-  <!-- DL-creation reads sources & writes DL records via MCP (dashed) -->
-  <line x1="730" y1="242" x2="730" y2="352" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#aGreen)"/>
-  <text x="737" y="294" font-size="8.5" fill="#2D8B57">reads sources &amp;</text>
-  <text x="737" y="305" font-size="8.5" fill="#2D8B57">writes DL records</text>
-  <text x="737" y="316" font-size="8.5" fill="#2D8B57">· via MCP</text>
+  <!-- ===== FLOW 1: DL POPULATION (green) — creation writes & tags DL records into the DSs ===== -->
+  <path d="M786,222 L848,232 L848,352" fill="none" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#aGreen)"/>
+  <text x="854" y="298" text-anchor="middle" font-size="8.5" fill="#2D8B57" transform="rotate(-90,854,298)">writes &amp; tags DL records</text>
   <!-- badge 1 -->
-  <circle cx="524" cy="214" r="11" fill="#2D8B57"/>
-  <text x="524" y="218" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>
+  <circle cx="848" cy="232" r="11" fill="#2D8B57"/>
+  <text x="848" y="236" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>
+
+  <!-- ===== FLOW 6: CATALOGING (teal) — registrar writes Catalog rows & discovers tagged records ===== -->
+  <line x1="540" y1="262" x2="486" y2="226" stroke="#0E7C86" stroke-width="2" marker-end="url(#aTeal)"/>
+  <text x="514" y="238" text-anchor="middle" font-size="8" fill="#0E7C86">writes rows</text>
+  <line x1="660" y1="306" x2="660" y2="352" stroke="#0E7C86" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#aTeal)"/>
+  <text x="667" y="326" font-size="8.5" fill="#0E7C86">discovers DL</text>
+  <text x="667" y="337" font-size="8.5" fill="#0E7C86">records · via MCP</text>
+  <!-- badge 6 -->
+  <circle cx="520" cy="248" r="11" fill="#0E7C86"/>
+  <text x="520" y="252" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">6</text>
 
   <!-- ===== FLOW 2: QUERY & RETRIEVAL (purple) ===== -->
   <!-- user asks / answers -->
@@ -136,7 +148,7 @@
   <!-- ===== FLOW 5: SAVED SYNTHESIS (orange) ===== -->
   <!-- user writes cross-source artifact (a DL record) under own SSO, into the Data Sources via MCP -->
   <path d="M120,122 L120,136 L66,136 L66,500" fill="none" stroke="#C0660E" stroke-width="2" marker-end="url(#aOrange)"/>
-  <text x="60" y="300" text-anchor="middle" font-size="7.5" fill="#C0660E" transform="rotate(-90,60,300)">writes artifact (a DL record) · own SSO</text>
+  <text x="60" y="300" text-anchor="middle" font-size="7.5" fill="#C0660E" transform="rotate(-90,60,300)">writes artifact · own SSO · DL or plain DS record</text>
   <!-- (service account registers the Catalog pointer — see legend item 5) -->
   <!-- badge 5 -->
   <circle cx="66" cy="170" r="11" fill="#C0660E"/>
@@ -146,8 +158,8 @@
   <line x1="40" y1="658" x2="860" y2="658" stroke="#D6E0E8" stroke-width="1"/>
   <!-- 1 -->
   <circle cx="48" cy="675" r="9" fill="#2D8B57"/><text x="48" y="679" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">1</text>
-  <text x="64" y="672" font-size="9.5" font-weight="700" fill="#1A5E34">Populate &amp; refresh</text>
-  <text x="64" y="685" font-size="9" fill="#5A8BA8">skill reads sources → computes → writes DL records + Catalog (via MCP)</text>
+  <text x="64" y="672" font-size="9.5" font-weight="700" fill="#1A5E34">DL population</text>
+  <text x="64" y="685" font-size="9" fill="#5A8BA8">DL-creation skill reads sources → computes → writes &amp; tags DL records (via MCP)</text>
   <!-- 2 -->
   <circle cx="468" cy="675" r="9" fill="#7D3C98"/><text x="468" y="679" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">2</text>
   <text x="484" y="672" font-size="9.5" font-weight="700" fill="#5B2282">Query &amp; retrieval</text>
@@ -160,5 +172,8 @@
   <text x="484" y="705" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#1B4A6B">Durable updates</tspan>  all new knowledge &amp; corrections go to Data Sources</text>
   <!-- 5 -->
   <circle cx="48" cy="722" r="9" fill="#C0660E"/><text x="48" y="726" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">5</text>
-  <text x="64" y="726" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#9B5410">Saved synthesis</tspan>  user writes a cross-source artifact (own SSO); service account registers its Catalog pointer as a human-owned row</text>
+  <text x="64" y="726" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#9B5410">Saved synthesis</tspan>  user writes a cross-source artifact (own SSO) — a DL record or plain DS record by purpose; if registered, a service account writes a human-owned Catalog pointer</text>
+  <!-- 6 -->
+  <circle cx="48" cy="742" r="9" fill="#0E7C86"/><text x="48" y="746" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">6</text>
+  <text x="64" y="746" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#0E7C86">Cataloging</tspan>  a separate registrar discovers discovery-layer-tagged DL records → registers each in the Catalog; validates pointers &amp; stamps freshness</text>
 </svg>

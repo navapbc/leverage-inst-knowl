@@ -1,6 +1,6 @@
-<svg width="860" height="730" viewBox="0 0 860 730" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+<svg width="860" height="792" viewBox="0 0 860 792" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title>LIK Key Concepts Diagram</title>
-  <desc>Key concepts: Data Sources (each authoritative for what it holds) hold both the primary DS records and most of the Discovery Layer as DL records — summaries, indexes, and pointers marked discovery-layer, which the source stores and backs up and which are rebuilt on demand. The Discovery Layer's own store holds the other two kinds of DL output: the Catalog (a directory from topic to where material lives, built only from the DL records, recomputed and not backed up) and Confirmation signals (people vouching a cited source was right or flagging it wrong, recorded by a Query skill from a user's positive or negative feedback, the one part the Layer backs up itself). DL-creation skills read the sources and produce the DL outputs through MCP; Query skills steer an agent to the right material under the asking person's permissions; Users/Agents/Apps ask, get answers, confirm sources, and write new knowledge. Everything reads and writes through MCP under a verified identity.</desc>
+  <desc>Key concepts: Data Sources (each authoritative for what it holds) hold both the primary DS records and most of the Discovery Layer as DL records — summaries, indexes, and pointers marked discovery-layer to flag their role as an AI's first entry point, which the source stores and backs up and which are mostly rebuilt on demand (a copy a person edits or verifies is kept). The Discovery Layer's own store holds the other two kinds of DL output: the Catalog (a directory from topic to where material lives, built only from the DL records, recomputed and not backed up) and Confirmation signals (people vouching a cited source was right or flagging it wrong, recorded by a Query skill from a user's positive or negative feedback, the one part the Layer backs up itself). DL-creation skills read the sources and produce and tag DL records through MCP, but do not catalog them; a separate Catalog-registration skill (the registrar) discovers those discovery-layer-tagged records and registers each in the Catalog, keeping the directory current. Query skills steer an agent to the right material under the asking person's permissions; Users/Agents/Apps ask, get answers, confirm sources, and write new knowledge. Everything reads and writes through MCP under a verified identity.</desc>
 
   <defs>
     <marker id="arrDark" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
@@ -15,10 +15,13 @@
     <marker id="arrPurple" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
       <path d="M0,0 L7,3.5 L0,7 Z" fill="#7D3C98"/>
     </marker>
+    <marker id="arrBlue" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2A7EAA"/>
+    </marker>
   </defs>
 
   <!-- Background -->
-  <rect width="860" height="730" fill="#F5F7FA"/>
+  <rect width="860" height="792" fill="#F5F7FA"/>
 
   <!-- ===== USERS ===== -->
   <rect x="40" y="28" width="500" height="72" rx="8" fill="#EAECEE" stroke="#A0A8B0" stroke-width="1.5"/>
@@ -48,39 +51,50 @@
   <text x="290" y="327" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">can't be re-derived → the one part the Layer backs up itself</text>
 
   <!-- ===== QUERY SKILLS ===== -->
-  <rect x="565" y="128" width="255" height="104" rx="8" fill="#F4ECF7" stroke="#7D3C98" stroke-width="2"/>
-  <text x="692" y="152" text-anchor="middle" font-size="12" font-weight="700" fill="#5B2282">Query skills</text>
-  <text x="692" y="168" text-anchor="middle" font-size="9.5" fill="#7D3C98">the guides — steer an agent to the</text>
-  <text x="692" y="180" text-anchor="middle" font-size="9.5" fill="#7D3C98">right material or the right source</text>
-  <text x="692" y="196" text-anchor="middle" font-size="9" fill="#A569BD">run under the asking person's own permissions</text>
-  <text x="692" y="212" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">many, not one — each covers a topic;</text>
-  <text x="692" y="224" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">can skip the Catalog when it knows the topic</text>
+  <rect x="565" y="128" width="255" height="100" rx="8" fill="#F4ECF7" stroke="#7D3C98" stroke-width="2"/>
+  <text x="692" y="150" text-anchor="middle" font-size="12" font-weight="700" fill="#5B2282">Query skills</text>
+  <text x="692" y="166" text-anchor="middle" font-size="9.5" fill="#7D3C98">the guides — steer an agent to the</text>
+  <text x="692" y="178" text-anchor="middle" font-size="9.5" fill="#7D3C98">right material or the right source</text>
+  <text x="692" y="194" text-anchor="middle" font-size="9" fill="#A569BD">run under the asking person's own permissions</text>
+  <text x="692" y="210" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">many, not one — each covers a topic;</text>
+  <text x="692" y="222" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">can skip the Catalog when it knows the topic</text>
 
   <!-- Query skills to Catalog -->
-  <line x1="565" y1="196" x2="522" y2="218" stroke="#7D3C98" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-  <text x="543" y="202" text-anchor="middle" font-size="8.5" fill="#7D3C98">queries</text>
+  <line x1="565" y1="194" x2="522" y2="216" stroke="#7D3C98" stroke-width="1.5" marker-end="url(#arrPurple)"/>
+  <text x="543" y="200" text-anchor="middle" font-size="8.5" fill="#7D3C98">queries</text>
 
   <!-- Query skills record Confirmation signals from user feedback -->
-  <path d="M575,232 C550,252 545,272 523,286" fill="none" stroke="#7D3C98" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrPurple)"/>
+  <path d="M575,228 C550,250 545,272 523,288" fill="none" stroke="#7D3C98" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrPurple)"/>
   <text x="547" y="300" text-anchor="middle" font-size="8.5" fill="#7D3C98">records</text>
 
-  <!-- ===== DL-CREATION SKILLS ===== -->
-  <rect x="565" y="250" width="255" height="110" rx="8" fill="#E9F7EF" stroke="#2D8B57" stroke-width="2"/>
-  <text x="692" y="273" text-anchor="middle" font-size="12" font-weight="700" fill="#1A5E34">DL-creation skills</text>
-  <text x="692" y="289" text-anchor="middle" font-size="9.5" fill="#2D8B57">the automated producers</text>
-  <text x="692" y="304" text-anchor="middle" font-size="9" fill="#52BE80">reads DSs · writes DL records + Catalog rows</text>
-  <text x="692" y="319" text-anchor="middle" font-size="9" fill="#52BE80">own service identity · scheduled or on demand</text>
-  <text x="692" y="336" text-anchor="middle" font-size="8.5" font-style="italic" fill="#52BE80">many, not one — each specialized</text>
-  <text x="692" y="348" text-anchor="middle" font-size="8.5" font-style="italic" fill="#52BE80">to the source data it handles</text>
+  <!-- ===== DL-CREATION SKILLS (producers) ===== -->
+  <rect x="565" y="240" width="255" height="96" rx="8" fill="#E9F7EF" stroke="#2D8B57" stroke-width="2"/>
+  <text x="692" y="261" text-anchor="middle" font-size="12" font-weight="700" fill="#1A5E34">DL-creation skills</text>
+  <text x="692" y="277" text-anchor="middle" font-size="9.5" fill="#2D8B57">the producers — write &amp; tag records</text>
+  <text x="692" y="291" text-anchor="middle" font-size="9" fill="#52BE80">reads DSs · writes &amp; tags DL records</text>
+  <text x="692" y="305" text-anchor="middle" font-size="9" fill="#52BE80">own service identity · scheduled or on demand</text>
+  <text x="692" y="321" text-anchor="middle" font-size="8.5" font-style="italic" fill="#52BE80">many, not one — each specialized to its source</text>
 
-  <!-- DL-creation produces the Catalog -->
-  <path d="M565,262 C540,262 540,225 523,225" fill="none" stroke="#2D8B57" stroke-width="2" marker-end="url(#arrGreen)"/>
-  <text x="556" y="252" text-anchor="middle" font-size="8.5" fill="#2D8B57">produces</text>
+  <!-- DL-creation reads & writes DSs via MCP (dashed, far-right channel) -->
+  <path d="M810,336 L838,344 L838,464" fill="none" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrGreen)"/>
+  <text x="846" y="400" text-anchor="middle" font-size="8.5" fill="#2D8B57" transform="rotate(-90,846,400)">writes &amp; tags DL records · via MCP</text>
 
-  <!-- DL-creation reads & writes DSs via MCP (dashed) -->
-  <line x1="692" y1="360" x2="692" y2="402" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrGreen)"/>
-  <text x="700" y="378" font-size="8.5" fill="#2D8B57">reads &amp; writes</text>
-  <text x="700" y="390" font-size="8.5" fill="#2D8B57">DSs via MCP</text>
+  <!-- ===== CATALOG-REGISTRATION SKILL (registrar) ===== -->
+  <rect x="565" y="348" width="255" height="96" rx="8" fill="#EAF3FA" stroke="#2A7EAA" stroke-width="2"/>
+  <text x="692" y="369" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Catalog-registration skill</text>
+  <text x="692" y="385" text-anchor="middle" font-size="9.5" fill="#2A7EAA">the registrar — the directory clerk</text>
+  <text x="692" y="399" text-anchor="middle" font-size="9" fill="#5A8BA8">discovers discovery-layer records</text>
+  <text x="692" y="413" text-anchor="middle" font-size="9" fill="#5A8BA8">registers each in the Catalog · keeps it current</text>
+  <text x="692" y="429" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">owns the Catalog row; the producer owns the content</text>
+
+  <!-- Registrar registers rows into the Catalog (up-left) -->
+  <path d="M565,378 C525,374 525,252 521,230" fill="none" stroke="#2A7EAA" stroke-width="2" marker-end="url(#arrBlue)"/>
+  <text x="512" y="330" text-anchor="middle" font-size="8.5" fill="#2A7EAA">registers</text>
+  <text x="512" y="342" text-anchor="middle" font-size="8.5" fill="#2A7EAA">rows</text>
+
+  <!-- Registrar discovers tagged records in the DSs via MCP (dashed) -->
+  <line x1="692" y1="444" x2="692" y2="464" stroke="#2A7EAA" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrBlue)"/>
+  <text x="700" y="458" font-size="8.5" fill="#2A7EAA">discovers records · via MCP</text>
 
   <!-- Users to Query skills arcs -->
   <path d="M540,64 C575,64 565,128 565,176" stroke="#555" stroke-width="1.5" fill="none" marker-end="url(#arrDark)"/>
@@ -89,41 +103,41 @@
   <text x="572" y="124" font-size="8.5" fill="#555">answers</text>
 
   <!-- Users write via agent dashed arrow on left -->
-  <line x1="60" y1="100" x2="60" y2="402" stroke="#B0B8C0" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrDark)"/>
-  <text x="30" y="251" text-anchor="middle" font-size="8.5" fill="#A0A8B0" transform="rotate(-90,30,251)">writes via agent</text>
+  <line x1="60" y1="100" x2="60" y2="464" stroke="#B0B8C0" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrDark)"/>
+  <text x="30" y="282" text-anchor="middle" font-size="8.5" fill="#A0A8B0" transform="rotate(-90,30,282)">writes via agent</text>
 
   <!-- ===== MCP ===== -->
-  <rect x="40" y="402" width="780" height="60" rx="6" fill="#2A7EAA"/>
-  <text x="430" y="425" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">MCP  (Model Context Protocol)</text>
-  <text x="430" y="442" text-anchor="middle" font-size="10" fill="#CBE7F7">Reads and writes to Data Sources flow through MCP under a verified identity</text>
-  <text x="430" y="455" text-anchor="middle" font-size="9" fill="#97C8E8">Each source enforces its own native permissions on every call</text>
+  <rect x="40" y="464" width="780" height="60" rx="6" fill="#2A7EAA"/>
+  <text x="430" y="487" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">MCP  (Model Context Protocol)</text>
+  <text x="430" y="504" text-anchor="middle" font-size="10" fill="#CBE7F7">Reads and writes to Data Sources flow through MCP under a verified identity</text>
+  <text x="430" y="517" text-anchor="middle" font-size="9" fill="#97C8E8">Each source enforces its own native permissions on every call</text>
 
   <!-- MCP double arrow -->
-  <line x1="430" y1="462" x2="430" y2="498" stroke="#1B4A6B" stroke-width="2" marker-end="url(#arrDark)" marker-start="url(#arrDarkRev)"/>
+  <line x1="430" y1="524" x2="430" y2="560" stroke="#1B4A6B" stroke-width="2" marker-end="url(#arrDark)" marker-start="url(#arrDarkRev)"/>
 
   <!-- ===== DATA SOURCES ===== -->
-  <rect x="40" y="498" width="780" height="212" rx="7" fill="#1B4A6B"/>
-  <text x="430" y="522" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Data Sources  —  each authoritative for what it holds</text>
-  <text x="430" y="540" text-anchor="middle" font-size="10" fill="#A8CCED">Drive · Confluence · Jira · GitHub · Slack · Salesforce · Workday</text>
-  <text x="430" y="556" text-anchor="middle" font-size="9.5" font-style="italic" fill="#7AABCE">each system controls who may see what · holds two kinds of DS record:</text>
+  <rect x="40" y="560" width="780" height="212" rx="7" fill="#1B4A6B"/>
+  <text x="430" y="584" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Data Sources  —  each authoritative for what it holds</text>
+  <text x="430" y="602" text-anchor="middle" font-size="10" fill="#A8CCED">Drive · Confluence · Jira · GitHub · Slack · Salesforce · Workday</text>
+  <text x="430" y="618" text-anchor="middle" font-size="9.5" font-style="italic" fill="#7AABCE">each system controls who may see what · holds two kinds of DS record:</text>
 
   <!-- DL records sub-box (left): most of the Discovery Layer lives inside the Data Sources -->
-  <rect x="58" y="572" width="486" height="122" rx="6" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
-  <rect x="58" y="572" width="110" height="122" rx="6" fill="#E9F7EF"/>
-  <text x="113" y="620" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1E6B32">A DL record</text>
-  <text x="113" y="636" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">kept safe by</text>
-  <text x="113" y="647" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">the Data Source</text>
-  <text x="356" y="596" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">DL records — most of the Discovery Layer</text>
-  <text x="356" y="613" text-anchor="middle" font-size="8.5" font-style="italic" fill="#4A8A5A">discovery-layer DS records · derived, not authoritative</text>
-  <text x="356" y="630" text-anchor="middle" font-size="9" fill="#4A8A5A">summaries · indexes · pointers · signals</text>
-  <text x="356" y="646" text-anchor="middle" font-size="9" fill="#4A8A5A">the source stores &amp; backs them up · rebuilt on demand</text>
-  <text x="356" y="664" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78AA82">edited or verified copies are left in place</text>
+  <rect x="58" y="634" width="486" height="122" rx="6" fill="#FFFFFF" stroke="#5BAD6F" stroke-width="1.5"/>
+  <rect x="58" y="634" width="110" height="122" rx="6" fill="#E9F7EF"/>
+  <text x="113" y="682" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1E6B32">A DL record</text>
+  <text x="113" y="698" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">kept safe by</text>
+  <text x="113" y="709" text-anchor="middle" font-size="8" font-style="italic" fill="#4A8A5A">the Data Source</text>
+  <text x="356" y="658" text-anchor="middle" font-size="11" font-weight="700" fill="#1E6B32">DL records — most of the Discovery Layer</text>
+  <text x="356" y="675" text-anchor="middle" font-size="8.5" font-style="italic" fill="#4A8A5A">discovery-layer DS records · an AI's first entry point · not authoritative</text>
+  <text x="356" y="692" text-anchor="middle" font-size="9" fill="#4A8A5A">summaries · indexes · pointers · signals</text>
+  <text x="356" y="708" text-anchor="middle" font-size="9" fill="#4A8A5A">the source stores &amp; backs them up · mostly rebuilt on demand</text>
+  <text x="356" y="726" text-anchor="middle" font-size="8.5" font-style="italic" fill="#78AA82">edited or verified copies are left in place</text>
 
   <!-- Primary DS records sub-box (right) -->
-  <rect x="556" y="572" width="246" height="122" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
-  <text x="679" y="600" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Primary DS records</text>
-  <text x="679" y="619" text-anchor="middle" font-size="9" fill="#2A7EAA">the authoritative originals</text>
-  <text x="679" y="637" text-anchor="middle" font-size="9" fill="#2A7EAA">pages · tickets · threads · PRs · files</text>
-  <text x="679" y="657" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">every lasting change is written here</text>
+  <rect x="556" y="634" width="246" height="122" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
+  <text x="679" y="662" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Primary DS records</text>
+  <text x="679" y="681" text-anchor="middle" font-size="9" fill="#2A7EAA">the authoritative originals</text>
+  <text x="679" y="699" text-anchor="middle" font-size="9" fill="#2A7EAA">pages · tickets · threads · PRs · files</text>
+  <text x="679" y="719" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">every lasting change is written here</text>
 
 </svg>
