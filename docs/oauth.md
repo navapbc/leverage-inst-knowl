@@ -354,7 +354,7 @@ registration and no configured client."*
 
 ### E. Redeploy and verify
 
-1. `./tf.sh apply -var-file=prod.tfvars` (runbook deploy step 6) so the `LIK_UI_SLACK_*` values land in
+1. `./tf.sh apply` (runbook deploy step 6) so the `LIK_UI_SLACK_*` values land in
    the container from SSM. The Slack code is already in the image, so no rebuild is needed unless the
    currently deployed `lik-ui` image predates it (built before the Slack source entry merged) — in that
    case rebuild + push first (runbook deploy step 4).

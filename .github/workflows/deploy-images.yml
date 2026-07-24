@@ -3,7 +3,7 @@
 # (slow) uplink. The `apply` job then runs `terraform apply` — but ONLY when the plan is a
 # clean image swap (`Plan: N to add, 0 to change, N to destroy.`). Any other plan (config
 # drift, anything with "to change") is left for the maintainer to review and apply locally
-# with `./tf.sh apply -var-file=prod.tfvars`.
+# with `./tf.sh apply` (the step summary echoes the exact -var image refs to use).
 #
 # Prerequisites (set once in repo Settings):
 #   - Variable AWS_DEPLOY_ROLE_ARN = the github_image_push_role_arn Terraform output.
@@ -210,17 +210,10 @@ jobs:
                 echo "${summary:-see the Terraform plan step log}"
                 echo '```'
                 echo ""
-                echo "Review and apply locally:"
+                echo "Review and apply locally with the image refs from this run:"
                 echo ""
                 echo '```'
-                echo "cd infra && ./tf.sh apply -var-file=prod.tfvars"
-                echo '```'
-                echo ""
-                echo "Image refs from this run (bump these in prod.tfvars if applying manually):"
-                echo ""
-                echo '```'
-                echo "lik_mcp_image = \"$MCP_REF\""
-                echo "lik_ui_image  = \"$UI_REF\""
+                echo "cd infra && ./tf.sh apply -var \"lik_mcp_image=$MCP_REF\" -var \"lik_ui_image=$UI_REF\""
                 echo '```'
               } >> "$GITHUB_STEP_SUMMARY"
               echo "::error::Plan is not a clean image swap — apply skipped, review and apply locally."

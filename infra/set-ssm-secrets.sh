@@ -47,4 +47,4 @@ while IFS='=' read -r name value; do
   rm -f "$f"
 done < "$SF"
 
-echo "done — $set_count set, $skip_count skipped. Redeploy to pick up changes: ./tf.sh apply -var-file=prod.tfvars"
+echo "done — $set_count set, $skip_count skipped. Redeploy to pick up changes: ./tf.sh apply"

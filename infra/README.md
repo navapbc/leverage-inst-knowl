@@ -66,16 +66,17 @@ URL so the cross-service equality constraints hold structurally (see the note at
 **Gotcha:** a Lightsail container service's `.url` attribute **always** returns the default
 `...cs.amazonlightsail.com` address — even after a custom domain is validated and attached.
 No provider attribute exposes the attached custom domain, so these values do **not** follow a
-custom domain on their own. To advertise a friendly domain, set the base URLs explicitly:
+custom domain on their own; the friendly domain must be supplied explicitly through the
+`ui_custom_domain_url` / `mcp_custom_domain_url` variables (`/mcp` is appended to the mcp URL
+automatically).
 
-```
-ui_custom_domain_url  = "https://ui.lik.navapbc.com"
-mcp_custom_domain_url = "https://mcp.lik.navapbc.com"   # /mcp is appended automatically
-```
-
-When empty (the default), the locals fall back to `.url` — the correct pre-domain / bootstrap
-state. Only populate them **after** the custom domain is validated and attached, or the apps
-will advertise a name that isn't serving yet. Full procedure (certificate, DNS, OAuth
+The Terraform variables default to `""` (fall back to `.url`), but the `tf.sh` wrapper
+**defaults them to the nava URLs** (`https://ui.lik.navapbc.com` / `https://mcp.lik.navapbc.com`)
+on every `apply` — so in practice the custom domains are on by default. Override with `-var`
+to use different domains, or `-var 'ui_custom_domain_url=' -var 'mcp_custom_domain_url='` to
+fall back to the Lightsail URLs (the pre-domain / bootstrap state) for a new environment whose
+domain isn't attached yet. Only advertise a domain **after** it is validated and attached, or
+the apps will advertise a name that isn't serving yet. Full procedure (certificate, DNS, OAuth
 redirect URIs, agent-definition URL, reconnect caveat): see
 [`docs/deploy-runbook.md`](../docs/deploy-runbook.md) "Custom-domain migration" and
 [`../domain-name.md`](../domain-name.md).

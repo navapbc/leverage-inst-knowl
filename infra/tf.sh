@@ -35,21 +35,33 @@ export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 
 # Only `apply` consumes the image/domain vars; resolve them (and guard) only then, so
 # `plan`/`output`/`destroy` don't fail when no images exist yet. Extra args (e.g.
-# -var-file, -auto-approve) are passed through after the injected vars.
+# -var, -auto-approve) are passed through after the injected vars.
 if [ "${1:-}" = "apply" ]; then
     shift
 
-    : "${UI_CUSTOM_DOMAIN_URL:=https://ui.lik.navapbc.com}"
-    : "${MCP_CUSTOM_DOMAIN_URL:=https://mcp.lik.navapbc.com}"
-    echo "Using UI_CUSTOM_DOMAIN_URL=$UI_CUSTOM_DOMAIN_URL"
-    echo "Using MCP_CUSTOM_DOMAIN_URL=$MCP_CUSTOM_DOMAIN_URL"
+    # Refer to variables.tf for all variable definitions.
+    # Set derivable defaults in this wrapper rather than requiring the caller to always pass them.
+
+    # Friendly base URLs (scheme + host, no trailing slash, no /mcp suffix). Empty/omitted =
+    # use the Lightsail default ...cs.amazonlightsail.com URL (the pre-domain / bootstrap state).
+    # Only set these AFTER the custom domain is validated and attached, or the apps advertise a
+    # name that isn't serving yet. See docs/deploy-runbook.md "Custom-domain migration".
+    : "${ENV_SUFFIX:=prod}"
+    if [ "$ENV_SUFFIX" == "prod" ]; then
+        : "${UI_CUSTOM_DOMAIN_URL:=https://ui.lik.navapbc.com}"
+        : "${MCP_CUSTOM_DOMAIN_URL:=https://mcp.lik.navapbc.com}"
+        echo "Using UI_CUSTOM_DOMAIN_URL=$UI_CUSTOM_DOMAIN_URL"
+        echo "Using MCP_CUSTOM_DOMAIN_URL=$MCP_CUSTOM_DOMAIN_URL"
+    fi
 
     latest_image() {
         mise exec -- aws lightsail get-container-images --service-name "$1" \
             --query 'containerImages[0].image' --output text
     }
 
-    : "${ENV_SUFFIX:=prod}"
+    # --- Image refs (required for a deployment apply) ---------------------------
+    # Lightsail-registered refs from the CI push (`aws lightsail push-container-image`).
+    # The ".app.N" number is incremented on each image build+push.
     : "${LIK_MCP_IMAGE:=$(latest_image lik-mcp-$ENV_SUFFIX)}"
     : "${LIK_UI_IMAGE:=$(latest_image lik-ui-$ENV_SUFFIX)}"
 
@@ -60,7 +72,7 @@ if [ "${1:-}" = "apply" ]; then
     echo "Using LIK_UI_IMAGE=$LIK_UI_IMAGE"
 
     # Terraform applies variables in the order they appear in the argument list,
-    # so -var-file and -var arguments in $@ will override the defaults
+    # so -var arguments in $@ will override the defaults injected below.
     exec mise exec -- terraform apply \
         -var "ui_custom_domain_url=$UI_CUSTOM_DOMAIN_URL" \
         -var "mcp_custom_domain_url=$MCP_CUSTOM_DOMAIN_URL" \

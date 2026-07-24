@@ -192,7 +192,7 @@ value is what Atlassian's DCR will register, closing the loop for that source.)
 > lik-mcp resource URL) by hand.** They are derived from the `ui_custom_domain_url` /
 > `mcp_custom_domain_url` variables, because the container service's `.url` attribute always
 > returns the default `...cs.amazonlightsail.com` address even after the custom domain is
-> attached. Set those two variables in `prod.tfvars` and `terraform apply`; that single
+> attached. Set those two variables via `-var` on `./tf.sh apply`; that single
 > change drives all the URL-derived env values *and* keeps the `public_domain_names`
 > attachment from Step 5 under management. See `infra/README.md` "URL-derived env values and
 > custom domains" and `docs/deploy-runbook.md`.

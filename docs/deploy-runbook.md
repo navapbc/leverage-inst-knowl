@@ -34,7 +34,7 @@ pushing images, and initializing the database schema.
 > if a `terraform` command later fails on expired credentials.
 >
 > **Shortcut:** `infra/tf.sh` does this export for you and runs terraform — e.g.
-> `./tf.sh plan`, `./tf.sh apply -var-file=prod.tfvars`, `./tf.sh output`. It mints fresh
+> `./tf.sh plan`, `./tf.sh apply`, `./tf.sh output`. It mints fresh
 > credentials each run, so expiry never bites. Use it in place of the manual export + bare
 > `terraform` in the steps below.
 
@@ -233,7 +233,7 @@ secret without touching the rest:
 ```bash
 printf '%s\n' '/ik-arch/prod/lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET=GOCSPX-…' > /tmp/one.env
 infra/set-ssm-secrets.sh /tmp/one.env && rm -f /tmp/one.env
-# then redeploy so the container picks it up:  ./tf.sh apply -var-file=prod.tfvars
+# then redeploy so the container picks it up:  ./tf.sh apply
 ```
 
 Verify nothing required is still a placeholder before deploying:
@@ -270,7 +270,7 @@ variables to resolve. Already created:
 
 `AWS_APPLY_ROLE_ARN` is the `apply` job's role (`terraform output github_apply_role_arn`).
 The role is created by Terraform, so it must exist before the first CI apply — run one local
-`cd infra && ./tf.sh apply -var-file=prod.tfvars` after merging the role, then set the variable.
+`cd infra && ./tf.sh apply` after merging the role, then set the variable.
 
 To recreate or inspect:
 ```bash
@@ -352,29 +352,24 @@ shows `users`, `user_vaults`, `sessions`.
 
 ### 6. Deploy the container versions ✅ done (containers healthy; see step 5 caveat)
 
-Apply with the image refs from step 4c — this creates the two `deployment_version` resources
-(the count-guard flips on once the image vars are non-empty), and the containers boot under
-real `prod` auth using the SSM values. `tf.sh` handles credentials:
+This creates the two `deployment_version` resources (the count-guard flips on once the image
+vars are non-empty), and the containers boot under real `prod` auth using the SSM values.
+`tf.sh` handles credentials and, on `apply`, auto-resolves each service's **latest** Lightsail
+image — so a bare apply deploys exactly what step 4c just pushed:
 
 ```bash
 cd infra
+./tf.sh apply
+```
+
+To pin a specific build instead of the latest (e.g. redeploying an older ref), pass it with
+`-var`; these override the auto-resolved defaults:
+
+```bash
 ./tf.sh apply \
   -var 'lik_mcp_image=:lik-mcp-prod.app.N' \
   -var 'lik_ui_image=:lik-ui-prod.app.N'
 ```
-
-Recommended: put the refs (and any custom-domain URLs) in a gitignored `infra/prod.tfvars`
-so redeploys don't retype them. Copy the committed template and edit it (`*.tfvars` is
-gitignored; `*.tfvars.example` is committed as the reference):
-
-```bash
-cp prod.tfvars.example prod.tfvars   # then edit: image refs, optional custom domains
-./tf.sh apply -var-file=prod.tfvars
-```
-
-`prod.tfvars.example` documents every non-default variable a real `prod.tfvars` may set —
-image refs plus the optional `ui_custom_domain_url` / `mcp_custom_domain_url` (see
-"Custom-domain migration" for when to populate the domains).
 
 The deployment takes a few minutes per service. Run it in the background or leave it to
 finish — a killed apply orphans state (see the step-1 gotcha).
@@ -410,10 +405,10 @@ current image ref from Lightsail and passes both, so it never destroys the untou
 apply and the run summary prints the exact command to run locally after review:
 
 ```bash
-cd infra && ./tf.sh apply -var-file=prod.tfvars
+cd infra && ./tf.sh apply -var "lik_mcp_image=…" -var "lik_ui_image=…"
 ```
 
-(bump the image ref(s) in your local `prod.tfvars` to the values the summary lists first).
+(use the exact `-var` image refs the run summary lists).
 
 No secret or DB steps needed unless config changed. The auto-apply gate is intentionally
 conservative — it only ever fails *toward* manual review, never toward an unattended dirty apply.
@@ -470,26 +465,35 @@ the runbook's deploy step 6; the SSM population uses `set-ssm-secrets.sh` per de
 
 ---
 
-## Custom-domain migration (later)
+## Custom-domain migration (done — reference)
 
-Currently the services use the Lightsail-provided HTTPS URLs. To move to a custom domain
-(see `../domain-name.md` for the console DNS/certificate steps):
+The prod services are served at `https://ui.lik.navapbc.com` and `https://mcp.lik.navapbc.com`.
+`tf.sh` defaults `ui_custom_domain_url` / `mcp_custom_domain_url` to these on every `apply`, so
+the custom domains are **on by default** — a bare `./tf.sh apply` keeps them set. This section
+records how the migration was performed and what to touch if the domains ever change (see
+`../domain-name.md` for the console DNS/certificate steps).
 
 1. Validate and attach the custom domains to each container service — a Lightsail-managed
    certificate per service, then point DNS at the services (`../domain-name.md` Steps 1–6).
-   Do this **first**: the URL-derived env values below must not advertise a name that isn't
-   serving yet. The `public_domain_names` attachment is already declared in `lik_ui.tf` /
-   `lik_mcp.tf` (a `dynamic` block gated on the domain vars, with `certificate_name`
-   `lik-ui-prod-cert` / `lik-mcp-prod-cert`) — so once the vars are set it stays under
-   Terraform management. If you attach via the console first, setting the vars makes the
-   config match the attachment (no destroy); if the cert names differ from those literals,
-   update them in the `.tf` to match, or Terraform will try to remove the attachment.
+   This must happen **before** an apply sets the domain vars: the URL-derived env values below
+   must not advertise a name that isn't serving yet. Since `tf.sh` now defaults the domain vars
+   ON, deploying to a **new** environment whose domain isn't attached yet requires overriding
+   them to empty first — `./tf.sh apply -var 'ui_custom_domain_url=' -var 'mcp_custom_domain_url='`
+   — to fall back to the Lightsail URLs until the domain is serving. The `public_domain_names`
+   attachment is declared in `lik_ui.tf` / `lik_mcp.tf` (a `dynamic` block gated on the domain
+   vars, with `certificate_name` `lik-ui-prod-cert` / `lik-mcp-prod-cert`) — so once the vars are
+   set it stays under Terraform management. If you attach via the console first, setting the vars
+   makes the config match the attachment (no destroy); if the cert names differ from those
+   literals, update them in the `.tf` to match, or Terraform will try to remove the attachment.
 2. Update the OAuth client redirect URIs (both `/auth/callback` and `/connections/callback`)
    in each provider console to the new `ui.` domain (`../domain-name.md` Step 7.b).
-3. Set the custom-domain variables (in `prod.tfvars`) and `./tf.sh apply -var-file=prod.tfvars`:
-   ```
-   ui_custom_domain_url  = "https://ui.lik.navapbc.com"
-   mcp_custom_domain_url = "https://mcp.lik.navapbc.com"   # /mcp is appended automatically
+3. Apply. The domain vars default to the nava URLs in `tf.sh`, so a plain `./tf.sh apply`
+   applies them (`/mcp` is appended to the mcp URL automatically). To use *different* domains,
+   override with `-var`:
+   ```bash
+   ./tf.sh apply \
+     -var 'ui_custom_domain_url=https://ui.example.com' \
+     -var 'mcp_custom_domain_url=https://mcp.example.com'
    ```
    These drive the URL-derived env values (`LIK_UI_APP_BASE_URL`, `LIK_RESOURCE_SERVER_URL`,
    `LIK_UI_LIKMCP_RESOURCE_URL`, and the `*_ALLOWED_HOSTS`). **They do not update on their own**
