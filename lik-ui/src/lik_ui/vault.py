@@ -17,6 +17,12 @@ class VaultClient(Protocol):
         """Create a vault and return its id (e.g. ``vlt_01ABC...``)."""
         ...
 
+    def vault_exists(self, vault_id: str) -> bool:
+        """True if the vault still exists in the current workspace. Lets callers detect a
+        stored mapping that points at a vault in another workspace (after a workspace switch)
+        or one deleted out-of-band, and re-provision instead of erroring."""
+        ...
+
     def put_mcp_oauth_credential(
         self,
         vault_id: str,
@@ -60,6 +66,15 @@ class AnthropicVaultClient:
     def create_vault(self, display_name: str, metadata: dict) -> str:
         vault = self._client.beta.vaults.create(display_name=display_name, metadata=metadata)
         return vault.id
+
+    def vault_exists(self, vault_id: str) -> bool:
+        import anthropic
+
+        try:
+            self._client.beta.vaults.retrieve(vault_id)
+            return True
+        except anthropic.NotFoundError:
+            return False
 
     def put_mcp_oauth_credential(
         self,
@@ -150,10 +165,17 @@ def ensure_user_vault(store: Store, vault_client: VaultClient, user: dict) -> st
 
     Idempotent: once the mapping exists, no new vault is created on later logins. The
     vault is tagged with ``external_user_id`` so it can be traced back to the app user.
+
+    Self-healing: if the stored vault no longer exists in the current workspace — the app's
+    API key was repointed at a different Claude Workspace (vaults are workspace-scoped), or
+    the vault was deleted out-of-band — the stale mapping is dropped and a fresh vault is
+    provisioned, rather than letting a later ``credentials.list`` 404 with "Vault not found".
     """
     existing = store.get_user_vault(user["id"])
     if existing:
-        return existing
+        if vault_client.vault_exists(existing):
+            return existing
+        store.delete_user_vault(user["id"])
     vault_id = vault_client.create_vault(
         display_name=f"lik-{user['email']}",
         metadata={"external_user_id": str(user["id"])},
