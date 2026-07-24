@@ -12,8 +12,8 @@
 
   <div class="card">
     <h2>Sessions</h2>
-    <p>Your sessions hold every conversation you've had, along with any files you uploaded.
-       Deleting them removes that data from the platform. This cannot be undone.</p>
+    <p>Your sessions hold every conversation you've had in this app.
+       Deleting them removes that data from the Claude-based platform. This cannot be undone.</p>
     {% if session_count %}
       <form method="post" action="/settings/sessions/delete-all"
             onsubmit="return confirm('Delete all {{ session_count }} of your sessions and everything in them? This permanently removes their data and cannot be undone.');">
