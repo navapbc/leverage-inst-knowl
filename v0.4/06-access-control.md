@@ -53,7 +53,7 @@ Enforcement is the **store's own native group/role grant** (mechanics per store 
 
 A non-versioned store's writer identity is a single point of failure — a compromised credential poisons ACLs, hints, and trust for every query. So it runs under: **no long-lived keys** (e.g., Workload Identity Federation), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on every write. Full mechanics in <u>Storage</u>.
 
-**DL outputs in a version-history DS (summaries, indexes) are deliberately *not* under that regime** — access enforced at the target store + the skill's validate/re-derive pass replace the service-account controls, with version-history revert as recovery. The **Catalog and confirmation signals**, by contrast, live in the service-fronted store and *do* run under these controls; their non-recomputable data recovers by backup, not revert.
+**DL outputs in a version-history DS (summaries, indexes) are deliberately *not* under that regime** — access enforced at the target store + the DL-creation skill's re-derive pass and the Catalog-registration skill's validation pass replace the service-account controls, with version-history revert as recovery. The **Catalog and confirmation signals**, by contrast, live in the service-fronted store and *do* run under these controls; their non-recomputable data recovers by backup, not revert.
 
 ## Third-party integration trust boundary
 

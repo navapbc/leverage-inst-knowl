@@ -13,13 +13,16 @@
    - **The Catalog** — one well-known directory mapping a *topic* to *where its material lives*, so a tool does **one lookup** then follows the pointer instead of searching every system (move a piece and you change one line, not the tools). It's built only from the **DL records** — not the full sources — so there's far less to process. Those records hold the same "what exists and where" at finer granularity; the Catalog is the coarse, topic-level view over them, recomputed rather than backed up.
    - **Confirmation signals** — people vouching that the source behind an answer was right (or flagging it wrong). A confirmation attaches to the **cited DS record or DL output the answer drew from**, never to the AI's response text — which is why answers always cite their sources. A **Query skill** records one when a person gives positive or negative feedback on a cited source. It can't be re-derived, so it's the **one part of DL that must be kept deliberately** rather than simply rebuilt.
 
-3. **DL-creation skills** — the automated *producers*. Each reads the Data Sources, writes DL outputs, and keeps the Catalog current; each runs on its own service identity, on a schedule or on demand. **There are many, not one** — a given skill is customized to the kind of source data it handles, so it can process and validate that source the way its owning team needs.
+3. **DL-creation skills** — the automated *producers*. Each reads the Data Sources and writes DL records, tagging each with the metadata a registrar needs to catalog it (its key, its audience, and the sources it came from); each runs on its own service identity, on a schedule or on demand. **There are many, not one** — a given skill is customized to the kind of source data it handles, so it can process and validate that source the way its owning team needs. Producing a DL record is a distinct job from cataloging it, and the two are often owned by separate teams.
 
-4. **Query skills** — the *guides*. Given a question, a skill steers an AI agent to the right material or the right source. Mostly they only help an agent *find* answers faster — never widen access, because every search runs under the asking person's own permissions. The one thing they produce is a **confirmation signal**: when a person gives feedback on a cited source, the skill records it. **There are many, not one** — each covers a topic or question type. A skill built for a known topic can go straight to the relevant material, skipping the Catalog; the Catalog is the fallback for questions no skill already knows how to answer.
+4. **Catalog-registration skill** — the *registrar*. It **discovers** the DL records the producers have written — finding the ones tagged `discovery-layer` — and **registers** them in the Catalog so tools can look them up, keeping the directory current as records appear, move, or go stale. It doesn't author DL records; it indexes them. It owns each Catalog row's upkeep (checking the pointer still resolves, stamping freshness), while re-deriving stale *content* stays with the producing skill that owns it.
+
+5. **Query skills** — the *guides*. Given a question, a skill steers an AI agent to the right material or the right source. Mostly they only help an agent *find* answers faster — never widen access, because every search runs under the asking person's own permissions. The one thing they produce is a **confirmation signal**: when a person gives feedback on a cited source, the skill records it. **There are many, not one** — each covers a topic or question type. A skill built for a known topic can go straight to the relevant material, skipping the Catalog; the Catalog is the fallback for questions no skill already knows how to answer.
 
 Two relationships tie these together:
 
 - The **DL-creation skill** takes **DS records** and creates **DL output**.
+- The **Catalog-registration skill** finds those **DL records** and registers them in the **Catalog**.
 - The **Query skill** queries **DL output** and **DS records** to answer a person's question.
 
 ## Progressive disclosure: answering in cheap steps
@@ -39,7 +42,8 @@ The Catalog and the Discovery Layer let an agent find an answer in increasingly 
 | DL output | Handouts and digests *about* what the offices do — at reception, on floor screens, in a kiosk | Entry points so you don't visit every office; most are regenerated automatically, some are hand-written. |
 | Confirmation signals | Visitor feedback cards — "Suite 4B actually solved my problem" | People vouching an answer was good; kept on the card, not inside the office. |
 | Catalog | The lobby directory — topic → where its handout is posted | The board everyone checks first; points to *where the handout lives*, not into the offices. |
-| DL-creation skills | Information officers, each assigned to certain offices — they tour them, write the handouts, keep the directory current | Produce the derived material; each specializes in the offices it knows. |
+| DL-creation skills | Information officers, each assigned to certain offices — they tour them and write the handouts | Produce the derived material; each specializes in the offices it knows. |
+| Catalog-registration skill | The directory clerk — collects the posted handouts and keeps the lobby directory current | Indexes what the officers produce; doesn't write handouts, just lists where each one lives. |
 | Query skills | Concierges, each an expert on certain topics — given your question, one points you to the right handout or office | Steer you; can only send you where you're already allowed in. |
 
 A few nuances:
