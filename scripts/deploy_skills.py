@@ -1,4 +1,4 @@
-"""Deploy skill directories under `.claude/skills/` to Claude Managed Agents.
+"""Deploy skill directories under `claude_platform/skills/` to Claude Managed Agents.
 
 GitHub is the source of truth for skill instructions (see
 docs/plans/2026-07-23-001-feat-skill-instruction-deploy-pipeline-plan.md). This script packages a
@@ -10,7 +10,7 @@ Run from the repo root:
 
     ANTHROPIC_API_KEY=sk-ant-... uv run --project scripts python scripts/deploy_skills.py --skill all
 
-`--skill` accepts `all` (every directory under `.claude/skills/`) or a single skill name.
+`--skill` accepts `all` (every directory under `claude_platform/skills/`) or a single skill name.
 
 Two upload rules the platform enforces (both surface as opaque 400s if violated), so this script
 guards them before uploading:
@@ -32,7 +32,7 @@ from pathlib import Path
 
 # Repo-relative location of the skill directories. Resolved from this file so the script works
 # regardless of the caller's cwd.
-SKILLS_ROOT = Path(__file__).resolve().parent.parent / ".claude" / "skills"
+SKILLS_ROOT = Path(__file__).resolve().parent.parent / "claude_platform" / "skills"
 
 _CONTENT_TYPES = {".md": "text/markdown"}
 
@@ -132,7 +132,7 @@ def deploy_skill(client, skill_dir: Path) -> DeployResult:
 def select_skill_dirs(selection: str) -> list[Path]:
     """Resolve the ``--skill`` selection to skill directories.
 
-    ``all`` returns every directory under ``.claude/skills/``; any other value must name an existing
+    ``all`` returns every directory under ``claude_platform/skills/``; any other value must name an existing
     directory.
     """
     if not SKILLS_ROOT.is_dir():
@@ -161,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--skill",
         default="all",
-        help="'all' or a single skill directory name under .claude/skills/",
+        help="'all' or a single skill directory name under claude_platform/skills/",
     )
     args = parser.parse_args(argv)
 

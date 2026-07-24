@@ -1,4 +1,4 @@
-# Deploy skill directories under `.claude/skills/` to Claude Managed Agents as new skill versions.
+# Deploy skill directories under `claude_platform/skills/` to Claude Managed Agents as new skill versions.
 # Manually dispatched (like deploy-images.yml) — a maintainer chooses which skill to publish after
 # the SKILL.md change has been reviewed and merged. Agents pin skills to `latest`, so a new version
 # rolls out on the agent's next session with no further step. See

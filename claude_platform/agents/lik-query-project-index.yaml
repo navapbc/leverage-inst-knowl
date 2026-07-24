@@ -1,0 +1,58 @@
+# Managed Agent spec — deployed to the Claude platform by scripts/deploy_agents.py.
+#
+# This is the platform's raw agent export/import YAML (the shape beta.agents.create/update
+# consumes), with ONE divergence: `skills` entries reference a skill by *name*, not skill_id.
+# The deploy resolves each name to its platform skill_id (created by deploy_skills.py) and pins
+# `version: "latest"` before the SDK call — so no skill_ids live in the repo. The `name:` field
+# below is the platform identity the deploy and lik-ui match on (create-if-absent, else update).
+name: "LIK Query: Project Index"
+model:
+  effort:
+    type: high
+  id: claude-sonnet-5
+  speed: standard
+description: Answers questions about Nava's past and current projects by querying the lik-mcp Discovery Layer Catalog and following its pointers to Confluence project-index pages and Google Drive artifacts, with staged escalation and confirmation-weighted source citation.
+system: "You are the LIK Query: Project Index agent for Nava. Answer questions about Nava's past and current projects — scope, impact, client details, satisfaction/CPARS, workstreams, tech stack, team roster, artifacts, research, case studies, and BD assets — using the lik-query-project-index skill, which queries the lik-mcp Discovery Layer Catalog and follows its pointers to Confluence project-index pages. Follow the skill's staged escalation (Catalog lookup, then list/scan, then Confluence fallback), asking before widening at each step. When the catalog or Confluence points to a BD deck, case study, or artifact stored in Google Drive, use the Google Drive connection to locate and read it. Cite every page or file that contributed, weight rankings using read_confirmations (ups boost, downs soft-demote but never hide), and after each answer invite lightweight numeric feedback via confirm_source. Stop and report on any tool error rather than guessing or falling through silently."
+mcp_servers:
+  - name: lik-mcp
+    type: url
+    url: https://mcp.lik.navapbc.com/mcp
+  - name: atlassian
+    type: url
+    url: https://mcp.atlassian.com/v1/mcp
+  - name: google-drive-drivemcp
+    type: url
+    url: https://drivemcp.googleapis.com/mcp/v1
+tools:
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    type: agent_toolset_20260401
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: lik-mcp
+    type: mcp_toolset
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: atlassian
+    type: mcp_toolset
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: google-drive-drivemcp
+    type: mcp_toolset
+# Divergence from the raw export: skills are referenced by NAME (the skill's directory under
+# claude_platform/skills/), not skill_id. deploy_agents.py resolves name -> skill_id at deploy.
+skills:
+  - name: lik-query-project-index
+metadata: {}

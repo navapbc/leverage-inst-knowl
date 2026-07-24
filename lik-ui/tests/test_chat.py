@@ -63,6 +63,12 @@ class FakeAgentsClient:
     """Minimal agents client so the untitled-chat default can read the agent's label and the
     chat page can list the agent's declared servers for the auto-approve checklist."""
 
+    def resolve_agent_id(self, name):
+        return "agent_1"
+
+    def resolve_environment_id(self, name):
+        return "env_1"
+
     def describe(self, agent_id):
         return {
             "name": "Discovery Layer Agent",

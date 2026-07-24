@@ -179,7 +179,7 @@ def register_auth_routes(app: FastAPI) -> None:
         user = require_user(request)
         agents_client = request.app.state.agents_client
         agents = []
-        for a in request.app.state.settings.agents:
+        for a in request.app.state.agents:
             info = {"label": a.agent_id, "agent_id": a.agent_id, "environment_id": a.environment_id,
                     "system": None, "model": None, "version": None}
             if agents_client is not None:

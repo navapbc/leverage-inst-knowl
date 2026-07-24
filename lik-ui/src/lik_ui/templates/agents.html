@@ -29,7 +29,7 @@
       </details>
     </div>
   {% else %}
-    <p>No agents are configured. Set <code>LIK_UI_DEFAULT_AGENT_ID</code> and
-       <code>LIK_UI_DEFAULT_ENVIRONMENT_ID</code>.</p>
+    <p>No agents are configured. Add a spec under <code>claude_platform/agents/</code>, deploy it,
+       and list it in <code>agents.toml</code>.</p>
   {% endfor %}
 {% endblock %}

@@ -19,8 +19,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _DEFAULT_AGENTS_CONFIG_PATH = Path(__file__).parent / "agents.toml"
 
 
+class AgentRosterEntry(BaseModel):
+    """One roster line: which agent to offer and which environment its sessions run in, both by
+    *name*. No platform ids live in the repo — GitHub is the source of truth for agents/environments
+    (see docs/plans/2026-07-24-001-...), and names survive re-initializing into a new workspace
+    without any id rewrite. Names are resolved to ids once at startup (see ``agents.resolve_agent_options``)."""
+
+    agent_name: str
+    environment_name: str
+
+
 class AgentOption(BaseModel):
-    """One selectable agent, pairing an agent id with the environment its sessions run in.
+    """One selectable agent, pairing an agent id with the environment its sessions run in — the
+    *resolved* form of an :class:`AgentRosterEntry` after startup name→id resolution.
 
     The human-readable label is not stored here — it is read from the agent's own definition
     via the Claude SDK. The user picks one of these; lik-ui then queries the agent for the MCP
@@ -101,14 +112,16 @@ class Settings(BaseSettings):
     # --- Skill instructions source (public GitHub repo) ----------------------------
     # A skill's full SKILL.md is fetched from this repo's raw content by skill name;
     # the repo is public, so no token is needed. Point at a fork/branch to preview
-    # without a code change. The path is always .claude/skills/<name>/SKILL.md.
+    # without a code change. The path is always claude_platform/skills/<name>/SKILL.md.
     skills_repo: str = "navapbc/leverage-inst-knowl"
     skills_ref: str = "main"
 
     # --- Agent registry ------------------------------------------------------------
     # Agents to offer live in a checked-in TOML file (``[[agents]]`` blocks), exposed as a
-    # list via ``agents``. Each agent's label is read from its own definition via the SDK.
-    # The path defaults to the packaged ``agents.toml``; tests override it with a temp file.
+    # name roster via ``agent_roster``. Entries name the agent and its environment; the ids are
+    # resolved from those names at startup (``agents.resolve_agent_options``), so no platform ids
+    # live in the repo. Each agent's label is read from its own definition via the SDK. The path
+    # defaults to the packaged ``agents.toml``; tests override it with a temp file.
     agents_config_path: Path = _DEFAULT_AGENTS_CONFIG_PATH
 
     @property
@@ -116,24 +129,24 @@ class Settings(BaseSettings):
         return [h.strip() for h in self.http_allowed_hosts.split(",") if h.strip()]
 
     @property
-    def agents(self) -> list[AgentOption]:
-        """Parse the roster TOML into ``AgentOption``s. A top-level ``default_environment_id``
-        applies to any agent that omits its own ``environment_id``. A missing file yields an
-        empty list (the production guard turns that into a loud startup failure); malformed
-        TOML raises."""
+    def agent_roster(self) -> list[AgentRosterEntry]:
+        """Parse the roster TOML into ``AgentRosterEntry``s (names, not ids). A top-level
+        ``default_environment`` applies to any agent that omits its own ``environment``. A missing
+        file yields an empty list (the production guard turns that into a loud startup failure);
+        malformed TOML raises. Name→id resolution happens later, at startup, via the SDK."""
         path = Path(self.agents_config_path)
         if not path.is_file():
             return []
         with path.open("rb") as fh:
             data = tomllib.load(fh)
-        default_env = str(data.get("default_environment_id", "")).strip()
-        options = []
+        default_env = str(data.get("default_environment", "")).strip()
+        entries = []
         for entry in data.get("agents", []):
-            agent_id = str(entry.get("agent_id", "")).strip()
-            environment_id = str(entry.get("environment_id", "")).strip() or default_env
-            if agent_id:
-                options.append(AgentOption(agent_id=agent_id, environment_id=environment_id))
-        return options
+            agent_name = str(entry.get("agent", "")).strip()
+            environment_name = str(entry.get("environment", "")).strip() or default_env
+            if agent_name:
+                entries.append(AgentRosterEntry(agent_name=agent_name, environment_name=environment_name))
+        return entries
 
     @property
     def conninfo(self) -> str:
@@ -162,7 +175,7 @@ class Settings(BaseSettings):
             }.items()
             if not value
         ]
-        if not self.agents:
+        if not self.agent_roster:
             missing.append(f"a non-empty agent roster in {self.agents_config_path}")
         if missing:
             raise RuntimeError(

@@ -105,6 +105,15 @@ Anthropic (per-user key vs. workload identity federation), and the chat and agen
 CMA owns the middle — the generic agent runtime. LIK owns the two ends: the governed knowledge
 ([lik-mcp](lik-mcp/README.md)) and the human front door ([lik-ui](lik-ui/README.md)).
 
+### Where the agent is defined
+
+The agent, its environment, and its skills are **defined in GitHub**, not edited by hand on the
+platform. They live under `claude_platform/` (agents and environments as the platform's raw export
+YAML; skills as directories) and deploy to CMA via manual-dispatch GitHub Actions
+(`deploy-skills.yml`, `deploy-agents.yml`). Everything is referenced **by name** — agents reference
+skills by name, and lik-ui resolves agent/environment names to platform ids at startup — so no
+platform ids live in the repo. See [scripts/README.md](scripts/README.md).
+
 ## Future option: replacing CMA
 
 Using CMA is a bet we can unwind. Consistent with the architecture's "earn each step" principle

@@ -51,6 +51,14 @@ def build_app(
     app.state.agents_client = agents_client
     app.state.sessions_client = sessions_client
 
+    # Resolve the name roster into concrete agent/environment ids once, at startup. Downstream
+    # routes and session creation consume these ids. With no client (local/test stub) this is an
+    # empty list; in production an unresolved name raises here, failing the boot loudly rather
+    # than serving an empty picker. Imported here (not at module top) to keep the import graph acyclic.
+    from .agents import resolve_agent_options
+
+    app.state.agents = resolve_agent_options(settings, agents_client)
+
     # Session cookie holds the signed app identity + transient OAuth flow state. Outside
     # local/test the secret is required (enforced by require_production_config above); the
     # dev fallback keeps local boot frictionless without shipping a real key.
