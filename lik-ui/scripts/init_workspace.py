@@ -120,14 +120,17 @@ ENV_DEFINITION: dict = {
 SSM_PREFIX = "$P/lik-ui"
 
 # Deploy steps that pick up the new values, printed after the SSM block. The agent roster
-# is committed in agents.toml (above); only the API key goes through SSM. Commands run from
-# infra/ (see infra/ssm-secrets.example's header for the $P path-prefix substitution).
+# is committed in agents.toml (above); only the API key goes through SSM. Steps 2-3 run from
+# infra/ (see infra/ssm-secrets.example's header for the $P path-prefix substitution); the
+# roster is baked into the image at build time, so step 4 rebuilds+redeploys via CI.
 NEXT_STEPS = (
-    "1. Commit the updated src/lik_ui/agents.toml (the new roster entry above).\n"
+    "1. Commit + merge the updated src/lik_ui/agents.toml (the new roster entry above).\n"
     "2. Copy infra/ssm-secrets.example to a temp file and set its LIK_UI_ANTHROPIC_API_KEY\n"
     "   line to the one above.\n"
-    "3. ./set-ssm-secrets.sh COPY_OF_ssm-secrets.example\n"
-    "4. ./tf.sh apply        # redeploy so lik-ui picks up the new key + committed roster"
+    "3. From infra/:  ./set-ssm-secrets.sh COPY_OF_ssm-secrets.example\n"
+    "4. Run the \"Build and deploy images\" GitHub Action for lik-ui\n"
+    "   (gh workflow run deploy-images.yml -f service=lik-ui). It rebuilds the image with the\n"
+    "   updated agents.toml and redeploys the app."
 )
 
 
@@ -297,7 +300,7 @@ def main(argv=None) -> int:
         print(format_agent_block("agent_<new>", "env_<new>"), end="")
         _hr("paste into a copy of infra/ssm-secrets.example")
         print(format_ssm_block(target_key))
-        _hr("then deploy (run from infra/)")
+        _hr("then deploy")
         print(NEXT_STEPS)
         return 0
 
@@ -329,7 +332,7 @@ def main(argv=None) -> int:
 
     _hr("paste into a copy of infra/ssm-secrets.example")
     print(format_ssm_block(target_key))
-    _hr("then deploy (run from infra/)")
+    _hr("then deploy")
     print(NEXT_STEPS)
     return 0
 

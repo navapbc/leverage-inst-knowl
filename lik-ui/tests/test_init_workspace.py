@@ -276,7 +276,7 @@ def test_main_dry_run_appends_deploy_instructions(capsys, monkeypatch):
     iw.main(["--dry-run"])
     out = capsys.readouterr().out
     assert "./set-ssm-secrets.sh COPY_OF_ssm-secrets.example" in out
-    assert "./tf.sh apply" in out
+    assert "deploy-images.yml" in out  # rebuild+redeploy via the GitHub Action, not tf.sh apply
 
 
 def test_main_dry_run_notes_uncaptured_placeholder(capsys, monkeypatch):
