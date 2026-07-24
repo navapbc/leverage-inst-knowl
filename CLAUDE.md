@@ -28,7 +28,7 @@
   `mise:2: command not found: _bootstrap_mise` line may print to stderr; ignore it.
 * **AWS is `AWS_PROFILE=lik`** (account 293033346213, us-east-1). If a call fails with "session has
   expired", run `AWS_PROFILE=lik mise exec -- aws login` (opens a browser) and retry. Secrets live in SSM
-  under `/ik-arch/prod/` (e.g. `LIK_UI_ANTHROPIC_API_KEY`; agent IDs are in `LIK_UI_AGENTS_CONFIG`).
+  under `/ik-arch/prod/` (e.g. `LIK_UI_ANTHROPIC_API_KEY`; agent IDs are in `lik-ui/src/lik_ui/agents.toml`).
 * **Diagnosing OAuth / MCP-auth / session failures:** chat transcripts and credentials are NOT stored in
   this repo — they live on the Anthropic Managed Agents platform, queried via the Python `anthropic` SDK
   (`beta.sessions` / `beta.vaults`). See `docs/oauth.md` → "Diagnosing a failing connection" for the

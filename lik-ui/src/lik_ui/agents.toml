@@ -9,14 +9,11 @@
 # hand, then open a PR. The app reads this file once at startup, so a new agent appears
 # after a redeploy — there is no runtime reload.
 
-default_environment_id = "env_016c6vWcCUvyVUaztWhvsAQt"
-
-[[agents]]
-# LIK Query: Project Index
-agent_id = "agent_01E7mqTKAdtosKpWDSLxALmq"
-# environment_id omitted -> uses default_environment_id above
+default_environment_id = "env_01T28NToQVoE9iCgttkpTCZE"
+# "env_016c6vWcCUvyVUaztWhvsAQt"
 
 [[agents]]
 # Knowledge Search Agent
-agent_id = "agent_016uQNVgNEVtcAmvwKtskh8d"
+agent_id = "agent_01H4exabGcK57yKD2cC1hcHs"
+# agent_id = "agent_016uQNVgNEVtcAmvwKtskh8d"
 # environment_id omitted -> uses default_environment_id above

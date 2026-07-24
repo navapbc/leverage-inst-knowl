@@ -271,6 +271,14 @@ def test_main_dry_run_prints_block_and_writes_nothing(capsys, monkeypatch, tmp_p
     assert not roster.exists()  # dry-run writes nothing
 
 
+def test_main_dry_run_appends_deploy_instructions(capsys, monkeypatch):
+    monkeypatch.delenv("LIK_UI_ANTHROPIC_API_KEY", raising=False)
+    iw.main(["--dry-run"])
+    out = capsys.readouterr().out
+    assert "./set-ssm-secrets.sh COPY_OF_ssm-secrets.example" in out
+    assert "./tf.sh apply" in out
+
+
 def test_main_dry_run_notes_uncaptured_placeholder(capsys, monkeypatch):
     monkeypatch.setattr(iw, "DEFINITIONS_CAPTURED", False)
     iw.main(["--dry-run"])

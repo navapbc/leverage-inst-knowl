@@ -3,7 +3,7 @@
 Creates the Knowledge Search **agent** and its **environment** in the ``lik-ui`` workspace
 from the definitions hardcoded below, then appends the new agent to the checked-in roster
 ``src/lik_ui/agents.toml`` (commit it and redeploy to offer the agent) and prints the
-``LIK_UI_ANTHROPIC_API_KEY`` line to paste into ``infra/ssm-secrets.example`` (consumed by
+``LIK_UI_ANTHROPIC_API_KEY`` line to paste into a copy of ``infra/ssm-secrets.example`` (consumed by
 ``infra/set-ssm-secrets.sh``). It needs only a ``lik-ui``-scoped API key and has no runtime
 dependency on the org ``Default`` workspace or on any source resource IDs — the source
 definitions are baked in as constants.
@@ -18,7 +18,7 @@ Usage:
   uv run python scripts/init_workspace.py --model claude-opus-4-8 --dry-run
   uv run python scripts/init_workspace.py --target-key sk-ant-... --env-name lik-ui
 
-Capturing / refreshing the hardcoded definitions (one-time, out-of-band, run against the
+If desired before running the above to refresh the hardcoded definitions (run against the
 workspace that currently owns the source agent+env — the org ``Default`` workspace):
 
   LIK_UI_ANTHROPIC_API_KEY=<default-ws key> uv run python -c "import anthropic; \
@@ -119,6 +119,17 @@ ENV_DEFINITION: dict = {
 
 SSM_PREFIX = "$P/lik-ui"
 
+# Deploy steps that pick up the new values, printed after the SSM block. The agent roster
+# is committed in agents.toml (above); only the API key goes through SSM. Commands run from
+# infra/ (see infra/ssm-secrets.example's header for the $P path-prefix substitution).
+NEXT_STEPS = (
+    "1. Commit the updated src/lik_ui/agents.toml (the new roster entry above).\n"
+    "2. Copy infra/ssm-secrets.example to a temp file and set its LIK_UI_ANTHROPIC_API_KEY\n"
+    "   line to the one above.\n"
+    "3. ./set-ssm-secrets.sh COPY_OF_ssm-secrets.example\n"
+    "4. ./tf.sh apply        # redeploy so lik-ui picks up the new key + committed roster"
+)
+
 
 class EnvNameConflict(Exception):
     """The environment name already exists in the workspace (create returned 409)."""
@@ -214,7 +225,7 @@ def create_resources(client, agent_payload: dict, env_payload: dict) -> tuple[st
 
 
 def format_ssm_block(api_key: str | None, prefix: str = SSM_PREFIX) -> str:
-    """The API-key line to paste into infra/ssm-secrets.example. No quotes, no trailing
+    """The API-key line to paste into a copy of infra/ssm-secrets.example. No quotes, no trailing
     space — set-ssm-secrets.sh takes the value as everything after the first '='. The agent
     roster is no longer an SSM value; it lives in agents.toml (see append_agent_to_config)."""
     key_value = api_key or "sk-ant-…  # create in the Console for the lik-ui workspace"
@@ -284,8 +295,10 @@ def main(argv=None) -> int:
         print(f"target key: {redact(target_key)}")
         _hr(f"would append to {AGENTS_CONFIG_PATH}")
         print(format_agent_block("agent_<new>", "env_<new>"), end="")
-        _hr("paste into infra/ssm-secrets.example")
+        _hr("paste into a copy of infra/ssm-secrets.example")
         print(format_ssm_block(target_key))
+        _hr("then deploy (run from infra/)")
+        print(NEXT_STEPS)
         return 0
 
     if not DEFINITIONS_CAPTURED:
@@ -314,8 +327,10 @@ def main(argv=None) -> int:
     print(format_agent_block(agent_id, env_id), end="")
     print("commit this file and redeploy to offer the new agent.")
 
-    _hr("paste into infra/ssm-secrets.example")
+    _hr("paste into a copy of infra/ssm-secrets.example")
     print(format_ssm_block(target_key))
+    _hr("then deploy (run from infra/)")
+    print(NEXT_STEPS)
     return 0
 
 
