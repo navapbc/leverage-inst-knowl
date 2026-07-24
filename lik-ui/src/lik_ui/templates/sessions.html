@@ -22,8 +22,12 @@
   {% endfor %}
   <form class="session-row" style="margin-top: 1rem"
         onsubmit="var id = this.session_id.value.trim(); if (!id) return false; window.location = '/chat/' + encodeURIComponent(id); return false;">
-    <label for="open-session-id">Open a session by id</label>
-    <input id="open-session-id" name="session_id" type="text" placeholder="Session id" required>
+    <label for="open-session-id"
+           title="You can only open a session someone else started if they shared it. The person who started the chat must turn on read-only sharing from that session's chat page first.">Open a session by id</label>
+    <input id="open-session-id" name="session_id" type="text" placeholder="Session id" required
+           title="You can only open a session someone else started if they shared it. The person who started the chat must turn on read-only sharing from that session's chat page first.">
     <button class="btn" type="submit">Open</button>
   </form>
+  <p class="muted-note">Opening someone else's session only works if they shared it — the person who
+    started the chat must turn on read-only sharing from that session's chat page first.</p>
 {% endblock %}
