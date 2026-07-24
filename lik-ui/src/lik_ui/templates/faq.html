@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}FAQ · lik-ui{% endblock %}
+{% block content %}
+  <h1>FAQ</h1>
+  {# `content` is falsy for both a failed fetch and an empty body — both show the fallback link. #}
+  {% if content %}
+    <p><a href="{{ source_url }}" target="_blank" rel="noopener">view on GitHub</a></p>
+    {# The raw Markdown is carried in an inert <template>, never a <script> or JS string: Jinja
+       HTML-escapes it, so a literal </script> or </template> in the content cannot break out, and
+       .content.textContent decodes it back to the exact source before marked/DOMPurify run. #}
+    <template id="faq-raw">{{ content }}</template>
+    <div id="faq-content" class="faq-content"></div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <script>
+      (function () {
+        var tpl = document.getElementById("faq-raw");
+        var target = document.getElementById("faq-content");
+        if (!tpl || !target) return;
+        // Strip a leading YAML frontmatter block if one is ever present (faq.md has none today).
+        var body = tpl.content.textContent.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+        // marked parses to HTML, DOMPurify sanitizes (the file is external content); if the CDN
+        // libs didn't load, fall back to literal text so the FAQ is never lost.
+        if (window.marked && window.DOMPurify) {
+          target.innerHTML = window.DOMPurify.sanitize(window.marked.parse(body));
+        } else {
+          var pre = document.createElement("pre");
+          pre.textContent = body;
+          target.appendChild(pre);
+        }
+      })();
+    </script>
+  {% else %}
+    <p>The FAQ couldn't be loaded right now —
+      <a href="{{ source_url }}" target="_blank" rel="noopener">view it on GitHub</a>.</p>
+  {% endif %}
+{% endblock %}
