@@ -57,12 +57,6 @@
     <button class="btn" type="submit" {% if not all_connected %}disabled{% endif %}>Start chatting</button>
   </form>
   <div><a href="/sessions">or continue existing chat sessions</a></div>
-  {% if skills %}
-  <!-- Markdown rendering for a skill's SKILL.md. DOMPurify sanitizes because the file comes
-       from an external repo; the same marked + DOMPurify pipeline as the chat transcript. -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-  {% endif %}
   <script>
     // Prefill the session title with the agent name plus the current local time so a session
     // gets a meaningful name by default. The user can edit it before starting; if cleared,
@@ -90,7 +84,8 @@
 
     // Fetch a skill's name and description on demand when its "Details" button is clicked.
     // The agent definition only carries each skill's id/version, so the name/description are
-    // looked up from the server and shown inline below the skill.
+    // looked up from the server and shown inline below the skill, with a link to the full
+    // SKILL.md on GitHub. The instructions are not rendered in-app.
     document.querySelectorAll(".skill-details-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var box = btn.parentElement.querySelector(".skill-details");
@@ -115,41 +110,21 @@
             desc.textContent = res.d.description;
             box.appendChild(name);
             box.appendChild(desc);
-            // Full SKILL.md, fetched from the public GitHub repo and rendered as Markdown.
-            // marked parses it to HTML and DOMPurify sanitizes (the file is external content),
-            // mirroring the chat transcript; if the CDN libs didn't load we fall back to the
-            // literal text so instructions are never lost. When the fetch failed
-            // (instructions == null) show a fallback line linking the file on GitHub.
+            // Link to the full instructions on GitHub rather than rendering them in-app. The
+            // linked source is the repo copy and may not exactly match what is deployed to the
+            // running agent.
             var gh = document.createElement("a");
             gh.href = res.d.source_url;
             gh.target = "_blank";
             gh.rel = "noopener";
-            if (res.d.instructions != null) {
-              gh.textContent = "view on GitHub";
-              var link = document.createElement("p");
-              link.appendChild(gh);
-              box.appendChild(link);
-              var md = document.createElement("div");
-              md.className = "skill-instructions";
-              // Drop the leading YAML frontmatter (name/description, already shown above): its
-              // closing "---" would otherwise read as a setext heading underline and render the
-              // whole block as a giant heading.
-              var body = res.d.instructions.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
-              if (window.marked && window.DOMPurify) {
-                md.innerHTML = window.DOMPurify.sanitize(window.marked.parse(body));
-              } else {
-                var pre = document.createElement("pre");
-                pre.textContent = body;
-                md.appendChild(pre);
-              }
-              box.appendChild(md);
-            } else {
-              gh.textContent = "view on GitHub";
-              var fallback = document.createElement("p");
-              fallback.appendChild(document.createTextNode("Full instructions unavailable — "));
-              fallback.appendChild(gh);
-              box.appendChild(fallback);
-            }
+            gh.textContent = "view full instructions on GitHub";
+            var link = document.createElement("p");
+            link.appendChild(gh);
+            box.appendChild(link);
+            var note = document.createElement("p");
+            note.className = "skill-note";
+            note.textContent = "Source in the repo; may differ from what's currently deployed.";
+            box.appendChild(note);
           })
           .catch(function () { box.textContent = "Could not load skill."; })
           .finally(function () { btn.disabled = false; });

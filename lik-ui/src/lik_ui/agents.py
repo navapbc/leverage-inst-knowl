@@ -9,7 +9,7 @@ status and drive the connect action for each missing source.
 from typing import Protocol
 
 from .settings import AgentOption, Settings
-from .skill_docs import fetch_skill_instructions, skill_source_url
+from .skill_docs import skill_source_url
 from .sources import normalize_url
 from .vault import VaultClient, ensure_user_vault
 
@@ -185,11 +185,9 @@ def register_agent_routes(app) -> None:
             details = request.app.state.agents_client.describe_skill(skill_id, version)
         except Exception as exc:  # noqa: BLE001 - surface SDK errors as JSON, not a 500
             return JSONResponse({"detail": f"Could not load skill: {exc}"}, status_code=502)
-        # The full SKILL.md is read from the public GitHub repo by skill name (which equals the
-        # skill's directory). source_url is always present (the "view on GitHub" affordance and
-        # the fallback link); instructions is None when the fetch failed — the page degrades to
-        # the fallback rather than erroring.
+        # The full instructions are not shown in-app; instead we surface source_url — the blob link
+        # to the skill's SKILL.md in the repo (the "view on GitHub" affordance). The linked source is
+        # the repo copy and may not exactly match what is currently deployed to the running agent.
         settings: Settings = request.app.state.settings
         details["source_url"] = skill_source_url(details["name"], settings)
-        details["instructions"] = await fetch_skill_instructions(details["name"], settings)
         return JSONResponse(details)

@@ -1,7 +1,7 @@
 """U4: the /faq page — route, render carrier, degradation, and auth gate.
 
-The live fetch is monkeypatched (mirrors the skill-details tests), so these prove the handler
-wiring and template behavior; the real faq.md content is validated offline in test_faq_content.py."""
+The bundled-file read is monkeypatched, so these prove the handler wiring and template
+behavior; the real faq.md content is validated offline in test_faq_content.py."""
 
 from fastapi.testclient import TestClient
 
@@ -9,12 +9,11 @@ from tests.test_agents import LIK, FakeAgentsClient, _app, _login
 from tests.test_oauth_connector import RecordingVaultClient
 
 
-def _client(db, monkeypatch, fetch_result):
-    async def fake_fetch(path, settings, client_factory=None, **kwargs):
-        assert path == "faq.md"
-        return fetch_result
+def _client(db, monkeypatch, faq_result):
+    def fake_load(settings):
+        return faq_result
 
-    monkeypatch.setattr("lik_ui.faq.fetch_repo_doc", fake_fetch)
+    monkeypatch.setattr("lik_ui.faq.load_faq", fake_load)
     client = TestClient(_app(db, FakeAgentsClient([LIK]), RecordingVaultClient()), follow_redirects=False)
     _login(client)
     return client
@@ -45,13 +44,6 @@ def test_faq_page_degrades_when_fetch_returns_none(db, monkeypatch):
     assert 'id="faq-raw"' not in r.text  # no render carrier when there's nothing to render
 
 
-def test_faq_page_treats_empty_body_like_none(db, monkeypatch):
-    client = _client(db, monkeypatch, "   \n  ")
-    r = client.get("/faq")
-    assert r.status_code == 200
-    assert "view it on GitHub" in r.text
-
-
 def test_faq_page_escapes_adversarial_content(db, monkeypatch):
     """Content is carried in a <template> and HTML-escaped by Jinja, so a literal </script> or
     an injected tag cannot break out or execute before DOMPurify runs."""
@@ -68,3 +60,38 @@ def test_faq_requires_login(db):
     r = client.get("/faq")
     assert r.status_code == 303
     assert r.headers["location"] == "/login"
+
+
+# --- load_faq: the local (no-network) read path -------------------------------------------------
+
+
+def test_load_faq_reads_bundled_file(tmp_path):
+    from lik_ui.faq import load_faq
+    from lik_ui.settings import Settings
+
+    f = tmp_path / "faq.md"
+    f.write_text("# FAQ\n\nbundled body")
+    assert load_faq(Settings(env="test", faq_path=f)) == "# FAQ\n\nbundled body"
+
+
+def test_load_faq_returns_none_when_missing(tmp_path):
+    from lik_ui.faq import load_faq
+    from lik_ui.settings import Settings
+
+    assert load_faq(Settings(env="test", faq_path=tmp_path / "nope.md")) is None
+
+
+def test_load_faq_treats_empty_body_as_none(tmp_path):
+    from lik_ui.faq import load_faq
+    from lik_ui.settings import Settings
+
+    f = tmp_path / "faq.md"
+    f.write_text("   \n  ")
+    assert load_faq(Settings(env="test", faq_path=f)) is None
+
+
+def test_default_faq_path_points_at_bundled_file():
+    """The packaged default resolves to a real file, so a fresh install serves the FAQ."""
+    from lik_ui.settings import Settings
+
+    assert Settings(env="test").faq_path.is_file()

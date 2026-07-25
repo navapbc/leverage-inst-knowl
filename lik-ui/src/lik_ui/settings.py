@@ -18,6 +18,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # (the pip-installed container). Overridable via LIK_UI_AGENTS_CONFIG_PATH.
 _DEFAULT_AGENTS_CONFIG_PATH = Path(__file__).parent / "agents.toml"
 
+# The FAQ content ships inside this package the same way (see pyproject package-data), so the
+# app can go private without a runtime GitHub fetch. Overridable via LIK_UI_FAQ_PATH (tests
+# point it at a temp file).
+_DEFAULT_FAQ_PATH = Path(__file__).parent / "faq.md"
+
 
 class AgentRosterEntry(BaseModel):
     """One roster line: which agent to offer and which environment its sessions run in, both by
@@ -109,12 +114,17 @@ class Settings(BaseSettings):
     # --- Anthropic / Managed Agents ------------------------------------------------
     anthropic_api_key: str = ""
 
-    # --- Skill instructions source (public GitHub repo) ----------------------------
-    # A skill's full SKILL.md is fetched from this repo's raw content by skill name;
-    # the repo is public, so no token is needed. Point at a fork/branch to preview
-    # without a code change. The path is always claude_platform/skills/<name>/SKILL.md.
+    # --- Repo links (GitHub "view on GitHub" affordance) ---------------------------
+    # The repo slug + ref used to build blob URLs for the connections page's skill links
+    # and the FAQ source link. Nothing is fetched from GitHub at runtime — these only
+    # construct human-facing links (which resolve for viewers with repo access, so the
+    # repo can be private). Point at a fork/branch to link a preview without a code change.
     skills_repo: str = "navapbc/leverage-inst-knowl"
     skills_ref: str = "main"
+
+    # The bundled FAQ content, read locally at request time (see _DEFAULT_FAQ_PATH). Tests
+    # override it with a temp file.
+    faq_path: Path = _DEFAULT_FAQ_PATH
 
     # --- Agent registry ------------------------------------------------------------
     # Agents to offer live in a checked-in TOML file (``[[agents]]`` blocks), exposed as a

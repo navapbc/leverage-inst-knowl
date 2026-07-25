@@ -1,51 +1,86 @@
 # Requirements: Make lik-ui private-repo-safe by bundling docs into the image
 
 **Date:** 2026-07-24
-**Status:** Parked — revisit after the agent-spec deploy pipeline ships
+**Status:** Ready for planning — the blocking dependency (agent-spec deploy pipeline) has shipped
 **Scope:** Standard (removes a runtime dependency; enables flipping the repo private)
 **Related:**
 [docs/brainstorms/2026-07-24-01-agent-spec-deploy-pipeline-requirements.md](docs/brainstorms/2026-07-24-01-agent-spec-deploy-pipeline-requirements.md)
-(the agent-spec pipeline whose specs make repo privacy desirable),
+(shipped in commit `065048a`; its specs are what make repo privacy desirable),
 [docs/plans/2026-07-23-001-feat-skill-instruction-deploy-pipeline-plan.md](docs/plans/2026-07-23-001-feat-skill-instruction-deploy-pipeline-plan.md)
 (first flagged this as a deferred dependency — "private → token or bundle").
 
 ## Problem
 
-lik-ui has exactly one dependency on the GitHub repo being **public**: a tokenless raw fetch in
+lik-ui has exactly one thing keeping the GitHub repo **public**: a tokenless raw fetch in
 [lik-ui/src/lik_ui/repo_docs.py](lik-ui/src/lik_ui/repo_docs.py) that reads markdown from
-`raw.githubusercontent.com/{skills_repo}/{skills_ref}/{path}`. Two viewer features ride on it:
+`raw.githubusercontent.com/{skills_repo}/{skills_ref}/{path}` (the repo is `navapbc/leverage-inst-knowl`,
+i.e. this repo). Two viewer features ride on it:
 
-1. **"Show full skill instructions"** — [skill_docs.py](lik-ui/src/lik_ui/skill_docs.py) fetches
-   `<skills-path>/<name>/SKILL.md` for the `/skill-details` endpoint (connections page).
-2. **The FAQ page** — fetches `faq.md`.
+1. **"Show full skill instructions"** — [agents.py](lik-ui/src/lik_ui/agents.py) `GET /skill-details`
+   (login-gated) fetches `claude_platform/skills/<name>/SKILL.md` via
+   [skill_docs.py](lik-ui/src/lik_ui/skill_docs.py).
+2. **The FAQ page** — [faq.py](lik-ui/src/lik_ui/faq.py) `GET /faq` fetches `faq.md`.
 
-Once agent specs (system prompts, MCP server URLs) live in the repo, keeping it public exposes them.
-The repo should be able to go **private**, which breaks the tokenless fetch.
+Agent specs now live in the repo — the shipped agent-spec pipeline exports system prompts and MCP
+server URLs into `claude_platform/agents/` and `claude_platform/environments/`. Keeping the repo public
+exposes them. The repo should be able to go **private**, which breaks the tokenless fetch.
 
 ## Decision (confirmed direction)
 
-**Bundle the docs into the lik-ui image at build time** (chosen over a server-side GitHub token).
-lik-ui reads the docs from its own package/filesystem instead of fetching over the network — the same
-way [agents.toml](lik-ui/src/lik_ui/agents.toml) is already shipped as package data. This removes both
-the network dependency and the visibility dependency. Accepted cost: refreshing a doc requires a
-redeploy (no live edit-to-view), consistent with lik-ui's existing restart-to-change posture.
+Remove both public-repo fetches (chosen over a server-side GitHub token), handled per-doc:
 
-## Requirements (to flesh out when revisited)
+- **Skill instructions (`SKILL.md`) → link-only.** The connections page stops fetching and rendering
+  `SKILL.md` in-app; it shows only the "view on GitHub" link. This drops the fetch entirely — no
+  bundling of `claude_platform/skills/` is needed. (Revised during planning; the in-app instruction
+  render was judged not worth the bundling complexity.)
+- **FAQ (`faq.md`) → bundled by relocation.** `faq.md` is lik-ui's own content with no other consumer,
+  so it moves into the lik-ui package (the same way [agents.toml](lik-ui/src/lik_ui/agents.toml) ships)
+  and is read locally. The FAQ page still renders inline. This keeps `faq.md` inside the narrow
+  `lik-ui/` Docker build context, so no Docker/CI/build-context changes are required.
 
-1. The `SKILL.md` files and `faq.md` (any doc `repo_docs.py` currently fetches) are packaged into the
-   lik-ui image at build and read locally at runtime; no runtime fetch from GitHub.
-2. `repo_docs.py` / `skill_docs.py` read from the bundled location instead of
-   `raw.githubusercontent.com`; the "view on GitHub" hyperlink affordance is retained (or revisited if
-   the repo is private and the link would 404 for viewers).
-3. The build copies the docs from their repo location into the package (note: the agent-spec plan moves
-   skills to `claude_platform/skills/<name>/SKILL.md` — the bundling must read from the then-current
-   location).
+Accepted cost: refreshing the bundled FAQ requires a redeploy (no live edit-to-view), consistent with
+lik-ui's existing restart-to-change posture.
+
+## Requirements
+
+1. No production code path fetches `SKILL.md` or `faq.md` from `raw.githubusercontent.com`. The
+   connections page no longer fetches/renders skill instructions; `faq.md` is read from the lik-ui
+   package at runtime.
+2. `faq.md` is packaged into the lik-ui image (relocated into the package) and read locally. The FAQ
+   page renders it inline, unchanged from the viewer's perspective.
+3. **The "view on GitHub" links are retained.** lik-ui's viewers are internal staff who have access to
+   the private repo, so the links stay useful; they resolve for anyone authenticated to GitHub with repo
+   access and 404 only for those without — an acceptable, pre-existing property of private-repo links.
+   These links are pure URL construction (no network), so nothing here affects them.
 4. After merge, the repo can be flipped to **private** with no lik-ui runtime regression.
-5. `settings.skills_repo` / `settings.skills_ref` are removed or repurposed once the fetch is gone.
+5. `settings.skills_repo` / `settings.skills_ref` are retained only insofar as they are still needed to
+   build the "view on GitHub" blob URLs (repo slug + ref). The fetch-only URL builder and settings usage
+   are removed.
+6. The connections page carries a note that the linked GitHub instructions are the repo source and **may
+   not exactly match what is currently deployed** to the running agents — a workaround for not being able
+   to fetch the skill's deployed content from the Claude platform. Exact wording/placement is the
+   planner's to finalize.
 
-## Open items for later
+## Why relocation avoids the build-context problem
 
-- Whether to keep the "view on GitHub" links (dead for external viewers on a private repo) or replace
-  with an in-app view only.
-- Freshness: confirm redeploy-to-refresh is acceptable for skill instructions and FAQ (expected yes).
-- Coordination: this must read docs from wherever the agent-spec plan leaves the skills folder.
+The Docker build context is `lik-ui/` in both local (`docker-compose` `build: .`) and CI
+([deploy-images.yml](.github/workflows/deploy-images.yml) `docker build ./lik-ui`). Files at the repo
+root and under `claude_platform/` are outside that context, so the Dockerfile cannot reach them without
+widening the context or staging copies — the original reason "bundle everything" was complex. Dropping
+in-app skill instructions removes the `claude_platform/skills/` case entirely, and `faq.md` (lik-ui's
+own content, no other consumer) can simply live in the package — inside the existing context and the
+existing `package-data`. No Docker, CI, or build-context changes.
+
+## Success criteria
+
+- With the repo set private and no GitHub token configured, a freshly built/deployed lik-ui serves the
+  FAQ page correctly and the connections page shows skill entries with working "view on GitHub" links.
+- No production code path issues a `raw.githubusercontent.com` request.
+- "View on GitHub" links still render and point at correct blob URLs.
+
+## Resolved open items
+
+- **View-on-GitHub links:** keep them (Requirement 3). Viewers have repo access.
+- **Skill instructions in-app:** dropped — link-only (revised during planning).
+- **Freshness:** redeploy-to-refresh is accepted; matches lik-ui's restart-to-change posture.
+- **Skills-folder coordination:** moot now that skill instructions are not bundled.

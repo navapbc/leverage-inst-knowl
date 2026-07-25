@@ -2,7 +2,7 @@
 {% block title %}FAQ · lik-ui{% endblock %}
 {% block content %}
   <h1>FAQ</h1>
-  {# `content` is falsy for both a failed fetch and an empty body — both show the fallback link. #}
+  {# `content` is falsy for both a missing bundled file and an empty body — both show the fallback link. #}
   {% if content %}
     <p><a href="{{ source_url }}" target="_blank" rel="noopener">view on GitHub</a></p>
     {# The raw Markdown is carried in an inert <template>, never a <script> or JS string: Jinja
