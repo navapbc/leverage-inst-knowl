@@ -17,8 +17,8 @@ Most DSs don't express permissions as Google Groups (Slack channels, Atlassian r
 - **Read:** MCP services require a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes access. Identity is carried across each `agent → MCP → DS` hop via **on-behalf-of token exchange** — each MCP service obtains a store-native **per-user** identity, since a DS won't accept a Google-audience token directly. **How** it obtains one varies by DS and must be confirmed per connector: some support direct token exchange, others require a one-time per-user OAuth consent with a stored refresh token, and some have no per-user delegation path at all. A DS in that last category cannot be read under per-user enforcement and is **out of scope until one exists** — never fall back to a shared service identity for user reads. Applies equally to AI agents and automation (e.g., Zapier).
 - **Write to DSs:** the user's verified SSO identity, via the DS's normal permissions.
 - **Write to DL:** depends on the store —
-  - *Non-versioned store* (warehouse, Postgres): a **governed writer identity** with the controls below.
-  - *Version-history DS* (Confluence): ordinary DS edit under SSO; a skill uses a non-human service account. No special regime.
+  - *Service-fronted store* (non-versioned): **the governed writer** — one identity for the Catalog and confirmation signals alike (defined below).
+  - *Version-history DS* (Confluence): ordinary DS edit under SSO; a DL-creation skill writes under **its own credential** (typically a non-human service account) — a **separate** identity from the governed writer, not under the governed-writer regime.
   - A skill writing summaries & indexes into a DS needs **least-privilege native edit access** to the locations it writes.
 
 **Identity is never self-asserted.** An email is an identifier, never an authenticator. Every call carries a verified token, never a claimed name.
@@ -49,11 +49,18 @@ Every DL output carries one of:
 
 Enforcement is the **store's own native group/role grant** (mechanics per store in <u>Storage</u>). Where a source isn't already group-based, an admin must provision a matching Google Group or the output stays default-deny.
 
-## Governed-writer controls (non-versioned stores)
+## The governed writer (service-fronted store)
 
-A non-versioned store's writer identity is a single point of failure — a compromised credential poisons ACLs, hints, and trust for every query. So it runs under: **no long-lived keys** (e.g., Workload Identity Federation), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on every write. Full mechanics in <u>Storage</u>.
+**One non-human identity writes everything in the service-fronted store.** The Catalog and confirmation signals share a **single governed writer** — the store's only writer, which no user connects as directly. Skills reach it through the store's MCP interface. It does **not** impersonate individual users, and there is **not** a separate identity per skill or per kind of row: which skill produced a row, and whether a row is skill- or human-owned, is recorded in the row's own provenance, never by using distinct writer accounts.
 
-**DL outputs in a version-history DS (summaries, indexes) are deliberately *not* under that regime** — access enforced at the target store + the skill's validate/re-derive pass replace the service-account controls, with version-history revert as recovery. The **Catalog and confirmation signals**, by contrast, live in the service-fronted store and *do* run under these controls; their non-recomputable data recovers by backup, not revert.
+*Everything below is written under that one identity:*
+- a **Catalog pointer** the registrar derived from a discovered DL record — a skill-owned row;
+- a **Catalog pointer** for a synthesis a user opted to register — a human-owned row that records the registering user as its creator;
+- a **confirmation signal** capturing a user's vouch — recording the user it was confirmed by.
+
+What separates these is data on the row (who created it, whether skill- or human-owned), not a distinct credential. This one writer is a single point of failure — a compromised credential poisons ACLs, hints, and trust for every query — so it runs under: **no long-lived keys** (e.g., Workload Identity Federation), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on every write. Full mechanics in <u>Storage</u>.
+
+**DL outputs in a version-history DS (summaries, indexes) are deliberately *not* under this regime** — a DL-creation skill writes them under its own credential (typically a service account, a **separate** identity from the governed writer); access is enforced at the target store, and the DL-creation skill's re-derive pass and the registrar's validation pass replace the governed-writer controls, with version-history revert as recovery. The **Catalog and confirmation signals**, by contrast, live in the service-fronted store and *do* run under these controls; their non-recomputable data recovers by backup, not revert.
 
 ## Third-party integration trust boundary
 

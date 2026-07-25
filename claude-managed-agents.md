@@ -25,7 +25,7 @@ keep conversation history, sandbox state, and outputs on Anthropic's servers:
 > eligible for [Zero Data Retention] or HIPAA Business Associate Agreement (BAA) coverage.
 
 For a system built around governed knowledge, that bounds what data may flow through an agent session and
-is a factor in the access-control design (see [v0.4/06-access-control.md](v0.4/06-access-control.md)).
+is a factor in the access-control design (see [v0.5/06-access-control.md](v0.5/06-access-control.md)).
 
 ## Why use it instead of building our own
 
@@ -50,7 +50,7 @@ them as managed infrastructure, so LIK doesn't have to build, host, or maintain 
 
 In short, CMA covers the *generic* machinery of running an agent — the part that is the same for
 everyone and that we'd gain nothing by rebuilding. This fits the architecture's principle of leaning on
-standards and common patterns rather than bespoke mechanisms (see [v0.4/01-overview.md](v0.4/01-overview.md)).
+standards and common patterns rather than bespoke mechanisms (see [v0.5/01-overview.md](v0.5/01-overview.md)).
 
 ## What it does not provide
 
@@ -117,7 +117,7 @@ platform ids live in the repo. See [scripts/README.md](scripts/README.md).
 ## Future option: replacing CMA
 
 Using CMA is a bet we can unwind. Consistent with the architecture's "earn each step" principle
-(see [v0.4/01-overview.md](v0.4/01-overview.md)), we'd only build a replacement once evidence shows it's
+(see [v0.5/01-overview.md](v0.5/01-overview.md)), we'd only build a replacement once evidence shows it's
 needed. Three triggers could justify it:
 
 - **Cost** — per-session platform and sandbox charges outgrow what self-hosted compute would cost at our

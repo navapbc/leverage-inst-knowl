@@ -189,7 +189,7 @@ A bare number (or trailing `+`) = **up**; a trailing `-` = **down**.
   (e.g. edit the Confluence page). Logged whether or not they fix it.
 
 Then `confirm_source` with the **same citation** (live hash as `source_state`), the chosen `vote`/`reason`/`comment`,
-and the user's email as the token (so `confirmed_by` is the real person, not the service account). One vote per source —
+and the user's email as the token (so `confirmed_by` is the real person, not a service account). One vote per source —
 re-voting replaces the prior one and updates the voter's marker to current content. Report:
 - `recorded` — saved (or replaced);
 - `rejected` — didn't go through (citation didn't resolve, or a down without a valid reason); say so, don't retry.

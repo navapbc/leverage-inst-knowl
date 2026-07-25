@@ -279,7 +279,7 @@ values into `.env`. Particulars differ by MCP service:
   `https://mcp.slack.com/mcp`, GA Feb 2026) fits the existing connector like GitHub does —
   no Slack-specific code. It does per-user OAuth 2.0/PKCE and issues per-user tokens that
   enforce each user's own Slack permissions (matches the no-shared-identity rule in
-  `../v0.4/06-access-control.md`); the `xoxb`/`xoxp` / `authed_user` token details are
+  `../v0.5/06-access-control.md`); the `xoxb`/`xoxp` / `authed_user` token details are
   handled inside the MCP server, not here. Slack does **not** support DCR, so it uses the
   pre-configured client path (`_acquire_configured`) with `LIK_UI_SLACK_CLIENT_ID` /
   `LIK_UI_SLACK_CLIENT_SECRET` — the same shape as GitHub. (Note: this DCR gap is a hard

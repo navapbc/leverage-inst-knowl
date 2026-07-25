@@ -19,7 +19,7 @@ The default for anything human-readable and for small-scale tables.
 |---|---|
 | **Write model** | **In-place update** — each re-derivation revises the *same* page at a stable address. |
 | **Versioning** | Native **version history** — supplies attribution, the audit log, and **revert as recovery**, with no extra machinery. |
-| **Identity** | Edits attributed to an SSO identity. A skill writes under a **non-human service account** (e.g., `summarizer@navapbc.com`) that appears in version history like any editor. |
+| **Identity** | Edits attributed to an SSO identity. A DL-creation skill writes under **its own credential** — typically a non-human service account (e.g., `summarizer@navapbc.com`), separate from the service-fronted store's governed writer — appearing in version history like any editor. The writing identity is **not** what marks provenance (that rides on change-detection, <u>Architecture</u> §5), so it is not architecturally fixed. |
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning configured.* |
 | **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. |
 
@@ -53,9 +53,16 @@ The home for DL's structured data — the **Catalog** and **confirmation signals
 
 **Served through scoped tools, never raw SQL.** The MCP service exposes **intent-named tools** — e.g., `confirm_source`, `register_catalog_entry` — each enforcing its own rules *at write time* (rate-limiting, de-duplication, "reject a confirmation whose citation doesn't resolve"). A generic `run_sql` would hand that enforcement back to the caller and forfeit the reason for moving off a page.
 
-**Two writer modes:**
-- **Service-only** — Catalog rows, written by the skill's service identity with no user in the loop.
-- **Service + user assertion** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the tool needs the user's token both to attribute the write and to rate-limit per person.
+**Vector-DB variant for the Catalog (opt-in).** The Catalog store may instead be a vector DB (or Postgres with `pgvector`) that embeds each DL record's text, so a consumer can match a *fuzzy* question by similarity rather than only by exact key. It sits behind the same scoped MCP tools — `register_catalog_entry` still writes rows; a similarity-search capability is added alongside keyed lookup. It can be **added later, not up front**: the embedding is a rebuildable index over text the row's pointer can always re-fetch, so enabling it is a non-destructive column-add plus a backfill — nothing at cataloging time must be preserved for it. The variant carries extra obligations implementers must meet (semantics in <u>Architecture</u> §3):
+- **Keyed lookup still required** — exact `(entry_type, subject)` retrieval via metadata filtering stays the floor; similarity is additive, and no consumer may assume it exists.
+- **Embed DL-record text only** — never raw Data-Source content, which would rebuild the index-based-copy custody risk of the Level 0 tools (<u>Strategy</u> Level 0).
+- **Access-group pre-filter** — restrict candidates to the caller's groups (the row-level-security predicate above) *before* similarity ranking; an unfiltered hit leaks record text, not just a pointer.
+- **Partition by sensitivity** — keep `restricted` and `cleared` vectors in separate indexes; embeddings can leak the content they encode, so a mixed index takes on its most-restricted member's sensitivity. **Settle this before embedding restricted content**: unlike enabling the variant itself, separating vectors that were already co-mingled is not a trivial retrofit.
+- **Re-embed on re-derivation** — refresh a record's vector when its content-state changes, or the similarity match goes stale (freshness handled as in <u>Architecture</u> §2).
+
+**Two governed-writer modes** (both writes go through the single governed writer; they differ only in whether a user is attributed):
+- **Autonomous** — Catalog rows the registrar derives, with no user in the loop.
+- **User-attributed** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the governed writer still performs the write, but needs the user's token both to attribute it and to rate-limit per person.
 
 **Used for:** the Catalog and confirmation signals; high-stakes ranking; untrusted writers needing hard write-time enforcement.
 
@@ -77,11 +84,11 @@ Where a source isn't already group-based (Slack, Jira, Salesforce, Workday), an 
 
 ## Governed-writer controls
 
-The discipline every **non-versioned** store's writer runs under (Postgres here; a warehouse in the Parallel Track). The writer identity is a single point of failure — a compromised credential could poison access hints and trust signals for every query — so require:
+The discipline every **non-versioned** store's writer runs under (Postgres here; a warehouse in the Parallel Track). One **governed writer** serves the whole store — the Catalog and confirmation signals alike (defined in <u>Access Control</u>). The writer identity is a single point of failure — a compromised credential could poison access hints and trust signals for every query — so require:
 
 - **No long-lived keys** (e.g., Workload Identity Federation).
 - A **rotation schedule**.
 - **Least privilege** — write only to the designated DL locations.
 - **Audit logging** on every write.
 
-Versioned stores (a Confluence page) are deliberately **not** under this regime: access is enforced at the target store and the skill's validate/re-derive pass replaces the service-account controls, with version-history revert as recovery.
+Versioned stores (a Confluence page) are deliberately **not** under this regime: a DL-creation skill writes there under its own credential (typically a service account), access is enforced at the target store, and the skill's validate/re-derive pass replaces the governed-writer controls, with version-history revert as recovery.

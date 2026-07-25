@@ -2,7 +2,7 @@
 * The architecture is being drafted. Don't reference old concepts or explain why old concepts are removed.
 * Keep the architecture relatively simple. Question any changes that would complicate the architecture.
 * Minimize jargon since the audience may be non-technical.
-* Keep the design docs (`v0.4/`) free of implementation specifics — describe capabilities and semantics, not how they're realized. Especially exclude UI choices (input syntax, button vs. menu, exact wording), concrete schema (column names, types), and tool signatures; those belong in a requirements/plan doc or the code, not the architecture. A design pinned to one realization restricts implementation. (Requirements docs may state a product-level form, flagged as the planner's to finalize.)
+* Keep the design docs (`v0.5/`) free of implementation specifics — describe capabilities and semantics, not how they're realized. Especially exclude UI choices (input syntax, button vs. menu, exact wording), concrete schema (column names, types), and tool signatures; those belong in a requirements/plan doc or the code, not the architecture. A design pinned to one realization restricts implementation. (Requirements docs may state a product-level form, flagged as the planner's to finalize.)
 
 ## Coding
 
@@ -10,7 +10,7 @@
 * Prefix all skill names with `lik-` (e.g. `lik-query-project-index`). Applies to the skill directory under `claude_platform/skills/` and its `name:` frontmatter.
 * Managed Agents resources are GitHub-sourced under `claude_platform/`: `skills/` (skill dirs), `agents/` and `environments/` (the platform's raw export YAML). Agents reference skills, and lik-ui references agents/environments, **by name** — no platform ids in the repo. Deploy skills via `deploy-skills.yml` and agents+environments via `deploy-agents.yml` (both manual dispatch); see `scripts/README.md`.
 * Wrap `SKILL.md` prose at a 120-character line limit. Exceptions that stay on one line: YAML frontmatter values (e.g. the `description`), table rows, and fenced code.
-* The software is being implemented based on the docs in the `v0.4` folder.
+* The software is being implemented based on the docs in the `v0.5` folder.
     - As code is being written ensure it aligns with the goals and intent of those docs.
 * Keep designs store-agnostic. A design pinned to a particular Data Source's (e.g. Confluence's) quirks would break on the next source. Code modifications must be general to different DSs.
 * Run `eval mise list` to initialize the uv and python 3.14 environment.
