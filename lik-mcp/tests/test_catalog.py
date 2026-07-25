@@ -43,7 +43,7 @@ def test_reregister_upserts(db):
 
 def test_human_saves_coexist_as_duplicates(db):
     """A key may resolve to several rows: independent human saves are exempt from the
-    skill upsert arbiter, so each inserts a new pointer rather than overwriting (v0.4 §3)."""
+    skill upsert arbiter, so each inserts a new pointer rather than overwriting (v0.5 §3)."""
     first = register_catalog_entry(
         db,
         _entry(location="https://alice", provenance="human-created", row_provenance="human"),

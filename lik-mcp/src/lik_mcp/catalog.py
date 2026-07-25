@@ -23,7 +23,7 @@ class SourceRef(BaseModel):
 
 class CatalogEntry(BaseModel):
     """A Catalog row. Discovery keys are (entry_type, subject); the rest follows the
-    v0.4 schema. Defaults match the schema so a producer supplies only what it knows."""
+    v0.5 schema. Defaults match the schema so a producer supplies only what it knows."""
 
     entry_type: str
     subject: str
@@ -58,7 +58,7 @@ class RegisterResult(BaseModel):
 
 class LookupResult(BaseModel):
     """Ranked Catalog rows for one (entry_type, subject). A key may resolve to several
-    pointers — duplicates from independent human saves coexist (v0.4 §3, "Keys"). Rows come
+    pointers — duplicates from independent human saves coexist (v0.5 §3, "Keys"). Rows come
     back best-first on what the Catalog holds: `human-verified` over `unverified`, fresher
     over staler, most-recently-updated as the tie-breaker. Confirmation-based boost/demotion
     is the consumer's job (the Query skill reads confirmations live), not applied here. The
@@ -109,7 +109,7 @@ RETURNING id, (xmax::text::bigint = 0) AS inserted
 # A key may hold several rows; return them ranked best-first on what the Catalog itself
 # holds — human-verified first, then fresher, then most-recently-updated. Confirmation-based
 # boost/demotion is deliberately NOT applied here: the Query skill owns it, reading
-# confirmations live at present-time (v0.4 §3). Keeping lookup off the confirmations table
+# confirmations live at present-time (v0.5 §3). Keeping lookup off the confirmations table
 # leaves it servable from the catalog row alone.
 _LOOKUP = """
 SELECT * FROM catalog

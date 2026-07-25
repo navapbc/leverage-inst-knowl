@@ -1,4 +1,4 @@
--- Discovery Layer service-fronted store (v0.4): the Catalog and Confirmation signals.
+-- Discovery Layer service-fronted store (v0.5): the Catalog and Confirmation signals.
 -- Idempotent: safe to run on an empty DB via the Docker entrypoint or by hand
 --   (`psql "$CONNINFO" -f db/init.sql`).
 
@@ -7,7 +7,7 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- The Catalog: a directory mapping (entry_type, subject) -> where an output lives.
--- Columns follow v0.4/05-architecture.md section 3.
+-- Columns follow v0.5/05-architecture.md section 3.
 --
 -- A key may resolve to several rows: a lookup returns all matching pointers, ranked
 -- (section 3, "Keys"). A skill keeps exactly one row per (entry_type, subject, computed_by)

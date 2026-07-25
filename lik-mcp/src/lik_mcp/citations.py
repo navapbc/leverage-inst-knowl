@@ -2,7 +2,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-# The store kinds the Catalog knows how to point at (v0.4/05-architecture.md).
+# The store kinds the Catalog knows how to point at (v0.5/05-architecture.md).
 KNOWN_STORE_KINDS = {"gdoc", "gsheet", "confluence", "postgres", "bigquery"}
 
 

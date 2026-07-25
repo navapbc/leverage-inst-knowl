@@ -1,7 +1,7 @@
 # lik-mcp
 
 The Discovery Layer's service-fronted store: an MCP service in front of a Postgres
-database holding the **Catalog** and **Confirmation signals** (v0.4 architecture). The
+database holding the **Catalog** and **Confirmation signals** (v0.5 architecture). The
 AI never touches the database directly — it calls a fixed menu of intent-named tools,
 and the service does the database work and enforces the rules.
 

@@ -20,7 +20,7 @@ _BLOB_PREFIX = f"https://github.com/{_SETTINGS.skills_repo}/blob/{_SETTINGS.skil
 # R6 sources that must be referenced somewhere on the page.
 R6_SOURCES = [
     "claude-managed-agents.md",
-    "v0.4/01-overview.md",
+    "v0.5/01-overview.md",
     "limitations.md",
     "mcp-availability.md",
     "lik-ui/README.md",

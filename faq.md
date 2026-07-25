@@ -11,7 +11,7 @@ Nava's existing data sources (Google Drive, Confluence, Jira, GitHub, Slack, and
 company knowledge fast to find and reuse, without copying everything into one place and without
 becoming a competing source of truth.
 
-[More: project overview](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/01-overview.md)
+[More: project overview](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/01-overview.md)
 
 ## What can the agent do, and how does it work?
 
@@ -42,14 +42,14 @@ are community or third-party, and a few have none yet.
 
 The design is written up in a set of short documents:
 
-- [Overview](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/01-overview.md) — what we're building and why
-- [Concepts](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/02-concepts.md) — the core ideas in plain language
-- [Examples](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/03-examples.md) — how they map to systems Nava runs
-- [Strategy](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/04-strategy.md) — the phased build plan
-- [Architecture](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/05-architecture.md) — the technical design
-- [Access control](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/06-access-control.md) — how permissions are enforced
-- [Storage](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/07-storage.md) — where derived material lives
-- [Open questions](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/08-open-questions.md) — what's still undecided
+- [Overview](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/01-overview.md) — what we're building and why
+- [Concepts](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/02-concepts.md) — the core ideas in plain language
+- [Examples](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/03-examples.md) — how they map to systems Nava runs
+- [Strategy](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/04-strategy.md) — the phased build plan
+- [Architecture](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/05-architecture.md) — the technical design
+- [Access control](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/06-access-control.md) — how permissions are enforced
+- [Storage](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/07-storage.md) — where derived material lives
+- [Open questions](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/08-open-questions.md) — what's still undecided
 
 ---
 
@@ -60,7 +60,7 @@ not end-user help.*
 
 ### Architecture and design
 
-The full design lives in the [v0.4 documents](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.4/01-overview.md)
+The full design lives in the [v0.5 documents](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/01-overview.md)
 (overview, concepts, examples, strategy, architecture, access control, storage, open questions —
 all linked above). For how the agent runtime is divided between Anthropic's platform and Nava's own
 apps, see [Claude Managed Agents](https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md).
