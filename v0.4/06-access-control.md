@@ -18,7 +18,7 @@ Most DSs don't express permissions as Google Groups (Slack channels, Atlassian r
 - **Write to DSs:** the user's verified SSO identity, via the DS's normal permissions.
 - **Write to DL:** depends on the store —
   - *Service-fronted store* (non-versioned): **the governed writer** — one identity for the Catalog and confirmation signals alike (defined below).
-  - *Version-history DS* (Confluence): ordinary DS edit under SSO; a DL-creation skill writes under its own non-human service account — a **separate** identity from the governed writer, not under the governed-writer regime.
+  - *Version-history DS* (Confluence): ordinary DS edit under SSO; a DL-creation skill writes under **its own credential** (typically a non-human service account) — a **separate** identity from the governed writer, not under the governed-writer regime.
   - A skill writing summaries & indexes into a DS needs **least-privilege native edit access** to the locations it writes.
 
 **Identity is never self-asserted.** An email is an identifier, never an authenticator. Every call carries a verified token, never a claimed name.
@@ -60,7 +60,7 @@ Enforcement is the **store's own native group/role grant** (mechanics per store 
 
 What separates these is data on the row (who created it, whether skill- or human-owned), not a distinct credential. This one writer is a single point of failure — a compromised credential poisons ACLs, hints, and trust for every query — so it runs under: **no long-lived keys** (e.g., Workload Identity Federation), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on every write. Full mechanics in <u>Storage</u>.
 
-**DL outputs in a version-history DS (summaries, indexes) are deliberately *not* under this regime** — a DL-creation skill writes them under its own service account (a **separate** identity from the governed writer); access is enforced at the target store, and the DL-creation skill's re-derive pass and the registrar's validation pass replace the governed-writer controls, with version-history revert as recovery. The **Catalog and confirmation signals**, by contrast, live in the service-fronted store and *do* run under these controls; their non-recomputable data recovers by backup, not revert.
+**DL outputs in a version-history DS (summaries, indexes) are deliberately *not* under this regime** — a DL-creation skill writes them under its own credential (typically a service account, a **separate** identity from the governed writer); access is enforced at the target store, and the DL-creation skill's re-derive pass and the registrar's validation pass replace the governed-writer controls, with version-history revert as recovery. The **Catalog and confirmation signals**, by contrast, live in the service-fronted store and *do* run under these controls; their non-recomputable data recovers by backup, not revert.
 
 ## Third-party integration trust boundary
 

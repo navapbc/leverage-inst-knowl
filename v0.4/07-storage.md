@@ -19,7 +19,7 @@ The default for anything human-readable and for small-scale tables.
 |---|---|
 | **Write model** | **In-place update** — each re-derivation revises the *same* page at a stable address. |
 | **Versioning** | Native **version history** — supplies attribution, the audit log, and **revert as recovery**, with no extra machinery. |
-| **Identity** | Edits attributed to an SSO identity. A DL-creation skill writes under its own **non-human service account** (e.g., `summarizer@navapbc.com`) — a separate identity from the service-fronted store's governed writer — appearing in version history like any editor. |
+| **Identity** | Edits attributed to an SSO identity. A DL-creation skill writes under **its own credential** — typically a non-human service account (e.g., `summarizer@navapbc.com`), separate from the service-fronted store's governed writer — appearing in version history like any editor. The writing identity is **not** what marks provenance (that rides on change-detection, <u>Architecture</u> §5), so it is not architecturally fixed. |
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning configured.* |
 | **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. |
 
@@ -60,9 +60,9 @@ The home for DL's structured data — the **Catalog** and **confirmation signals
 - **Partition by sensitivity** — keep `restricted` and `cleared` vectors in separate indexes; embeddings can leak the content they encode, so a mixed index takes on its most-restricted member's sensitivity. **Settle this before embedding restricted content**: unlike enabling the variant itself, separating vectors that were already co-mingled is not a trivial retrofit.
 - **Re-embed on re-derivation** — refresh a record's vector when its content-state changes, or the similarity match goes stale (freshness handled as in <u>Architecture</u> §2).
 
-**Two writer modes:**
-- **Service-only** — Catalog rows, written by the skill's service identity with no user in the loop.
-- **Service + user assertion** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the tool needs the user's token both to attribute the write and to rate-limit per person.
+**Two governed-writer modes** (both writes go through the single governed writer; they differ only in whether a user is attributed):
+- **Autonomous** — Catalog rows the registrar derives, with no user in the loop.
+- **User-attributed** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the governed writer still performs the write, but needs the user's token both to attribute it and to rate-limit per person.
 
 **Used for:** the Catalog and confirmation signals; high-stakes ranking; untrusted writers needing hard write-time enforcement.
 
@@ -91,4 +91,4 @@ The discipline every **non-versioned** store's writer runs under (Postgres here;
 - **Least privilege** — write only to the designated DL locations.
 - **Audit logging** on every write.
 
-Versioned stores (a Confluence page) are deliberately **not** under this regime: a DL-creation skill writes there under its own service account, access is enforced at the target store, and the skill's validate/re-derive pass replaces the governed-writer controls, with version-history revert as recovery.
+Versioned stores (a Confluence page) are deliberately **not** under this regime: a DL-creation skill writes there under its own credential (typically a service account), access is enforced at the target store, and the skill's validate/re-derive pass replaces the governed-writer controls, with version-history revert as recovery.
