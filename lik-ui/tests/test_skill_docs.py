@@ -1,49 +1,10 @@
-"""U1: the public-GitHub SKILL.md fetcher.
+"""The skill "view on GitHub" link builder.
 
-Drives the fetcher with an httpx.MockTransport-backed client (no network), asserting the
-requested raw URL and the graceful-None behavior on every failure mode."""
-
-import httpx
+The connections page links to a skill's SKILL.md rather than fetching it, so this only covers
+the pure blob-URL construction (no network)."""
 
 from lik_ui.settings import Settings
-from lik_ui.skill_docs import fetch_skill_instructions, skill_source_url
-
-
-def _factory(handler):
-    return lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
-
-
-async def test_happy_path_returns_body_and_hits_expected_raw_url():
-    settings = Settings(env="test")  # default repo/ref
-    seen = {}
-
-    def handler(request):
-        seen["url"] = str(request.url)
-        return httpx.Response(200, text="# Skill\nfull instructions")
-
-    out = await fetch_skill_instructions("lik-query-project-index", settings, _factory(handler))
-    assert out == "# Skill\nfull instructions"
-    assert seen["url"] == (
-        "https://raw.githubusercontent.com/navapbc/leverage-inst-knowl/main"
-        "/claude_platform/skills/lik-query-project-index/SKILL.md"
-    )
-
-
-async def test_non_default_repo_and_ref_reflected_in_urls():
-    settings = Settings(env="test", skills_repo="acme/fork", skills_ref="dev")
-    seen = {}
-
-    def handler(request):
-        seen["url"] = str(request.url)
-        return httpx.Response(200, text="body")
-
-    await fetch_skill_instructions("lik-thing", settings, _factory(handler))
-    assert seen["url"] == (
-        "https://raw.githubusercontent.com/acme/fork/dev/claude_platform/skills/lik-thing/SKILL.md"
-    )
-    assert skill_source_url("lik-thing", settings) == (
-        "https://github.com/acme/fork/blob/dev/claude_platform/skills/lik-thing/SKILL.md"
-    )
+from lik_ui.skill_docs import skill_source_url
 
 
 def test_source_url_is_pure_blob_url():
@@ -54,35 +15,8 @@ def test_source_url_is_pure_blob_url():
     )
 
 
-async def test_404_returns_none():
-    settings = Settings(env="test")
-    out = await fetch_skill_instructions(
-        "missing", settings, _factory(lambda r: httpx.Response(404))
+def test_source_url_reflects_non_default_repo_and_ref():
+    settings = Settings(env="test", skills_repo="acme/fork", skills_ref="dev")
+    assert skill_source_url("lik-thing", settings) == (
+        "https://github.com/acme/fork/blob/dev/claude_platform/skills/lik-thing/SKILL.md"
     )
-    assert out is None
-
-
-async def test_500_returns_none():
-    settings = Settings(env="test")
-    out = await fetch_skill_instructions(
-        "boom", settings, _factory(lambda r: httpx.Response(500))
-    )
-    assert out is None
-
-
-async def test_connect_error_does_not_propagate():
-    settings = Settings(env="test")
-
-    def handler(request):
-        raise httpx.ConnectError("no route")
-
-    assert await fetch_skill_instructions("x", settings, _factory(handler)) is None
-
-
-async def test_timeout_does_not_propagate():
-    settings = Settings(env="test")
-
-    def handler(request):
-        raise httpx.TimeoutException("slow")
-
-    assert await fetch_skill_instructions("x", settings, _factory(handler)) is None
