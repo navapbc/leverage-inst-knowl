@@ -16,9 +16,10 @@
 default_environment = "lik-ui-env"
 
 [[agents]]
+# Created by init-workspace.py
 agent = "Knowledge Search Agent"
 # environment omitted -> uses default_environment above
 
 [[agents]]
+# Defined by claude_platform/agents/lik-query-project-index.yaml
 agent = "LIK Query: Project Index"
-
