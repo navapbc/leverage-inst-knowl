@@ -1,6 +1,6 @@
 <svg width="900" height="756" viewBox="0 0 900 756" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title>Data flows</title>
-  <desc>Diagram of the six data flows in the architecture. The Data Sources (authoritative) hold both the primary DS records and most of the Discovery Layer as DL records; the Discovery Layer's own store holds the Catalog and the Confirmation store. (1) DL population — a DL-creation skill reads Data Sources and writes DL records into them, tagged discovery-layer, all via MCP; (2) Query and retrieval — a Query skill finds a known DL record directly or reads the Catalog and follows pointers to the DL record in the Data Sources; (3) Confirmations — users mark a cited source right or wrong, kept and backed up by the Layer's own confirmation store; (4) Durable updates — all permanent new knowledge and corrections go to Data Sources; (5) Saved synthesis — a user writes a cross-source artifact under their own SSO, acting as a DL record when marked an entry point at save or a plain DS record otherwise; if it's an entry point, a service account may register its Catalog pointer as a human-owned row. (6) Cataloging — a separate Catalog-registration skill (the registrar) discovers those discovery-layer-tagged records and registers each in the Catalog, validating that pointers resolve and stamping freshness. Everything reads and writes through MCP under a verified identity.</desc>
+  <desc>Diagram of the six data flows in the architecture. The Data Sources (authoritative) hold both the primary DS records and most of the Discovery Layer as DL records; the Discovery Layer's own store holds the Catalog and the Confirmation store. (1) DL population — a DL-creation skill reads Data Sources and writes DL records into them, tagged discovery-layer, all via MCP; (2) Query and retrieval — a Query skill finds a known DL record directly or reads the Catalog and follows pointers to the DL record in the Data Sources; (3) Confirmations — users mark a cited source right or wrong, kept and backed up by the Layer's own confirmation store; (4) Durable updates — all permanent new knowledge and corrections go to Data Sources; (5) Saved synthesis — a user writes a cross-source artifact under their own SSO, acting as a DL record when marked an entry point at save or a plain DS record otherwise; if it's an entry point, the governed writer may register its Catalog pointer as a human-owned row. (6) Cataloging — a separate Catalog-registration skill (the registrar) discovers those discovery-layer-tagged records and registers each in the Catalog, validating that pointers resolve and stamping freshness. Everything reads and writes through MCP under a verified identity.</desc>
 
   <defs>
     <marker id="aGreen" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#2D8B57"/></marker>
@@ -52,7 +52,7 @@
   <text x="681" y="171" text-anchor="middle" font-size="12" font-weight="700" fill="#1A5E34">DL-creation skill  <tspan font-size="9" font-weight="400" fill="#2D8B57">(one per source/team)</tspan></text>
   <text x="681" y="187" text-anchor="middle" font-size="9" fill="#2D8B57">reads sources · computes outputs</text>
   <text x="681" y="201" text-anchor="middle" font-size="9" fill="#2D8B57">writes &amp; tags DL records</text>
-  <text x="681" y="214" text-anchor="middle" font-size="8.5" fill="#52BE80" font-style="italic">re-derives its own content · service identity</text>
+  <text x="681" y="214" text-anchor="middle" font-size="8.5" fill="#52BE80" font-style="italic">re-derives its own content · runs under its own credential</text>
 
   <!-- ===== CATALOG-REGISTRATION SKILL (registrar) ===== -->
   <rect x="540" y="234" width="282" height="72" rx="8" fill="#EAF3FA" stroke="#2A7EAA" stroke-width="2"/>
@@ -149,7 +149,7 @@
   <!-- user writes cross-source artifact (a DL record) under own SSO, into the Data Sources via MCP -->
   <path d="M120,122 L120,136 L66,136 L66,500" fill="none" stroke="#C0660E" stroke-width="2" marker-end="url(#aOrange)"/>
   <text x="60" y="300" text-anchor="middle" font-size="7.5" fill="#C0660E" transform="rotate(-90,60,300)">writes artifact · own SSO · DL or plain DS record</text>
-  <!-- (service account registers the Catalog pointer — see legend item 5) -->
+  <!-- (the governed writer registers the Catalog pointer — see legend item 5) -->
   <!-- badge 5 -->
   <circle cx="66" cy="170" r="11" fill="#C0660E"/>
   <text x="66" y="174" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">5</text>
@@ -172,7 +172,7 @@
   <text x="484" y="705" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#1B4A6B">Durable updates</tspan>  all new knowledge &amp; corrections go to Data Sources</text>
   <!-- 5 -->
   <circle cx="48" cy="722" r="9" fill="#C0660E"/><text x="48" y="726" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">5</text>
-  <text x="64" y="726" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#9B5410">Saved synthesis</tspan>  user writes a cross-source artifact (own SSO) — a DL record or plain DS record by purpose; if registered, a service account writes a human-owned Catalog pointer</text>
+  <text x="64" y="726" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#9B5410">Saved synthesis</tspan>  user writes a cross-source artifact (own SSO) — a DL record or plain DS record by purpose; if registered, the governed writer writes a human-owned Catalog pointer</text>
   <!-- 6 -->
   <circle cx="48" cy="742" r="9" fill="#0E7C86"/><text x="48" y="746" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">6</text>
   <text x="64" y="746" font-size="9" fill="#5A8BA8"><tspan font-weight="700" fill="#0E7C86">Cataloging</tspan>  a separate registrar discovers discovery-layer-tagged DL records → registers each in the Catalog; validates pointers &amp; stamps freshness</text>
