@@ -19,7 +19,7 @@ The default for anything human-readable and for small-scale tables.
 |---|---|
 | **Write model** | **In-place update** — each re-derivation revises the *same* page at a stable address. |
 | **Versioning** | Native **version history** — supplies attribution, the audit log, and **revert as recovery**, with no extra machinery. |
-| **Identity** | Edits attributed to an SSO identity. A skill writes under a **non-human service account** (e.g., `summarizer@navapbc.com`) that appears in version history like any editor. |
+| **Identity** | Edits attributed to an SSO identity. A DL-creation skill writes under its own **non-human service account** (e.g., `summarizer@navapbc.com`) — a separate identity from the service-fronted store's governed writer — appearing in version history like any editor. |
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning configured.* |
 | **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. |
 
@@ -84,11 +84,11 @@ Where a source isn't already group-based (Slack, Jira, Salesforce, Workday), an 
 
 ## Governed-writer controls
 
-The discipline every **non-versioned** store's writer runs under (Postgres here; a warehouse in the Parallel Track). The writer identity is a single point of failure — a compromised credential could poison access hints and trust signals for every query — so require:
+The discipline every **non-versioned** store's writer runs under (Postgres here; a warehouse in the Parallel Track). One **governed writer** serves the whole store — the Catalog and confirmation signals alike (defined in <u>Access Control</u>). The writer identity is a single point of failure — a compromised credential could poison access hints and trust signals for every query — so require:
 
 - **No long-lived keys** (e.g., Workload Identity Federation).
 - A **rotation schedule**.
 - **Least privilege** — write only to the designated DL locations.
 - **Audit logging** on every write.
 
-Versioned stores (a Confluence page) are deliberately **not** under this regime: access is enforced at the target store and the skill's validate/re-derive pass replaces the service-account controls, with version-history revert as recovery.
+Versioned stores (a Confluence page) are deliberately **not** under this regime: a DL-creation skill writes there under its own service account, access is enforced at the target store, and the skill's validate/re-derive pass replaces the governed-writer controls, with version-history revert as recovery.
