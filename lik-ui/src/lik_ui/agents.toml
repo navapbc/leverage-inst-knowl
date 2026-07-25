@@ -16,5 +16,9 @@
 default_environment = "lik-ui-env"
 
 [[agents]]
-agent = "LIK Query: Project Index"
+agent = "Knowledge Search Agent"
 # environment omitted -> uses default_environment above
+
+[[agents]]
+agent = "LIK Query: Project Index"
+
