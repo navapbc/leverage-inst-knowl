@@ -12,8 +12,8 @@
 
   <div class="card">
     <h2>Sessions</h2>
-    <p>Your sessions hold every conversation you've had in this app.
-       Deleting them removes that data from the Claude-based platform. This cannot be undone.</p>
+    <p><a href="/sessions">Your sessions</a> hold every conversation you've had in this app.
+       Deleting them removes that data from the Claude platform. This cannot be undone.</p>
     {% if session_count %}
       <form method="post" action="/settings/sessions/delete-all"
             onsubmit="return confirm('Delete all {{ session_count }} of your sessions and everything in them? This permanently removes their data and cannot be undone.');">
@@ -26,7 +26,7 @@
 
   <div class="card">
     <h2>Credential vault</h2>
-    <p>Your vault holds the credentials for every source you've connected.</p>
+    <p>Your vault holds the credentials for every data source you've connected.</p>
     {% if vault_id %}
       {% if credentials %}
         <ul class="cred-list">
@@ -47,10 +47,9 @@
       {% else %}
         <p>No credentials connected yet.</p>
       {% endif %}
-      <p>Deleting the vault disconnects all sources and removes those credentials. A new, empty
-         vault is created automatically the next time an agent needs one.</p>
+      <p>Deleting the vault removes all credentials, which disconnects all data sources.</p>
       <form method="post" action="/settings/vault/delete"
-            onsubmit="return confirm('Delete your vault and all connected credentials? This cannot be undone.');">
+            onsubmit="return confirm('Delete your vault with all credentials? This cannot be undone.');">
         <button class="btn danger" type="submit">Delete my vault</button>
       </form>
     {% else %}

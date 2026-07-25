@@ -300,7 +300,7 @@
         resetTranscript();
         events.forEach(function (event) {
           if (event.type === "user") {
-            bubble("user", "You: " + event.text);
+            bubble("user", event.text);
           } else if (event.type === "text") {
             const el = bubble("assistant", "");
             renderMarkdown(el, event.text);

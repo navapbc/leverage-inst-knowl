@@ -3,10 +3,9 @@
 {% block body_class %}chat-page{% endblock %}
 {% block content %}
   <div class="chat-header">
-    <h2>Chat Session: {{ session.title }}</h2>
+    Chat Session
+    <h2>{{ session.title }}</h2>
   </div>
-  <p><a href="/connections?agent_id={{ session.agent_id | urlencode }}">{{ agent_label }} — connections</a></p>
-
   {% if not is_owner %}
     <p class="muted-note">You're viewing a shared session read-only. Only its owner can send messages.</p>
   {% endif %}
@@ -22,9 +21,11 @@
       </form>
     {% endif %}
 
+    <p><a href="/connections?agent_id={{ session.agent_id | urlencode }}">Connections for {{ agent_label }}</a></p>
+
     <div id="chat-controls">
-      <label><input type="checkbox" id="toggle-tools"> Show tool use</label>
       <label><input type="checkbox" id="toggle-mcp"> Show MCP tool use</label>
+      <label><input type="checkbox" id="toggle-tools"> Show tool use</label>
     </div>
     {% if is_owner and servers %}
       <div id="auto-approve">
