@@ -1,10 +1,10 @@
-"""U3: the curated faq.md, validated offline (no live fetch).
+"""The curated faq.md, validated offline.
 
-This is the highest-value guard for the FAQ: because the app fetches faq.md from `main` at
-runtime, the real page is otherwise first seen in production. These checks run in CI on the
-branch and enforce R3 (both sections), R6 (every source referenced), and that every intra-repo
-link in faq.md resolves to a real file/heading — including the developer-section anchors, the
-drift-prone part (also covers U2's link-target verification)."""
+This is the highest-value guard for the FAQ: the real page content is otherwise first seen in
+production. These checks enforce R3 (both sections), R6 (every source referenced), and that every
+intra-repo link in faq.md resolves to a real file/heading — including the developer-section
+anchors, the drift-prone part. faq.md now ships inside the lik-ui package (read locally at
+runtime, no fetch), but its intra-repo links are still repo-root-relative blob URLs."""
 
 import re
 from pathlib import Path
@@ -12,7 +12,7 @@ from pathlib import Path
 from lik_ui.settings import Settings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-FAQ = REPO_ROOT / "faq.md"
+FAQ = REPO_ROOT / "lik-ui" / "src" / "lik_ui" / "faq.md"
 
 _SETTINGS = Settings(env="test")  # default repo/ref — the same values the app fetches with
 _BLOB_PREFIX = f"https://github.com/{_SETTINGS.skills_repo}/blob/{_SETTINGS.skills_ref}/"
@@ -42,7 +42,7 @@ def _headings(text: str) -> list[str]:
 
 
 def test_faq_exists_and_has_no_leading_frontmatter_rule():
-    assert FAQ.is_file(), "faq.md must exist at the repo root"
+    assert FAQ.is_file(), "faq.md must exist in the lik-ui package (lik-ui/src/lik_ui/faq.md)"
     # A leading `---` would be misread as YAML frontmatter and stripped by the render (U4).
     assert not FAQ.read_text().lstrip().startswith("---")
 
