@@ -79,6 +79,49 @@ the live app:
 - Connect one data source (exercises `/connections/callback`) and make a lik-mcp call
   (exercises the resource URL; expect a one-time reconnect after a resource-URL change).
 
+## Add an agent
+
+An agent shown in lik-ui's picker is two things: a **definition** on the Claude Managed Agents
+platform (deployed from GitHub, the source of truth) and an entry in lik-ui's **roster**. Adding one
+is a PR plus two manual deploy Actions — no ids are hand-copied anywhere; everything resolves by name.
+
+1. **Write the agent spec.** Add `claude_platform/agents/<stem>.yaml` — the platform's raw agent YAML
+   (see `lik-cross-source-reference.yaml` for a template): `name`, `model`, `description`, `system`,
+   the `mcp_servers` it needs, a matching `mcp_toolset` under `tools` for each server, and `skills`.
+   The `name` is the platform identity the deploy and the app match on. `skills` reference skills **by
+   name** (the dir under `claude_platform/skills/`), never by id — use `skills: []` if the behavior
+   lives inline in `system`. If the agent needs a new skill, add it under
+   `claude_platform/skills/<name>/SKILL.md`; `deploy_agents.py` publishes exactly the skills an agent
+   references, so there's no separate skills step for it.
+
+2. **Add it to the roster.** Add a `[[agents]]` block naming the agent in
+   [`src/lik_ui/agents.toml`](src/lik_ui/agents.toml). Omit `environment` to use `default_environment`
+   (`lik-ui-env`), or set it to override. The app reads this file **once at startup** — a new agent
+   appears only after a redeploy (step 5), there is no runtime reload.
+
+3. **Expose it in the deploy workflow's picker.** Add the spec's filename stem to the `agent` choice
+   `options` in [`.github/workflows/deploy-agents.yml`](../.github/workflows/deploy-agents.yml) (and,
+   for a new skill you want dispatchable on its own, to `deploy-skills.yml`). `all` deploys everything
+   regardless, so this only affects whether you can dispatch the one agent by name.
+
+4. **Open a PR and merge.** GitHub is the source of truth; nothing is live until the specs land on the
+   default branch and you run the deploy.
+
+5. **Deploy, then redeploy the app.**
+   - Run the **Deploy agents to Claude platform** Action (Actions → manual dispatch, like
+     `deploy-images.yml`), choosing your agent or `all`. It syncs all environments, then creates the
+     agent (or updates it in place, matched by name) and publishes+attaches the skills it references
+     at `latest`. `deploy_agents.py --dry-run` prints the plan without publishing. Running against the
+     real API needs `ANTHROPIC_API_KEY` (a standard org key scoped to the LIK workspace) — CI reads it
+     from the `prod` environment secret.
+   - Run the **Build and deploy images** Action for `lik-ui` so the app restarts and re-reads
+     `agents.toml`; the new agent then shows in the picker.
+
+To change an existing agent's definition (prompt, model, servers), edit its spec and re-run the
+Deploy agents Action — it updates in place. Editing only a skill it references? The **Deploy skills to
+Claude platform** Action publishes a new version, and agents pinned to `latest` pick it up on their
+next session — no app redeploy needed.
+
 ## TODO: cache agent `describe` results
 
 The home (agent picker) and connections pages call `AgentsClient.describe(agent_id)` on

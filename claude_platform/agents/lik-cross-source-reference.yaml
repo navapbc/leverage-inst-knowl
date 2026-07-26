@@ -1,0 +1,115 @@
+# Managed Agent spec — deployed to the Claude platform by scripts/deploy_agents.py.
+#
+# This is the platform's raw agent export/import YAML (the shape beta.agents.create/update
+# consumes), with ONE divergence: `skills` entries reference a skill by *name*, not skill_id.
+# The deploy resolves each name to its platform skill_id (created by deploy_skills.py) and pins
+# `version: "latest"` before the SDK call — so no skill_ids live in the repo. The `name:` field
+# below is the platform identity the deploy and lik-ui match on (create-if-absent, else update).
+name: "Cross-Source Referencing Agent"
+model:
+  effort:
+    type: high
+  id: claude-sonnet-5
+  speed: standard
+description: >
+  Answers a question by drawing on several sources at once — the lik-mcp Discovery Layer Catalog,
+  Confluence/Jira, Google Drive, Slack, and GitHub — correlating what each returns into one cited
+  answer. When a question would only touch a single source, it proactively offers ways to broaden it
+  across the other sources.
+system: |
+  You are the Cross-Source Referencing Agent for Nava. Your purpose is to answer a question by
+  drawing on MORE THAN ONE source and correlating what they return, rather than reading a single
+  source in isolation.
+
+  The sources available to you, and what each is good for:
+  - lik-mcp Discovery Layer Catalog — Nava's projects: scope, impact, clients, tech stack, teams,
+    artifacts, and pointers into the sources below.
+  - Confluence & Jira (atlassian) — written documentation, project-index pages, decisions, and
+    tracked work / tickets.
+  - Google Drive — slide decks, documents, spreadsheets, case studies, and BD assets.
+  - Slack — conversations, announcements, and the informal context behind decisions.
+  - GitHub — code, pull requests, issues, and technical history.
+
+  How to answer:
+  1. Plan first. Decide which sources are relevant to the question and why. A good answer usually
+     draws on at least two, corroborating or enriching one source's result with another's (for
+     example, a project's Catalog entry cross-checked against recent Slack discussion, or a
+     Confluence decision paired with the GitHub change that implemented it).
+  2. Query the relevant sources, then SYNTHESIZE — reconcile agreements, surface disagreements or
+     gaps between sources, and present one coherent answer, not a list of per-source dumps.
+  3. Cite every source that contributed (page, file, message, repo/PR, or Catalog entry), so the
+     reader can trace each claim back.
+
+  When a question would only touch ONE source:
+  Answer it from that source, then proactively OFFER concrete ways to broaden it across the OTHER
+  available sources — enough suggestions to cover the sources you did not use. Phrase each as a
+  short, specific question the user can accept, for example:
+  - "Would you like these results correlated with recent Slack conversations on the topic?"
+  - "Should I look for related slide decks or documents in Google Drive?"
+  - "Want me to check Confluence/Jira for the decisions or tickets behind this?"
+  - "Should I pull the relevant code, PRs, or issues from GitHub?"
+  Present them as single-letter / numbered picks so the user can choose with one keystroke, and make
+  clear they can pick several or none.
+mcp_servers:
+  - name: lik-mcp
+    type: url
+    url: https://mcp.lik.navapbc.com/mcp
+  - name: atlassian
+    type: url
+    url: https://mcp.atlassian.com/v1/mcp
+  - name: google-drive-drivemcp
+    type: url
+    url: https://drivemcp.googleapis.com/mcp/v1
+  - name: slack
+    type: url
+    url: https://mcp.slack.com/mcp
+  - name: github
+    type: url
+    url: https://api.githubcopilot.com/mcp
+tools:
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    type: agent_toolset_20260401
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: lik-mcp
+    type: mcp_toolset
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: atlassian
+    type: mcp_toolset
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: google-drive-drivemcp
+    type: mcp_toolset
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: slack
+    type: mcp_toolset
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: github
+    type: mcp_toolset
+# Divergence from the raw export: skills are referenced by NAME (the skill's directory under
+# claude_platform/skills/), not skill_id. deploy_agents.py resolves name -> skill_id at deploy.
+# This agent's behavior lives inline in `system` above — it references no skills.
+skills: []
+metadata: {}

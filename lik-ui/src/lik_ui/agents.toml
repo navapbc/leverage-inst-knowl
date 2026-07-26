@@ -23,3 +23,7 @@ agent = "Knowledge Search Agent"
 [[agents]]
 # Defined by claude_platform/agents/lik-query-project-index.yaml
 agent = "LIK Query: Project Index"
+
+[[agents]]
+# Defined by claude_platform/agents/lik-cross-source-reference.yaml
+agent = "Cross-Source Referencing Agent"
