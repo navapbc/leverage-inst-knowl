@@ -132,7 +132,26 @@ def register_auth_routes(app: FastAPI) -> None:
     async def login(request: Request):
         if get_current_user(request):
             return RedirectResponse("/", status_code=303)
-        return templates.TemplateResponse(request, "login.html", {})
+        settings: Settings = request.app.state.settings
+        return templates.TemplateResponse(request, "login.html", {"dev_login": settings.is_stub})
+
+    @app.get("/auth/dev-login")
+    async def dev_login(request: Request):
+        """Local-only shortcut: seed a session user without the Google round-trip. Gated hard
+        on stub mode (env local/test), so it 404s in any real deployment. Uses the same
+        upsert-user + ensure-vault path as the real callback so downstream pages behave."""
+        settings: Settings = request.app.state.settings
+        if not settings.is_stub:
+            return HTMLResponse("Not found.", status_code=404)
+        store: Store = request.app.state.store
+        vault_client: VaultClient | None = request.app.state.vault_client
+        user = store.upsert_user("dev@navapbc.com")
+        # In stub mode there's no vault client; the vault is provisioned lazily on first
+        # real use, so skip it here rather than dereferencing None.
+        if vault_client is not None:
+            ensure_user_vault(store, vault_client, user)
+        request.session["user"] = {"id": user["id"], "email": user["email"]}
+        return RedirectResponse("/", status_code=303)
 
     @app.get("/auth/login")
     async def auth_login(request: Request):

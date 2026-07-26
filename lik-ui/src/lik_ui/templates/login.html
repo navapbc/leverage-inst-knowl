@@ -4,4 +4,7 @@
   <h1>lik-ui</h1>
   <p>Connect your data sources and chat with the Discovery Layer agent.</p>
   <p><a class="btn" href="/auth/login">Sign in with Google</a></p>
+  {% if dev_login %}
+    <p><a class="btn secondary" href="/auth/dev-login">Dev sign-in (local only)</a></p>
+  {% endif %}
 {% endblock %}
