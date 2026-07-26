@@ -1,30 +1,71 @@
 /* Minimal styling for lik-ui. Kept intentionally small — server-rendered pages. */
-:root { --fg: #1a1a1a; --muted: #666; --accent: #2b6cb0; --bg: #fafafa; --line: #e2e2e2; }
+/* All colors are theme variables so a single [data-theme="dark"] block flips the whole UI.
+   Light values below are the historical defaults; do not change them without intent. */
+:root {
+  color-scheme: light;
+  --fg: #1a1a1a; --muted: #666; --accent: #2b6cb0; --bg: #fafafa; --line: #e2e2e2;
+  --topbar: #95b6ed;
+  --card: #fff;                 /* cards and nested surfaces (pre blocks, detail panels) */
+  --btn-fg: #fff;               /* text on an accent-filled button */
+  --btn-secondary-bg: #fff;     /* secondary (outline) button fill */
+  --danger: #c05621;
+  --status-ok: #2f855a; --status-warn: #c05621;
+  /* Per-page body tints. */
+  --body-agents: #e1ecfd; --body-connections: #dfeaff; --body-sessions: #eafffc; --body-settings: #fdf9ea;
+  /* Chat transcript role bubbles. */
+  --bubble-user-bg: #f0f6ff; --bubble-user-line: #cfe0f5;
+  --bubble-tool-bg: #f7f7f5; --bubble-tool-line: #e6e6e0;
+  --bubble-mcp-bg: #f3f0fb; --bubble-mcp-line: #ddd3f0;
+  /* Advisory notice callout. */
+  --notice-bg: #fffaf2; --notice-line: #f0dcc0;
+  /* Error surfaces (500 page, chat error bubble, traceback). */
+  --error-fg: #c05621; --error-bg: #fff5ef; --error-line: #f0c9ad;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fg: #e6e8ea; --muted: #9aa0a6; --accent: #6ab0f3; --bg: #16181c; --line: #33373d;
+  --topbar: #1f2a44;
+  --card: #1e2126;
+  --btn-fg: #10141a;            /* dark text reads better on the lighter dark-mode accent */
+  --btn-secondary-bg: #23272e;
+  --danger: #d46a3a;
+  --status-ok: #5fb07f; --status-warn: #f0a072;
+  --body-agents: #12203a; --body-connections: #12203a; --body-sessions: #10241f; --body-settings: #2a2413;
+  --bubble-user-bg: #16233a; --bubble-user-line: #274063;
+  --bubble-tool-bg: #1c1f24; --bubble-tool-line: #33373d;
+  --bubble-mcp-bg: #241f33; --bubble-mcp-line: #3d3357;
+  --notice-bg: #2a2413; --notice-line: #4a3f22;
+  --error-fg: #f0a072; --error-bg: #2a1a12; --error-line: #4a2f1f;
+}
 * { box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; color: var(--fg); background: var(--bg);
   margin: 0; line-height: 1.5; display: flex; flex-direction: column; min-height: 100vh; }
 main { flex: 1; min-width: 0; width: 100%; max-width: 820px; margin: 0 auto; padding: 2rem 1.25rem; }
 /* The chat page uses the full browser width. */
 body.chat-page main { max-width: none; }
-/* The agents page shares the topbar's blue background. */
-body.agents-page { background: #b6caeb; }
-body.sessions-page { background: #daf2ee; }
-body.settings-page { background: #e7dec2; }
-body.connections-page { background: #b6caeb; }
+body.agents-page { background: var(--body-agents); }
+body.connections-page { background: var(--body-connections); }
+body.sessions-page { background: var(--body-sessions); }
+body.settings-page { background: var(--body-settings); }
 a { color: var(--accent); }
 
 /* Top bar: navigation on the left, account (email + sign out) on the right. */
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  background: #95b6ed; border-bottom: 1px solid var(--line); padding: .6rem 1.25rem; }
+  background: var(--topbar); border-bottom: 1px solid var(--line); padding: .6rem 1.25rem; }
 .topbar-nav { display: flex; gap: .35rem; }
 .topbar-nav a { text-decoration: none; color: var(--fg); padding: .4rem .6rem; border-radius: 6px; }
 .topbar-nav a:hover { background: var(--bg); }
 .topbar-account { display: flex; align-items: center; gap: .75rem; }
 .topbar-email { font-size: .85rem; color: var(--muted); }
+/* Theme toggle: icon-only button sitting just before the email address. */
+.theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 2rem;
+  height: 2rem; padding: 0; font-size: 1.1rem; line-height: 1; background: transparent;
+  border: 1px solid transparent; border-radius: 6px; color: var(--fg); cursor: pointer; }
+.theme-toggle:hover { background: var(--bg); }
 .btn { display: inline-block; padding: .5rem .9rem; border: 1px solid var(--accent);
-  border-radius: 6px; background: var(--accent); color: #fff; text-decoration: none; cursor: pointer; }
-.btn.secondary { background: #fff; color: var(--accent); }
-.btn.danger { background: #c05621; border-color: #c05621; }
+  border-radius: 6px; background: var(--accent); color: var(--btn-fg); text-decoration: none; cursor: pointer; }
+.btn.secondary { background: var(--btn-secondary-bg); color: var(--accent); }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .start-chat { display: flex; gap: .5rem; align-items: center; max-width: 640px; }
 .start-chat input { flex: 1; padding: .5rem .6rem; font-size: 1.2rem; border: 1px solid var(--line); border-radius: 6px; }
@@ -32,11 +73,11 @@ a { color: var(--accent); }
 .cred-list li { display: flex; align-items: center; justify-content: space-between; gap: .7rem; padding: .5rem .7rem; border: 1px solid var(--line); border-radius: 6px; margin: .35rem 0; background: var(--bg); }
 .cred-list .btn { flex: none; padding: .3rem .7rem; font-size: .85rem; }
 .cred-url { color: var(--muted); font-size: .85rem; word-break: break-all; }
-.status-connected { color: #2f855a; }
-.status-missing { color: #c05621; }
-.card { border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin: .75rem 0; background: #fff; }
+.status-connected { color: var(--status-ok); }
+.status-missing { color: var(--status-warn); }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin: .75rem 0; background: var(--card); }
 /* Advisory notice (e.g. beta / data-handling caveats): a quiet amber callout. */
-.card.notice { background: #fffaf2; border-color: #f0dcc0; }
+.card.notice { background: var(--notice-bg); border-color: var(--notice-line); }
 .card.notice > :first-child { margin-top: 0; }
 .card.notice > :last-child { margin-bottom: 0; }
 .card.notice p { margin: .5rem 0; }
@@ -64,7 +105,7 @@ a { color: var(--accent); }
 /* Agent system prompt on the connections page: collapsed by default, scrollable when long. */
 details.system-prompt { margin: .75rem 0; }
 details.system-prompt > summary { cursor: pointer; color: var(--accent); }
-details.system-prompt pre { margin: .5rem 0 0; padding: .6rem .8rem; background: #fff;
+details.system-prompt pre { margin: .5rem 0 0; padding: .6rem .8rem; background: var(--card);
   border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere;
   font-size: .85rem; max-height: 24rem; overflow-y: auto; }
 
@@ -72,23 +113,23 @@ details.skills { margin: .75rem 0; }
 details.skills > summary { cursor: pointer; color: var(--accent); }
 details.skills li { margin: .35rem 0; }
 details.skills .skill-details-btn { padding: .1rem .5rem; font-size: .8rem; margin-left: .35rem; }
-details.skills .skill-details { margin: .35rem 0 .5rem; padding: .5rem .7rem; background: #fff;
+details.skills .skill-details { margin: .35rem 0 .5rem; padding: .5rem .7rem; background: var(--card);
   border: 1px solid var(--line); border-radius: 6px; font-size: .85rem; }
 details.skills .skill-details p { margin: .3rem 0 0; }
 details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 
 /* Chat transcript bubbles: shared .card base with a per-role tint. */
-.card.user { background: #f0f6ff; border-color: #cfe0f5; }
-.card.assistant { background: #fff; }
-.card.tool { background: #f7f7f5; border-color: #e6e6e0; color: var(--muted);
+.card.user { background: var(--bubble-user-bg); border-color: var(--bubble-user-line); }
+.card.assistant { background: var(--card); }
+.card.tool { background: var(--bubble-tool-bg); border-color: var(--bubble-tool-line); color: var(--muted);
   font-size: .9rem; padding: .6rem .8rem; }
 /* MCP (external-server) tools get a distinct tint to set them apart from built-in tools. */
-.card.tool.mcp { background: #f3f0fb; border-color: #ddd3f0; }
-.card.error { background: #fff5ef; border-color: #f0c9ad; color: #c05621; }
+.card.tool.mcp { background: var(--bubble-mcp-bg); border-color: var(--bubble-mcp-line); }
+.card.error { background: var(--error-bg); border-color: var(--error-line); color: var(--error-fg); }
 /* Collapsible tool arguments / results. */
 .card.tool details { margin-top: .4rem; }
 .card.tool summary { cursor: pointer; color: var(--accent); }
-.card.tool pre { margin: .4rem 0 0; padding: .5rem; background: #fff; border: 1px solid var(--line);
+.card.tool pre { margin: .4rem 0 0; padding: .5rem; background: var(--card); border: 1px solid var(--line);
   border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem;
   max-height: 24rem; overflow-y: auto; }
 
@@ -112,8 +153,8 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 .card.tool .tool-actions .btn { padding: .3rem .8rem; font-size: .85rem; }
 /* Outcome tag left on a gated call after it's approved / auto-approved / denied. */
 .card.tool .tool-decision { margin-top: .5rem; font-size: .85rem; font-weight: 600; }
-.card.tool .tool-decision.ok { color: #2f855a; }
-.card.tool .tool-decision.no { color: #c05621; }
+.card.tool .tool-decision.ok { color: var(--status-ok); }
+.card.tool .tool-decision.no { color: var(--status-warn); }
 
 /* Per-server auto-approve checklist. */
 #auto-approve { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: center;
@@ -134,8 +175,8 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 
 /* Descriptive 500 page: readable summary plus, in local/test, the full traceback. */
 .error-page { max-width: 60rem; }
-.error-summary { color: #c05621; font-weight: 600; }
+.error-summary { color: var(--error-fg); font-weight: 600; }
 .error-hint { color: var(--muted); font-size: .9rem; }
-.error-traceback { padding: .75rem; background: #fff5ef; border: 1px solid #f0c9ad;
+.error-traceback { padding: .75rem; background: var(--error-bg); border: 1px solid var(--error-line);
   border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem;
   max-height: 32rem; overflow-y: auto; }
