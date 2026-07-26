@@ -21,6 +21,7 @@ on:
         options:
           - all
           - lik-query-project-index
+          - lik-cross-source-reference
         default: all
 
 permissions:
