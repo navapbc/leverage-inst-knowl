@@ -33,10 +33,10 @@ def test_toggle_button_has_accessible_name(db):
 
 
 def test_no_flash_bootstrap_present(db):
-    """R4/R5: an inline head script applies the stored or OS-preferred theme before paint."""
+    """R4/R5: an inline head script applies the stored theme before paint, defaulting to light."""
     html = _client(db).get("/").text
     assert "lik-theme" in html  # storage key the bootstrap reads
-    assert "prefers-color-scheme: dark" in html  # first-visit OS fallback
+    assert "prefers-color-scheme" not in html  # first visit defaults to light, not OS preference
     assert "documentElement.dataset.theme" in html  # sets the attribute CSS keys off
 
 
