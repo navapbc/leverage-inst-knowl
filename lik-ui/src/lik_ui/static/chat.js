@@ -27,6 +27,20 @@
   function setStatus(text) { if (statusEl) { statusEl.textContent = text; statusEl.hidden = false; } }
   function clearStatus() { if (statusEl) { statusEl.hidden = true; statusEl.textContent = ""; } }
 
+  // A detail label for the activity indicator describing what the agent is doing right now, so
+  // "working" becomes concrete during the long silent stretches that are mostly tool calls. MCP
+  // tools name their server (matching the tool bubble's plug icon); built-in tools use the gear.
+  // ``count`` is the run length of back-to-back calls to this same tool — the agent fans out
+  // batches of identical calls (e.g. 10 page fetches at once), so surfacing "(×10)" tells the
+  // user one tool is being hammered rather than one slow call hanging.
+  function toolActivityLabel(event, count) {
+    const name = event.name || "a tool";
+    const times = count > 1 ? " (×" + count + ")" : "";
+    return event.server
+      ? "🔌 Using " + event.server + " · " + name + times + "…"
+      : "⚙ Running " + name + times + "…";
+  }
+
   // Render accumulated markdown to sanitized HTML; fall back to plain text if the CDN
   // libs didn't load (offline / blocked).
   function renderMarkdown(el, raw) {
@@ -351,6 +365,11 @@
     setStatus(initial);
 
     let assistant = null;
+    // Track a run of back-to-back calls to the same tool so the indicator can show "(×N)". Reset
+    // whenever anything other than another matching tool_use streams (text, a result, etc.), so a
+    // later batch of the same tool starts its count fresh rather than continuing an old run.
+    let toolRunKey = null;
+    let toolRunCount = 0;
     // Did the live stream render anything for this turn? If not, the reply was persisted but
     // the stream missed it (dropped connection) — reconcile from history so it still appears
     // without a manual refresh.
@@ -370,14 +389,26 @@
       }
       if (event.type === "text") {
         produced = true;
+        toolRunKey = null; toolRunCount = 0;  // a reply broke the tool run
+        setStatus("✍️ Responding…");  // reflects text streaming, even after an intervening tool call
         if (!assistant) { assistant = bubble("assistant", ""); assistant._raw = ""; }
         assistant._raw += event.text;
         renderMarkdown(assistant, assistant._raw);
       } else if (event.type === "tool_use") {
         produced = true;
         toolBubble(event);
+        // Reflect the tool being called in the indicator, counting a run of back-to-back calls to
+        // the same tool. A gated ("ask") call is about to pause the turn, so leave its "waiting
+        // for approval" wording to the awaiting_confirmation branch rather than flashing "Using…".
+        if (event.permission !== "ask") {
+          const key = (event.server || "") + "·" + (event.name || "");
+          toolRunCount = key === toolRunKey ? toolRunCount + 1 : 1;
+          toolRunKey = key;
+          setStatus(toolActivityLabel(event, toolRunCount));
+        }
       } else if (event.type === "tool_result") {
         produced = true;
+        toolRunKey = null; toolRunCount = 0;  // results came back; the next batch counts fresh
         toolResultBubble(event);
       } else if (event.type === "compacted") {
         produced = true;
