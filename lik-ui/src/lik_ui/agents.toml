@@ -51,4 +51,4 @@ section = "Temporary"
 [[agents]]
 # Defined by claude_platform/agents/lik-catalog-registration.yaml — writes to the shared Catalog.
 agent = "Catalog Registration Agent"
-section = "Management"
+section = "Sync to Catalog"

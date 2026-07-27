@@ -34,6 +34,25 @@ def test_shipped_roster_parses_to_at_least_one_agent():
     assert all(e.agent_name and e.environment_name for e in roster)
 
 
+def test_shipped_roster_agents_reference_declared_sections():
+    # Guards against a section rename/typo leaving an agent pointing at an undeclared section —
+    # which would silently drop it into the default group as non-management (unhidden).
+    s = Settings(env="test")
+    declared = {sec.name for sec in s.agent_sections}
+    for entry in s.agent_roster:
+        assert entry.section == "" or entry.section in declared, (
+            f"{entry.agent_name!r} references undeclared section {entry.section!r}"
+        )
+
+
+def test_shipped_roster_hides_catalog_registration_as_management():
+    # The Catalog Registration Agent writes to the shared Catalog, so it must live in a
+    # management (hidden-by-default) section.
+    s = Settings(env="test")
+    catalog = next(e for e in s.agent_roster if e.agent_name == "Catalog Registration Agent")
+    assert catalog.is_management is True
+
+
 def test_agent_roster_lists_configured_agents_in_file_order(tmp_path):
     path = _roster(
         tmp_path,
