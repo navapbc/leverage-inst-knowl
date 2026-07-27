@@ -241,12 +241,7 @@ docker compose down -v && docker compose up --build -d
 
 `mcp-remote` caches the tool list from the server. After deploying new tools, restart Claude Desktop to force a fresh tool-list fetch.
 
-## TODO
-
-lik-mcp runs in production on Lightsail with real data. Every request is authorized by a
-verified Google OIDC token (`LIK_ENV=prod`), so `confirmed_by` / `updated_by` reflect a
-real caller — the `local`/`test` stub identity is confined to those environments. The items
-below are remaining hardening and scaling work, not blockers to loading real data.
+## Technical decisions
 
 **Access control is by design, not a gap.** The Catalog and confirmation signals hold
 **pointers and metadata**, not restricted source content, so they are readable org-wide by
@@ -255,18 +250,41 @@ follows a pointer. Reads therefore apply **no per-row `access_groups` filtering 
 — `access_groups` is carried as routing metadata, and there is **no** planned Group →
 Postgres-role RLS bridge.
 
+**Citation resolution is the client's job, by design.** The service validates a citation's
+**shape** only — `ShapeResolver` checks well-formedness and a known `store_kind`, never that
+the cited source exists or reaches. The calling skill submits citations it has already
+resolved, and **reachability and access are enforced by the target Data Source when a pointer
+is followed** — the correct place for it, since a write-time existence check would be racy
+(the source can vanish a second later) and would otherwise force lik-mcp to hold a per-user
+credential to every store just to validate. The consequence to accept: a confirmation or
+Catalog pointer can reference a source that never existed or later vanished, so read paths
+treat pointers as best-effort (the `wrong-content` correction and citation-based maintenance
+items in the TODO below likewise operate best-effort). The `CitationResolver` seam stays, so
+a connector could add a real check later, but that is not planned work.
+
+## TODO
+
+lik-mcp runs in production on Lightsail with real data. Every request is authorized by a
+verified Google OIDC token (`LIK_ENV=prod`), so `confirmed_by` / `updated_by` reflect a
+real caller — the `local`/`test` stub identity is confined to those environments. The items
+below are remaining hardening and scaling work, not blockers to loading real data.
+
 **Known limits (still open):**
 
-- **Citations aren't really resolved.** `ShapeResolver` only checks well-formedness
-  and a known `store_kind` — it does not confirm the cited source exists/reaches.
-- **No governed-writer security or durability.** Keyless/rotated credentials, audit
-  logging, and confirmation backup/retention are unbuilt.
+- **Governed-writer hardening.** lik-mcp writes the Catalog and confirmations under one
+  Postgres identity — a single point of failure, since one compromised credential could
+  poison ACLs, hints, and trust for every query. That identity isn't locked down yet: the
+  credential isn't on a rotation schedule, the role isn't scoped least-privilege to the DL
+  tables, and there's no durable write-audit trail. Durability is largely handled by
+  infrastructure — the Lightsail managed DB has automated daily backups and point-in-time
+  restore on (`backup_retention_enabled`) — but the retention window is short, a restore
+  is whole-instance (it rolls back lik-ui's database too), not per-row, and catching a bad
+  write in time to use PITR depends on the missing audit trail.
 
 **Planned work:**
 
-- Real per-store citation resolution (behind the existing `CitationResolver` seam).
-- Governed-writer controls: keyless/rotated credentials, least privilege, audit logging.
-- Confirmation backup/retention, plus rate-limiting / minimum-distinct-confirmer thresholds.
+- Governed-writer controls: rotated credentials, least-privilege role, write-audit logging.
+- Confirmation retention policy, plus rate-limiting / minimum-distinct-confirmer thresholds.
 - The producer (DL-creation) and Query skills that call this service.
 
 **Confirmation table maintenance/management**
