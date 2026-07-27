@@ -122,13 +122,16 @@ Deploy agents Action — it updates in place. Editing only a skill it references
 Claude platform** Action publishes a new version, and agents pinned to `latest` pick it up on their
 next session — no app redeploy needed.
 
-## TODO: cache agent `describe` results
+## DONE: cache agent `describe` results
 
-The home (agent picker) and connections pages call `AgentsClient.describe(agent_id)` on
-every load — one Anthropic SDK `retrieve` per configured agent. With a single agent that's
-one call, but the agent definition (system prompt, model, declared servers) changes rarely.
-If the agent list grows, cache these results (e.g. a short TTL) rather than fetching per
-request.
+The home (agent picker) and connections pages — plus the chat label and chat-resume paths —
+call `AgentsClient.describe(agent_id)` on every load, one Anthropic SDK `retrieve` per
+configured agent. The agent definition (system prompt, model, declared servers) changes only on
+redeploy, so `CachingAgentsClient` (in `src/lik_ui/agents.py`) wraps the real client and memoizes
+`describe` per agent for a short TTL, collapsing a burst of loads into at most one fetch per agent
+per window. Only `describe` is cached; every other method delegates straight through. The window
+is `LIK_UI_AGENT_DESCRIBE_TTL` (default 60s; `0` disables caching). A redeploy restarts the
+process and empties the cache, so there is no manual bust.
 
 ## DONE: show full skill instructions (SKILL.md)
 
