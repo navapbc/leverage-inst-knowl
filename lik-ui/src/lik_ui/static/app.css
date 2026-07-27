@@ -175,6 +175,10 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 .card.compacted { border: none; background: none; text-align: center; color: var(--muted);
   font-size: .85rem; padding: .25rem; margin: .5rem 0; }
 
+/* Per-turn response time: a quiet meta line under an agent reply, not a card. */
+.card.duration { border: none; background: none; color: var(--muted); font-size: .8rem;
+  padding: 0 .25rem; margin: -.25rem 0 .5rem; }
+
 /* Running token total, shown once below the transcript. */
 .usage { color: var(--muted); font-size: .8rem; margin: .5rem 0 0; text-align: right; }
 

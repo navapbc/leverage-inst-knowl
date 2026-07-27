@@ -501,6 +501,56 @@ def test_confirm_route_rejects_bad_result(db):
     assert r.status_code == 400
 
 
+def _list_events_client(raw):
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+    client._client = SimpleNamespace(
+        beta=SimpleNamespace(sessions=SimpleNamespace(events=SimpleNamespace(
+            list=lambda session_id, order: iter(raw))))
+    )
+    return client
+
+
+def test_list_events_emits_turn_duration_from_processed_at():
+    from datetime import datetime, timezone
+
+    def at(sec):
+        return datetime(2026, 7, 27, 14, 40, sec, tzinfo=timezone.utc)
+
+    raw = [
+        SimpleNamespace(type="user.message", processed_at=at(0), content=[SimpleNamespace(text="hi")]),
+        SimpleNamespace(type="agent.mcp_tool_use", processed_at=at(2), id="t1", name="search",
+                        mcp_server_name="atlassian", input={}, evaluated_permission="allow",
+                        session_thread_id=None),
+        SimpleNamespace(type="agent.message", processed_at=at(5), content=[SimpleNamespace(text="reply")]),
+    ]
+    out = list(_list_events_client(raw).list_events("s"))
+    # The duration is the last agent event minus the user message, emitted after the turn's events.
+    assert [e["type"] for e in out] == ["user", "tool_use", "text", "turn_duration"]
+    assert out[-1] == {"type": "turn_duration", "seconds": 5.0}
+
+
+def test_list_events_emits_a_duration_per_turn_and_skips_an_unfinished_one():
+    from datetime import datetime, timezone
+
+    def at(minute, sec):
+        return datetime(2026, 7, 27, 14, minute, sec, tzinfo=timezone.utc)
+
+    raw = [
+        SimpleNamespace(type="user.message", processed_at=at(40, 0), content=[SimpleNamespace(text="q1")]),
+        SimpleNamespace(type="agent.message", processed_at=at(40, 4), content=[SimpleNamespace(text="a1")]),
+        SimpleNamespace(type="user.message", processed_at=at(41, 0), content=[SimpleNamespace(text="q2")]),
+        SimpleNamespace(type="agent.message", processed_at=at(41, 30), content=[SimpleNamespace(text="a2")]),
+        # A trailing user turn still in flight (no agent event yet) yields no duration.
+        SimpleNamespace(type="user.message", processed_at=at(42, 0), content=[SimpleNamespace(text="q3")]),
+    ]
+    out = list(_list_events_client(raw).list_events("s"))
+    durations = [e["seconds"] for e in out if e["type"] == "turn_duration"]
+    assert durations == [4.0, 30.0]
+    # The first turn's duration lands between its reply and the second user bubble.
+    types = [e["type"] for e in out]
+    assert types == ["user", "text", "turn_duration", "user", "text", "turn_duration", "user"]
+
+
 def test_history_drops_transient_status_events():
     # A past turn's "running" is meaningless on replay, so list_events filters it out.
     raw = [SimpleNamespace(type="session.status_running", id="s_1"),
