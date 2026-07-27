@@ -275,10 +275,25 @@
   }
 
   // A small meta line under an agent reply showing how long that turn took (the agent's working
-  // time). Rendered from server-computed processed_at on history replay, and from a live timer on
-  // a freshly sent turn.
+  // time), computed server-side from the platform's processed_at timestamps.
   function durationLine(seconds) {
     bubble("duration", "⏱ took " + humanizeDuration(seconds));
+  }
+
+  // Append the just-finished live turn's duration under its reply, using the same server-computed
+  // value that replay renders (it's the last event history returns for the completed turn). We use
+  // the server value rather than a client wall-clock timer because the timer can't survive the
+  // drop→resume and pause→confirm paths (the turn spans several streams), and it must match what a
+  // later reload shows. Best-effort: on a transient miss the line simply appears on the next load.
+  function appendTurnDuration() {
+    fetch("/chat/" + sessionId + "/history")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        const events = (data && Array.isArray(data.events)) ? data.events : [];
+        const last = events[events.length - 1];
+        if (last && last.type === "turn_duration") durationLine(last.seconds);
+      })
+      .catch(function () { /* best-effort; the duration shows on the next history render */ });
   }
 
   // Running token total across every model request in the session (history + live),
@@ -374,20 +389,13 @@
   // Consume one turn's SSE stream from `url` into the transcript. Shared by sending a message
   // and by answering a paused tool call (both stream the same normalized vocabulary), so the
   // rendering and reconcile logic lives in one place. `initial` is the first activity label.
-  function streamTurn(url, initial, opts) {
+  function streamTurn(url, initial) {
     // Show the activity indicator for the whole turn: from start (`initial` label) through tool
     // calls and intermediate output — so the user always knows the agent is still working — and
     // clear it only when the turn finishes (`done`), pauses for approval (`awaiting_confirmation`
     // with nothing left to auto-approve), or the connection drops without an in-flight turn to
     // re-attach to.
     setStatus(initial);
-
-    // Time a freshly sent turn so we can show "took Xs" the moment it finishes, without waiting
-    // for a history reload. Only for sends (opts.timed) — a resume/confirm attaches partway
-    // through, so it can't know the true start; those turns get their duration from the
-    // server-computed processed_at on the next history render. Timing starts now and is reset to
-    // the "running" transition to exclude queue wait (matching the server's working-time basis).
-    let startMs = (opts && opts.timed) ? Date.now() : null;
 
     let assistant = null;
     // Track a run of back-to-back calls to the same tool so the indicator can show "(×N)". Reset
@@ -409,10 +417,7 @@
       const event = JSON.parse(ev.data);
       if (event.type === "status") {
         // Advance the indicator queued -> running; it stays put until the turn ends.
-        if (event.state === "running") {
-          setStatus("⚙ Working — the agent is running…");
-          if (startMs !== null) startMs = Date.now();  // exclude queue wait from the timed duration
-        }
+        if (event.state === "running") setStatus("⚙ Working — the agent is running…");
         return;
       }
       if (event.type === "text") {
@@ -475,9 +480,10 @@
         // A completed turn has nothing paused, so no auto-approve here — just recover a reply
         // the stream may have missed. (awaiting_confirmation, not done, signals a pause.)
         // When the stream missed the reply we reload history, which renders the server-computed
-        // duration itself; otherwise show the live-timed duration for this send.
+        // duration itself; otherwise the reply is already on screen, so just append this turn's
+        // duration under it — the authoritative server value, matching how replay renders it.
         if (!produced) { loadHistory(); return; }
-        if (startMs !== null) durationLine((Date.now() - startMs) / 1000);
+        appendTurnDuration();
         return;
       }
     };
@@ -531,7 +537,7 @@
       bubble("user", "You: " + message);
       input.value = "";
       streamTurn("/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message),
-                 "⏳ Queued — waiting for the agent…", {timed: true});
+                 "⏳ Queued — waiting for the agent…");
     });
   }
 
