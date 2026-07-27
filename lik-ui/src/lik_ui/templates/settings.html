@@ -12,23 +12,6 @@
   {% endif %}
 
   <div class="card">
-    <h2>Agent picker</h2>
-    <p><strong>Management agents write data.</strong> They change shared knowledge that everyone
-       relies on (for example, registering entries into the catalog), so they are hidden from the
-       agent picker by default. Only turn them on if you understand what they do — this is a
-       safety reminder, not a permission check.</p>
-    <form method="post" action="/settings/agent-visibility">
-      <label>
-        <input type="checkbox" name="show_management_agents" value="1"
-               {% if show_management_agents %}checked{% endif %}
-               onchange="this.form.submit()">
-        Show management agents in the picker
-      </label>
-      <noscript><button class="btn" type="submit">Save</button></noscript>
-    </form>
-  </div>
-
-  <div class="card">
     <h2>Sessions</h2>
     <p><a href="/sessions">Your sessions</a> hold every conversation you've had in this app.
        Deleting them removes that data from the Claude platform. This cannot be undone.</p>
@@ -74,4 +57,22 @@
       <p>You don't have a vault yet. One is created the first time an agent needs it.</p>
     {% endif %}
   </div>
-{% endblock %}
+
+  <div class="card">
+    <h2>Agent picker</h2>
+    <p><strong>Management agents write data.</strong> They change shared knowledge that everyone
+       relies on (for example, registering entries into the catalog), so they are hidden from the
+       agent picker by default. Only turn them on if you understand what they do — this is a
+       safety reminder, not a permission check.</p>
+    <form method="post" action="/settings/agent-visibility">
+      <label>
+        <input type="checkbox" name="show_management_agents" value="1"
+               {% if show_management_agents %}checked{% endif %}
+               onchange="this.form.submit()">
+        Show management agents in the picker
+      </label>
+      <noscript><button class="btn" type="submit">Save</button></noscript>
+    </form>
+  </div>
+
+  {% endblock %}

@@ -4,13 +4,12 @@
 {% block content %}
   <h1>Choose a prior session</h1>
   {% if sessions %}
-    <p class="muted-note">To remove every session at once, go to <a href="/settings">Settings</a> to delete all sessions.</p>
+    <p class="muted-note">To remove all sessions at once, go to the <a href="/settings">Settings</a> page.</p>
   {% endif %}
   {% for s in sessions %}
     <div class="card session-row">
       <span>
         <a href="/chat/{{ s.session_id | urlencode }}" title="Session {{ s.session_id }}">{{ s.title or ("Session " ~ s.session_id) }}</a>
-        · <a href="/connections?agent_id={{ s.agent_id | urlencode }}">agent</a>
       </span>
       <form method="post" action="/sessions/delete"
             onsubmit="return confirm('Delete this session? This permanently removes its data and cannot be undone.');">
@@ -24,10 +23,10 @@
   <form class="session-row" style="margin-top: 1rem"
         onsubmit="var id = this.session_id.value.trim(); if (!id) return false; window.location = '/chat/' + encodeURIComponent(id); return false;">
     <label for="open-session-id"
-           title="You can only open a session someone else started if they shared it. The person who started the chat must turn on read-only sharing from that session's chat page first.">Open a session by id</label>
+           title="You can only open a session someone else started if they shared it.">Open a session by id</label>
     <input id="open-session-id" name="session_id" type="text" placeholder="Session id" required>
     <button class="btn" type="submit">Open</button>
   </form>
   <p class="muted-note">Opening someone else's session only works if they shared it — the person who
-    started the chat must turn on read-only sharing from that session's chat page first.</p>
+    started the chat must enable "Share read-only" in the <b>Session settings</b> for that session's chat first.</p>
 {% endblock %}
