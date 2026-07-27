@@ -9,25 +9,46 @@
 # default_environment applies to any agent that omits its own environment; an agent may still set
 # environment to override the default.
 #
+# The picker groups agents by section. Each [[sections]] block below declares a section; the order
+# of the blocks is the order the sections render in. A section marked management = true holds agents
+# that write shared data — those are hidden in the picker by default and revealed only when the user
+# opts in via the "show management agents" preference on the Settings page. This is a usability
+# guardrail against accidental use, not access control. An agent with no section (or an undeclared
+# one) falls into a default group rendered after the declared sections.
+#
 # To add an agent: add its spec under claude_platform/agents/, deploy it, then add a [[agents]] block
-# here naming it, and open a PR. The app reads this file once at startup, so a new agent appears after
-# a redeploy — there is no runtime reload.
+# here naming it and its section, and open a PR. The app reads this file once at startup, so a new
+# agent appears after a redeploy — there is no runtime reload.
 
 default_environment = "lik-ui-env"
+
+[[sections]]
+name = "Knowledge"
+
+[[sections]]
+name = "Temporary"
+
+[[sections]]
+name = "Sync to Catalog"
+management = true
 
 [[agents]]
 # Created by init-workspace.py
 agent = "Knowledge Search Agent"
+section = "Knowledge"
 # environment omitted -> uses default_environment above
-
-[[agents]]
-# Defined by claude_platform/agents/lik-query-project-index.yaml
-agent = "LIK Query: Project Index"
-
-[[agents]]
-# Defined by claude_platform/agents/lik-catalog-registration.yaml
-agent = "Catalog Registration Agent"
 
 [[agents]]
 # Defined by claude_platform/agents/lik-cross-source-reference.yaml
 agent = "Cross-Source Referencing Agent"
+section = "Knowledge"
+
+[[agents]]
+# Defined by claude_platform/agents/lik-query-project-index.yaml
+agent = "LIK Query: Project Index"
+section = "Temporary"
+
+[[agents]]
+# Defined by claude_platform/agents/lik-catalog-registration.yaml — writes to the shared Catalog.
+agent = "Catalog Registration Agent"
+section = "Sync to Catalog"

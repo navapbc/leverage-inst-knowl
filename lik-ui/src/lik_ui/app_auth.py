@@ -46,6 +46,23 @@ def require_user(request: Request) -> dict:
     return user
 
 
+# Key under which the per-user "show management agents" preference is stored in the signed
+# session cookie. Absent ⇒ off: management agents are hidden by default.
+_SHOW_MANAGEMENT_AGENTS_KEY = "show_management_agents"
+
+
+def show_management_agents(request: Request) -> bool:
+    """Whether this user has opted to see management (write-capable) agents in the picker.
+    Stored in the session cookie, so it sticks across pages/visits until changed or logout;
+    a fresh session has no key and defaults to False. This is a usability guardrail, not access
+    control — it only affects picker visibility, never whether an agent can be reached."""
+    return bool(request.session.get(_SHOW_MANAGEMENT_AGENTS_KEY, False))
+
+
+def set_show_management_agents(request: Request, value: bool) -> None:
+    request.session[_SHOW_MANAGEMENT_AGENTS_KEY] = bool(value)
+
+
 class GoogleOidcClient:
     """Identity-only OIDC client for app login. Endpoints and signing keys come from
     Google's discovery document; identity is read from the verified ID token."""
@@ -197,10 +214,17 @@ def register_auth_routes(app: FastAPI) -> None:
     async def home(request: Request):
         user = require_user(request)
         agents_client = request.app.state.agents_client
-        agents = []
+        settings: Settings = request.app.state.settings
+        # Management (write-capable) agents are hidden unless the user opted in. This is a
+        # visibility guardrail only: /connections and /chat still resolve a management agent
+        # reached by a direct URL — the toggle never gates access.
+        show_management = show_management_agents(request)
+        infos = []
         for a in request.app.state.agents:
+            if a.is_management and not show_management:
+                continue
             info = {"label": a.agent_id, "agent_id": a.agent_id, "environment_id": a.environment_id,
-                    "system": None, "model": None, "version": None}
+                    "section": a.section, "system": None, "model": None, "version": None}
             if agents_client is not None:
                 try:
                     described = agents_client.describe(a.agent_id)
@@ -209,5 +233,20 @@ def register_auth_routes(app: FastAPI) -> None:
                     info["version"] = described.get("version")
                 except Exception:  # noqa: BLE001 - a details lookup failure shouldn't blank the picker
                     pass
-            agents.append(info)
-        return templates.TemplateResponse(request, "agents.html", {"user": user, "agents": agents})
+            infos.append(info)
+
+        # Group by section in declared order; agents whose section is undeclared fall into a
+        # trailing default group (unlabelled when there are no other sections, so a roster with
+        # no sections renders as a plain flat list exactly as before).
+        section_order = [s.name for s in settings.agent_sections]
+        declared = set(section_order)
+        by_section: dict[str, list] = {}
+        default_agents = []
+        for info in infos:
+            (by_section.setdefault(info["section"], []) if info["section"] in declared
+             else default_agents).append(info)
+        groups = [{"name": name, "agents": by_section[name]} for name in section_order if by_section.get(name)]
+        if default_agents:
+            groups.append({"name": "Other" if groups else "", "agents": default_agents})
+
+        return templates.TemplateResponse(request, "agents.html", {"user": user, "groups": groups})

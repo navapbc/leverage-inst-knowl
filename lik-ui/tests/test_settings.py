@@ -34,6 +34,25 @@ def test_shipped_roster_parses_to_at_least_one_agent():
     assert all(e.agent_name and e.environment_name for e in roster)
 
 
+def test_shipped_roster_agents_reference_declared_sections():
+    # Guards against a section rename/typo leaving an agent pointing at an undeclared section —
+    # which would silently drop it into the default group as non-management (unhidden).
+    s = Settings(env="test")
+    declared = {sec.name for sec in s.agent_sections}
+    for entry in s.agent_roster:
+        assert entry.section == "" or entry.section in declared, (
+            f"{entry.agent_name!r} references undeclared section {entry.section!r}"
+        )
+
+
+def test_shipped_roster_hides_catalog_registration_as_management():
+    # The Catalog Registration Agent writes to the shared Catalog, so it must live in a
+    # management (hidden-by-default) section.
+    s = Settings(env="test")
+    catalog = next(e for e in s.agent_roster if e.agent_name == "Catalog Registration Agent")
+    assert catalog.is_management is True
+
+
 def test_agent_roster_lists_configured_agents_in_file_order(tmp_path):
     path = _roster(
         tmp_path,
@@ -108,6 +127,80 @@ def test_agent_roster_skips_entry_missing_agent_name(tmp_path):
     )
     s = Settings(env="test", agents_config_path=path)
     assert [(e.agent_name, e.environment_name) for e in s.agent_roster] == [("Agent OK", "Env OK")]
+
+
+def test_agent_roster_resolves_section_and_management_flag(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[sections]]
+        name = "Knowledge"
+
+        [[sections]]
+        name = "Management"
+        management = true
+
+        [[agents]]
+        agent = "Searcher"
+        section = "Knowledge"
+
+        [[agents]]
+        agent = "Registrar"
+        section = "Management"
+        """,
+    )
+    s = Settings(env="test", agents_config_path=path)
+    by_name = {e.agent_name: e for e in s.agent_roster}
+    assert by_name["Searcher"].section == "Knowledge"
+    assert by_name["Searcher"].is_management is False
+    assert by_name["Registrar"].section == "Management"
+    assert by_name["Registrar"].is_management is True
+
+
+def test_agent_sections_preserve_declaration_order(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[sections]]
+        name = "Management"
+        management = true
+
+        [[sections]]
+        name = "Knowledge"
+        """,
+    )
+    sections = Settings(env="test", agents_config_path=path).agent_sections
+    assert [(s.name, s.is_management) for s in sections] == [("Management", True), ("Knowledge", False)]
+
+
+def test_agent_without_section_falls_into_default_group(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[sections]]
+        name = "Knowledge"
+
+        [[agents]]
+        agent = "Loner"
+        """,
+    )
+    entry = Settings(env="test", agents_config_path=path).agent_roster[0]
+    assert entry.section == ""
+    assert entry.is_management is False
+
+
+def test_agent_referencing_undeclared_section_is_not_management(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Orphan"
+        section = "Nowhere"
+        """,
+    )
+    entry = Settings(env="test", agents_config_path=path).agent_roster[0]
+    assert entry.section == "Nowhere"
+    assert entry.is_management is False  # undeclared section -> default, non-management
 
 
 def test_require_production_config_raises_when_unconfigured():

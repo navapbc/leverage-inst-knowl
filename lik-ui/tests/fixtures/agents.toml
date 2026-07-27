@@ -2,5 +2,9 @@
 # client resolves these names to agent_1 / env_1 at startup (see FakeAgentsClient in test_agents.py).
 default_environment = "Test Env"
 
+[[sections]]
+name = "Knowledge"
+
 [[agents]]
 agent = "Test Agent"
+section = "Knowledge"
