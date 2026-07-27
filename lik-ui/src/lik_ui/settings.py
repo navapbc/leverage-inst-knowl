@@ -134,6 +134,11 @@ class Settings(BaseSettings):
 
     # --- Anthropic / Managed Agents ------------------------------------------------
     anthropic_api_key: str = ""
+    # How long (seconds) to cache each agent's SDK ``describe`` result. The picker and
+    # connections page fetch one agent definition per load, but definitions only change on
+    # redeploy, so a short cache collapses bursts of loads into one fetch per agent. 0 disables
+    # caching (always fetch). A redeploy restarts the process and clears the cache regardless.
+    agent_describe_ttl: int = 60
 
     # --- Repo links (GitHub "view on GitHub" affordance) ---------------------------
     # The repo slug + ref used to build blob URLs for the connections page's skill links

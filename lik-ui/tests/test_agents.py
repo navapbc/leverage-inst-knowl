@@ -6,7 +6,12 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from lik_ui.agents import AnthropicAgentsClient, resolve_connections
+from lik_ui.agents import (
+    AnthropicAgentsClient,
+    CachingAgentsClient,
+    build_agents_client,
+    resolve_connections,
+)
 from lik_ui.app import build_app
 from lik_ui.db import Store
 from lik_ui.settings import Settings
@@ -63,6 +68,114 @@ def test_resolve_matches_across_trailing_slash():
     conns = resolve_connections([github], {"https://api.githubcopilot.com/mcp"})
     assert conns[0]["connected"] is True
     assert conns[0]["url"] == "https://api.githubcopilot.com/mcp/"  # declared form preserved for the connect link
+
+
+class CountingAgentsClient:
+    """Delegate that records how often each method is hit, so the cache wrapper can be checked
+    by counting the underlying calls. ``describe`` returns per-agent-id data to prove no bleed."""
+
+    def __init__(self):
+        self.describe_calls: list[str] = []
+        self.skill_calls = 0
+        self.resolve_agent_calls = 0
+        self.resolve_env_calls = 0
+        self.describe_error: Exception | None = None
+
+    def resolve_agent_id(self, name):
+        self.resolve_agent_calls += 1
+        return f"id-{name}"
+
+    def resolve_environment_id(self, name):
+        self.resolve_env_calls += 1
+        return f"env-{name}"
+
+    def describe(self, agent_id):
+        self.describe_calls.append(agent_id)
+        if self.describe_error is not None:
+            raise self.describe_error
+        return {"name": agent_id, "servers": [], "system": None, "model": None,
+                "skills": [], "version": "1"}
+
+    def describe_skill(self, skill_id, version):
+        self.skill_calls += 1
+        return {"name": skill_id, "description": "x"}
+
+
+def test_caching_describe_hits_delegate_once_within_ttl():
+    delegate = CountingAgentsClient()
+    client = CachingAgentsClient(delegate, ttl_seconds=60)
+    first = client.describe("a")
+    second = client.describe("a")
+    assert delegate.describe_calls == ["a"]  # one underlying fetch
+    assert first == second
+
+
+def test_caching_describe_refetches_after_ttl_expiry(monkeypatch):
+    delegate = CountingAgentsClient()
+    client = CachingAgentsClient(delegate, ttl_seconds=60)
+    clock = {"now": 1000.0}
+    monkeypatch.setattr("lik_ui.agents.time.monotonic", lambda: clock["now"])
+    client.describe("a")
+    clock["now"] += 61  # past the TTL window
+    client.describe("a")
+    assert delegate.describe_calls == ["a", "a"]  # re-fetched after expiry
+
+
+def test_caching_describe_isolates_distinct_ids():
+    delegate = CountingAgentsClient()
+    client = CachingAgentsClient(delegate, ttl_seconds=60)
+    a = client.describe("a")
+    b = client.describe("b")
+    assert delegate.describe_calls == ["a", "b"]  # one fetch each, no cross-agent bleed
+    assert a["name"] == "a" and b["name"] == "b"
+
+
+def test_caching_disabled_when_ttl_zero():
+    delegate = CountingAgentsClient()
+    client = CachingAgentsClient(delegate, ttl_seconds=0)
+    client.describe("a")
+    client.describe("a")
+    assert delegate.describe_calls == ["a", "a"]  # pass-through, always fetch
+
+
+def test_caching_delegates_non_describe_methods_uncached():
+    delegate = CountingAgentsClient()
+    client = CachingAgentsClient(delegate, ttl_seconds=60)
+    assert client.resolve_agent_id("x") == "id-x"
+    client.resolve_agent_id("x")
+    client.resolve_environment_id("y")
+    client.describe_skill("s", "1")
+    client.describe_skill("s", "1")
+    assert delegate.resolve_agent_calls == 2  # not cached
+    assert delegate.resolve_env_calls == 1
+    assert delegate.skill_calls == 2  # not cached
+
+
+def test_caching_does_not_store_on_delegate_error():
+    delegate = CountingAgentsClient()
+    delegate.describe_error = RuntimeError("boom")
+    client = CachingAgentsClient(delegate, ttl_seconds=60)
+    with pytest.raises(RuntimeError):
+        client.describe("a")
+    delegate.describe_error = None
+    client.describe("a")  # cache was not poisoned by the failure — re-attempts the delegate
+    assert delegate.describe_calls == ["a", "a"]
+
+
+def test_build_agents_client_wraps_with_caching():
+    settings = Settings(env="prod", anthropic_api_key="sk-test", agent_describe_ttl=42)
+    client = build_agents_client(settings)
+    assert isinstance(client, CachingAgentsClient)
+    assert isinstance(client._delegate, AnthropicAgentsClient)
+    assert client._ttl == 42
+
+
+def test_build_agents_client_returns_none_for_stub():
+    assert build_agents_client(Settings(env="local")) is None
+
+
+def test_agent_describe_ttl_defaults_to_60():
+    assert Settings().agent_describe_ttl == 60
 
 
 def test_describe_skill_resolves_latest_version():

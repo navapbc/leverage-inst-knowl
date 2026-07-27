@@ -6,6 +6,8 @@ required set against the credentials already in the user's vault to show connect
 status and drive the connect action for each missing source.
 """
 
+import threading
+import time
 from typing import Protocol
 
 from .settings import AgentOption, Settings
@@ -106,10 +108,54 @@ class AnthropicAgentsClient:
         return {"name": v.name, "description": v.description}
 
 
+class CachingAgentsClient:
+    """Wraps an ``AgentsClient`` and memoizes ``describe(agent_id)`` for a short TTL.
+
+    The home picker and connections page call ``describe`` on every load — one SDK ``retrieve``
+    per configured agent — but an agent's definition only changes on redeploy, so the repeated
+    lookups are almost entirely redundant. This decorator collapses a burst of loads into at most
+    one underlying fetch per agent per TTL window. Every other method delegates straight through;
+    only ``describe`` is cached. A ``ttl_seconds`` of 0 disables caching (always fetch), preserving
+    the pre-cache behavior. Expiry keys off ``time.monotonic()`` so a wall-clock adjustment can't
+    skew it. A redeploy restarts the process and empties the cache, so there is no manual bust."""
+
+    def __init__(self, delegate: AgentsClient, ttl_seconds: int):
+        self._delegate = delegate
+        self._ttl = ttl_seconds
+        self._lock = threading.Lock()
+        # agent_id -> (value, expires_at monotonic seconds)
+        self._cache: dict[str, tuple[dict, float]] = {}
+
+    def resolve_agent_id(self, name: str) -> str:
+        return self._delegate.resolve_agent_id(name)
+
+    def resolve_environment_id(self, name: str) -> str:
+        return self._delegate.resolve_environment_id(name)
+
+    def describe(self, agent_id: str) -> dict:
+        if self._ttl <= 0:
+            return self._delegate.describe(agent_id)
+        now = time.monotonic()
+        with self._lock:
+            entry = self._cache.get(agent_id)
+            if entry is not None and entry[1] > now:
+                return entry[0]
+        # Fetch outside the lock so a slow SDK call doesn't serialize every describe. Callers treat
+        # the returned dict as read-only, so the shared instance is safe to hand back uncopied.
+        value = self._delegate.describe(agent_id)
+        with self._lock:
+            self._cache[agent_id] = (value, time.monotonic() + self._ttl)
+        return value
+
+    def describe_skill(self, skill_id: str, version: str) -> dict:
+        return self._delegate.describe_skill(skill_id, version)
+
+
 def build_agents_client(settings: Settings) -> AgentsClient | None:
     if settings.is_stub:
         return None
-    return AnthropicAgentsClient(settings.anthropic_api_key)
+    delegate = AnthropicAgentsClient(settings.anthropic_api_key)
+    return CachingAgentsClient(delegate, settings.agent_describe_ttl)
 
 
 def resolve_agent_options(settings: Settings, agents_client: AgentsClient | None) -> list[AgentOption]:
