@@ -11,24 +11,27 @@
     <p>You retain control over this data: you can delete sessions at any time.</p>
     <p>For more details, see <a href="https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md" target="_blank">claude-managed-agents.md</a>.</p>
   </div>
-  {% for a in agents %}
-    <div class="card">
-      <a class="btn" href="/connections?agent_id={{ a.agent_id | urlencode }}">Select</a>
-      <strong>{{ a.label }}</strong>
-      <details>
-        <summary>Details</summary>
-        <dl>
-          <dt>Agent ID</dt><dd>{{ a.agent_id }}</dd>
-          <dt>Environment ID</dt><dd>{{ a.environment_id }}</dd>
-          {% if a.version %}<dt>Version</dt><dd>{{ a.version }}</dd>{% endif %}
-          {% if a.model %}<dt>Model</dt><dd>{{ a.model }}</dd>{% endif %}
-        </dl>
-        {% if a.system %}
-          <div class="prompt-label">System prompt</div>
-          <pre>{{ a.system }}</pre>
-        {% endif %}
-      </details>
-    </div>
+  {% for group in groups %}
+    {% if group.name %}<h2 class="section-heading">{{ group.name }}</h2>{% endif %}
+    {% for a in group.agents %}
+      <div class="card">
+        <a class="btn" href="/connections?agent_id={{ a.agent_id | urlencode }}">Select</a>
+        <strong>{{ a.label }}</strong>
+        <details>
+          <summary>Details</summary>
+          <dl>
+            <dt>Agent ID</dt><dd>{{ a.agent_id }}</dd>
+            <dt>Environment ID</dt><dd>{{ a.environment_id }}</dd>
+            {% if a.version %}<dt>Version</dt><dd>{{ a.version }}</dd>{% endif %}
+            {% if a.model %}<dt>Model</dt><dd>{{ a.model }}</dd>{% endif %}
+          </dl>
+          {% if a.system %}
+            <div class="prompt-label">System prompt</div>
+            <pre>{{ a.system }}</pre>
+          {% endif %}
+        </details>
+      </div>
+    {% endfor %}
   {% else %}
     <p>No agents are configured. Add a spec under <code>claude_platform/agents/</code>, deploy it,
        and list it in <code>agents.toml</code>.</p>

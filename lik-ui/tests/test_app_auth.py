@@ -100,6 +100,107 @@ def test_home_redirects_anonymous_to_login(db):
     assert r.headers["location"] == "/login"
 
 
+class SectionAgentsClient:
+    """Resolves distinct ids per agent name and describes each with a distinct label, so the
+    grouped/filtered picker can be observed in the rendered HTML."""
+
+    def __init__(self, name_to_id):
+        self.name_to_id = name_to_id
+        self.id_to_label = {v: k for k, v in name_to_id.items()}
+
+    def resolve_agent_id(self, name):
+        return self.name_to_id[name]
+
+    def resolve_environment_id(self, name):
+        return "env_1"
+
+    def describe(self, agent_id):
+        return {"name": self.id_to_label[agent_id], "servers": [], "system": None,
+                "model": None, "skills": [], "version": None}
+
+
+_SECTION_ROSTER = """
+default_environment = "Env"
+
+[[sections]]
+name = "Knowledge"
+
+[[sections]]
+name = "Management"
+management = true
+
+[[agents]]
+agent = "Searcher"
+section = "Knowledge"
+
+[[agents]]
+agent = "Registrar"
+section = "Management"
+
+[[agents]]
+agent = "Loner"
+"""
+
+
+def _section_client(db, tmp_path, roster=_SECTION_ROSTER):
+    path = tmp_path / "agents.toml"
+    path.write_text(roster)
+    settings = Settings(env="test", agents_config_path=path)
+    from tests.test_oauth_connector import RecordingVaultClient
+
+    agents_client = SectionAgentsClient({"Searcher": "id_search", "Registrar": "id_reg", "Loner": "id_lone"})
+    oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
+    app = build_app(settings, store=Store(db), app_oidc=oidc, vault_client=RecordingVaultClient(),
+                    agents_client=agents_client)
+    client = TestClient(app, follow_redirects=False)
+    state = _start_login_and_get_state(client)
+    client.get(f"/auth/callback?code=x&state={state}")
+    return client
+
+
+def test_picker_hides_management_section_by_default(db, tmp_path):
+    html = _section_client(db, tmp_path).get("/").text
+    assert "Searcher" in html          # non-management agent shown
+    assert "Knowledge" in html         # its section heading shown
+    assert "Registrar" not in html     # management agent hidden by default (AE1)
+    assert "Management" not in html    # empty (all-filtered) section renders no heading
+
+
+def test_picker_shows_management_section_when_enabled(db, tmp_path):
+    client = _section_client(db, tmp_path)
+    client.post("/settings/agent-visibility", data={"show_management_agents": "1"})
+    html = client.get("/").text
+    assert "Registrar" in html         # now visible (AE1)
+    assert "Management" in html         # its heading now rendered
+
+
+def test_sectionless_agent_falls_into_default_group(db, tmp_path):
+    html = _section_client(db, tmp_path).get("/").text
+    assert "Loner" in html             # AE4: no-section agent still renders
+    assert "Other" in html             # under the trailing default heading
+
+
+def test_sections_render_in_declared_order(db, tmp_path):
+    client = _section_client(db, tmp_path)
+    client.post("/settings/agent-visibility", data={"show_management_agents": "1"})
+    html = client.get("/").text
+    assert html.index("Knowledge") < html.index("Management") < html.index("Other")
+
+
+def test_management_agent_reachable_by_direct_url_when_hidden(db, tmp_path):
+    """AE3: the toggle is cosmetic — a management agent hidden from the picker is still reachable
+    by a direct /connections URL."""
+    client = _section_client(db, tmp_path)  # toggle off by default
+    r = client.get("/connections?agent_id=id_reg")
+    assert r.status_code == 200
+    assert "Registrar" in r.text
+
+
+def test_empty_roster_shows_empty_state(db, tmp_path):
+    html = _section_client(db, tmp_path, roster='default_environment = "Env"\n').get("/").text
+    assert "No agents are configured" in html
+
+
 def test_logout_clears_session(db):
     client, _, _ = _client(db, {"email": "alice@navapbc.com", "email_verified": True})
     state = _start_login_and_get_state(client)
