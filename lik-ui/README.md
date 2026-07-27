@@ -300,20 +300,19 @@ browser never detects), the strip can stay frozen on "⚙ Working…"/"✍️ Re
 never clear — so if it looks stuck with no new text arriving, refresh rather than keep
 waiting. A refresh always reloads the true state from the server.
 
-**Next step if needed:** we've confirmed the ~60s *idle* limit, but not whether the
-Lightsail container service also caps the *total* length of a single connection regardless
-of activity. Even if it does, the reply isn't lost: a hard cap closes the connection
-cleanly, so `onerror` fires and the auto-reconnect re-attaches via `/resume` and keeps
-streaming (the turn survives repeated culls by design). The only symptom would be a periodic
-"⚙ Reconnecting…" flicker every cap-interval — a UX blemish, not data loss — so this may not
-be worth fixing at all. If it is, options that keep the app in Lightsail come first:
-(1) **proactive connection cycling** — have the client close and re-open the stream on a
-timer just before the cap, reusing the existing `/resume` machinery, so the re-attach is
-seamless; (2) a **Lightsail VM instance** fronted by your own nginx, where `proxy_read_timeout`
-is yours to set. Moving off Lightsail to ECS/EC2 behind an ALB (configurable timeout) is only
-warranted if you're leaving Lightsail for other reasons too. Regardless of choice, do **not**
-front the app with a Lightsail distribution/CDN — its 30s limit breaks live streaming. See
-`../domain-name.md` (Caveat: real-time streaming and timeouts).
+**No total-duration cap — measured.** Besides the ~60s *idle* limit, we checked whether the
+Lightsail container service also caps the *total* length of a single connection regardless of
+activity. It does not: a streaming connection emitting a keepalive every 15s stayed open,
+uninterrupted, for the full **31 minutes** tested, with no server-side close (the test ended
+on the client's own timeout). So with the 15s heartbeat, a connection lasts as long as the
+agent needs — the idle cull is the only ingress timeout, and no total-cap fix is warranted.
+
+Even if a longer cap existed beyond what we tested, it wouldn't lose a reply: a hard cap
+closes cleanly, so `onerror` fires and the auto-reconnect re-attaches via `/resume` and keeps
+streaming (the turn survives repeated culls by design) — the only symptom would be a periodic
+"⚙ Reconnecting…" flicker. One standing constraint regardless: do **not** front the app with a
+Lightsail distribution/CDN — its 30s limit breaks live streaming. See `../domain-name.md`
+(Caveat: real-time streaming and timeouts).
 
 ### DONE: OAuth client registrations: ownership
 
