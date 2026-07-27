@@ -124,7 +124,12 @@ def resolve_agent_options(settings: Settings, agents_client: AgentsClient | None
     for entry in settings.agent_roster:
         agent_id = agents_client.resolve_agent_id(entry.agent_name)
         environment_id = agents_client.resolve_environment_id(entry.environment_name)
-        options.append(AgentOption(agent_id=agent_id, environment_id=environment_id))
+        options.append(AgentOption(
+            agent_id=agent_id,
+            environment_id=environment_id,
+            section=entry.section,
+            is_management=entry.is_management,
+        ))
     return options
 
 

@@ -239,6 +239,28 @@ def test_resolve_agent_options_maps_roster_names_to_ids(tmp_path):
     assert [(o.agent_id, o.environment_id) for o in options] == [("agent_1", "env_1")]
 
 
+def test_resolve_agent_options_carries_section_and_management(tmp_path):
+    """Section metadata from the roster is carried onto the resolved AgentOptions so the picker
+    can group and hide management agents without re-reading the roster."""
+    from lik_ui.agents import resolve_agent_options
+    from lik_ui.settings import Settings
+
+    path = tmp_path / "agents.toml"
+    path.write_text(
+        'default_environment = "Env"\n\n'
+        '[[sections]]\nname = "Knowledge"\n\n'
+        '[[sections]]\nname = "Management"\nmanagement = true\n\n'
+        '[[agents]]\nagent = "Searcher"\nsection = "Knowledge"\n\n'
+        '[[agents]]\nagent = "Registrar"\nsection = "Management"\n'
+    )
+    settings = Settings(env="test", agents_config_path=path)
+    options = resolve_agent_options(settings, FakeAgentsClient([LIK]))
+    assert [(o.section, o.is_management) for o in options] == [
+        ("Knowledge", False),
+        ("Management", True),
+    ]
+
+
 def test_resolve_agent_options_empty_without_client(tmp_path):
     """No agents client (local/test stub) -> empty resolved list, so the app still boots."""
     from lik_ui.agents import resolve_agent_options
