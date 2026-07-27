@@ -13,6 +13,7 @@ and [../docs/brainstorms/2026-06-24-01-catalog-confirmations-mcp-service-require
 - `register_catalog_entry(entry)` — register a Catalog row; a skill upserts its own row on `(entry_type, subject, computed_by)`, a human-owned row inserts a new pointer (duplicates on a key coexist).
 - `lookup_catalog_entry(entry_type, subject)` — resolve the key to all matching pointers, ranked best-first (the top row is the default); an empty result is a clean miss.
 - `list_catalog_entries(entry_type)` — every Catalog row for one `entry_type`, ordered by subject; bounded by the discovery key, not a free-form predicate.
+- `search_catalog_entries(entry_type, query, category=None, limit=10)` — partial + fuzzy match on `subject` within one `entry_type`, top `limit` rows ranked by similarity; a bounded candidate set for placing a fuzzy question on the right key, not a full read. Optional `category` is an exact-match pre-filter; an empty result is a clean miss.
 - `confirm_source(citation)` — record a confirmation; rejects unresolvable citations, one row per user per source (re-confirming updates the stored content-state marker).
 - `read_confirmations(citation, current_source_state=None)` — accumulated confirmations for one cited source, one row per user; pass the live marker to flag each row's `edited_since`.
 
@@ -30,8 +31,9 @@ Run everything through `uv run` (it uses `.venv` automatically — no activation
 ## Configuration
 
 Copy `.env.example` to `.env` and edit. `LIK_ENV=local|test` uses a stub identity
-verifier; any other value — including cloud `dev`/`prod` — fails closed (real Google OIDC
-is a later slice). Swapping databases is a credentials change here, never code.
+verifier; any other value — including cloud `dev`/`prod` — verifies a real Google OIDC
+token per request and fails closed without one. Swapping databases is a credentials change
+here, never code.
 
 ## Test
 
@@ -241,27 +243,27 @@ docker compose down -v && docker compose up --build -d
 
 ## TODO
 
-A local/test harness with throwaway data, not yet a production service. Real Google token
-verification is wired (`LIK_ENV` outside `local`/`test`), but enforced access has not
-landed — so do not load real or restricted data yet:
+lik-mcp runs in production on Lightsail with real data. Every request is authorized by a
+verified Google OIDC token (`LIK_ENV=prod`), so `confirmed_by` / `updated_by` reflect a
+real caller — the `local`/`test` stub identity is confined to those environments. The items
+below are remaining hardening and scaling work, not blockers to loading real data.
 
-**Current limits (do not treat these as done):**
+**Access control is by design, not a gap.** The Catalog and confirmation signals hold
+**pointers and metadata**, not restricted source content, so they are readable org-wide by
+any verified Nava caller; real enforcement happens at the **target Data Source** when a user
+follows a pointer. Reads therefore apply **no per-row `access_groups` filtering on purpose**
+— `access_groups` is carried as routing metadata, and there is **no** planned Group →
+Postgres-role RLS bridge.
 
-- **Identity is only verified on a real deploy.** In `local`/`test` the stub treats the
-  token as the caller's email, so `confirmed_by` / `updated_by` are effectively
-  self-asserted and confirmations accumulated this way are not real trust. A deploy
-  (`LIK_ENV=dev`/`prod` with the OAuth vars set) verifies a real Google token per request.
-- **No access control.** There is no Group → Postgres-role RLS yet; reads return
-  rows with **no `access_groups` filtering**. Do **not** load real or restricted
-  data into any instance.
+**Known limits (still open):**
+
 - **Citations aren't really resolved.** `ShapeResolver` only checks well-formedness
   and a known `store_kind` — it does not confirm the cited source exists/reaches.
 - **No governed-writer security or durability.** Keyless/rotated credentials, audit
   logging, and confirmation backup/retention are unbuilt.
 
-**Deferred work that lifts the limits (see the plan's scope boundaries):**
+**Planned work:**
 
-- Google-Group → Postgres-role RLS bridge (enforces `access_groups` on reads).
 - Real per-store citation resolution (behind the existing `CitationResolver` seam).
 - Governed-writer controls: keyless/rotated credentials, least privilege, audit logging.
 - Confirmation backup/retention, plus rate-limiting / minimum-distinct-confirmer thresholds.

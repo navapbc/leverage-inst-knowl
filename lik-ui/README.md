@@ -79,6 +79,18 @@ the live app:
 - Connect one data source (exercises `/connections/callback`) and make a lik-mcp call
   (exercises the resource URL; expect a one-time reconnect after a resource-URL change).
 
+## Configuration
+
+All config is `LIK_UI_`-prefixed; see `.env.example`. Outside `local`/`test`, the app
+fails closed if app-login, vault, or agent config is missing. Secrets are never logged.
+
+`LIK_UI_APP_BASE_URL` is the public HTTPS URL the app is reached at; **both OAuth callback
+URLs are derived from it** (`{base}/auth/callback` for login, `{base}/connections/callback`
+for data sources — see `src/lik_ui/__main__.py`). It must match the redirect URIs registered
+with each OAuth provider. In the production Terraform deploy this value is not set by hand —
+it is computed from the container service's URL (or a custom domain when configured); see
+[`../infra/README.md`](../infra/README.md) "URL-derived env values and custom domains".
+
 ## Add an agent
 
 An agent shown in lik-ui's picker is two things: a **definition** on the Claude Managed Agents
@@ -122,41 +134,28 @@ Deploy agents Action — it updates in place. Editing only a skill it references
 Claude platform** Action publishes a new version, and agents pinned to `latest` pick it up on their
 next session — no app redeploy needed.
 
-## DONE: cache agent `describe` results
+## OAuth connector: why it's hand-rolled
 
-The home (agent picker) and connections pages — plus the chat label and chat-resume paths —
-call `AgentsClient.describe(agent_id)` on every load, one Anthropic SDK `retrieve` per
-configured agent. The agent definition (system prompt, model, declared servers) changes only on
-redeploy, so `CachingAgentsClient` (in `src/lik_ui/agents.py`) wraps the real client and memoizes
-`describe` per agent for a short TTL, collapsing a burst of loads into at most one fetch per agent
-per window. Only `describe` is cached; every other method delegates straight through. The window
-is `LIK_UI_AGENT_DESCRIBE_TTL` (default 60s; `0` disables caching). A redeploy restarts the
-process and empties the cache, so there is no manual bust.
+`src/lik_ui/oauth_connector.py` implements MCP OAuth from scratch rather than using a
+library. This is a deliberate choice, not an oversight.
 
-## DONE: show full skill instructions (SKILL.md)
+The bulk of that file is discovery and client acquisition — RFC 9728 protected-resource
+metadata, RFC 8414 / OpenID authorization-server metadata, and RFC 7591 dynamic client
+registration. General OAuth libraries (authlib, httpx-oauth) don't cover any of these;
+they only handle the small, already-clean tail (PKCE, the authorization URL, and token
+exchange, ~40 lines). Adopting one would add a dependency without removing the hard parts.
 
-Expanding a skill's "Details" on the connections page shows its full `SKILL.md` alongside the
-name and description. The instructions come from **GitHub**, the single source of truth (skills
-are deployed *to* Managed Agents from `claude_platform/skills/<name>/` — see
-[`scripts/README.md`](../scripts/README.md)), not from Managed Agents:
-`beta.skills.versions.download` is a dead end (it 403s with "Downloading skill content is not
-supported with this credential type"). `skill_docs.py` fetches the raw
-`claude_platform/skills/<name>/SKILL.md` from the **public** repo with a plain unauthenticated GET —
-addressed by skill *name*, which the deploy pipeline guarantees equals the directory. The repo
-and ref are configurable via `LIK_UI_SKILLS_REPO` (default `navapbc/leverage-inst-knowl`) and
-`LIK_UI_SKILLS_REF` (default `main`).
+The one library that covers the whole chain is the official MCP Python SDK's OAuth client
+(`mcp.client.auth`). It's built for a client that *holds* the tokens and injects them into
+its own MCP requests. lik-ui deliberately splits **connection** (this app acquires tokens
+and deposits them in the user's vault) from **usage** (a separate Managed Agent consumes
+them), so the SDK's token-lifecycle model doesn't fit — we'd fight its assumptions to reuse
+its discovery internals. If a future SDK release exposes discovery + DCR as standalone
+helpers, revisit replacing `discover()` and `_acquire_via_dcr()`.
 
-Any fetch failure (404, non-200, timeout, or the repo later going private) degrades gracefully:
-the view shows a fallback line linking the file on GitHub so the user can open it themselves,
-never a page or endpoint error. The `SKILL.md` is rendered as Markdown (headings/lists/links)
-client-side with the same `marked` + `DOMPurify` pipeline as the chat transcript — the endpoint
-still returns the raw text, and if the CDN libs don't load the view falls back to the literal
-text so instructions are never lost.
+## TODO items
 
-Deferred: caching the fetched file (align with the `describe`-caching TODO above if per-expand
-fetches become a concern).
-
-## Workaround: per-user authorization and billing for Anthropic API access
+### Workaround: per-user authorization and billing for Anthropic API access
 
 lik-ui talks to the Managed Agents platform with a single shared Anthropic credential today, so
 every user's traffic bills and authorizes as one principal. It would be a **nice-to-have** for
@@ -182,51 +181,7 @@ per-user rate-limiting or spend enforcement.
 Keep the single shared workspace
 key and do per-user attribution in lik-ui's own DB, which we control and can fully automate.
 
-## DONE: dedicated Claude Workspace for LIK
-
-LIK's Anthropic usage now lives in its own Claude Workspace
-(https://platform.claude.com/settings/workspaces) rather than the org's default one. A
-dedicated workspace isolates LIK's spend, rate limits, and API keys, so its usage can be
-tracked and capped without affecting other Nava work, and access can be scoped to just the
-people who run it.
-
-**Why a separate workspace was required.** The lik-ui app uses the Claude
-Platform and stores its OAuth secrets in "Credential vaults", which are visible to *everyone*
-with access to the workspace they live in — and the vault IDs can be used to get access to
-data as other users, which is an impersonation risk. In the shared `Default` workspace,
-every member could therefore see LIK's OAuth secrets. To close that gap, a separate `lik-ui`
-workspace was created that only the LIK developers and IT admins can access, so the OAuth secrets
-are protected.
-
-More details at https://platform.claude.com/docs/en/manage-claude/workspaces.
-
-## TODO: streaming timeouts on the deployed ingress (scaling)
-
-The chat streams the agent's reply to the browser live. On the current Lightsail deployment,
-the connection is dropped if it stays quiet for about 60 seconds — and the agent often goes
-quiet that long while it's thinking between steps. When that happened, the reply was still
-finished and saved on the server, but it never showed up in the open chat.
-
-**Largely fixed** as of PR #33 (navapbc/leverage-inst-knowl):
-
-- A small "still here" signal is sent every 15 seconds during quiet stretches, so the
-  connection isn't dropped in the first place.
-- If it *is* dropped, the page automatically reconnects and picks up the reply — the user
-  doesn't lose it.
-
-**Workaround if a reply ever goes missing:** wait until the agent looks idle, then refresh
-the page. The reply is saved on the server, so reloading brings it back. (This is the
-fallback the automatic reconnect now handles for you.)
-
-**Remaining risk:** we've confirmed the ~60s *idle* limit, but not whether Lightsail also
-caps the *total* length of a single connection regardless of activity. If it does, the
-heartbeat won't help (the auto-reconnect still recovers the reply, and refreshing won't if
-the server never got to finish), and the real fix is to move off the Lightsail ingress to
-ECS/EC2 behind an ALB, where the timeout is configurable. Also avoid fronting the app with a
-Lightsail distribution/CDN — its 30s limit breaks live streaming. See `../domain-name.md`
-(Caveat: real-time streaming and timeouts).
-
-## TODO: auto-archive or delete stale chat sessions
+### ONLY IF NEEDED: auto-archive or delete stale chat sessions
 
 Today a session lives forever: `SessionsClient.create_session` mints a Managed Agents
 session and `db.py` keeps a local row (`session_id`, `user_id`, `agent_id`, `title`,
@@ -269,38 +224,98 @@ Design notes if we build this:
   sweep or lazy-on-list. Keep the local row and the platform session in sync — the code already
   handles `SessionNotFound` for platform sessions that vanish out-of-band.
 
-## Configuration
+### DONE: cache agent `describe` results
 
-All config is `LIK_UI_`-prefixed; see `.env.example`. Outside `local`/`test`, the app
-fails closed if app-login, vault, or agent config is missing. Secrets are never logged.
+The home (agent picker) and connections pages — plus the chat label and chat-resume paths —
+call `AgentsClient.describe(agent_id)` on every load, one Anthropic SDK `retrieve` per
+configured agent. The agent definition (system prompt, model, declared servers) changes only on
+redeploy, so `CachingAgentsClient` (in `src/lik_ui/agents.py`) wraps the real client and memoizes
+`describe` per agent for a short TTL, collapsing a burst of loads into at most one fetch per agent
+per window. Only `describe` is cached; every other method delegates straight through. The window
+is `LIK_UI_AGENT_DESCRIBE_TTL` (default 60s; `0` disables caching). A redeploy restarts the
+process and empties the cache, so there is no manual bust.
 
-`LIK_UI_APP_BASE_URL` is the public HTTPS URL the app is reached at; **both OAuth callback
-URLs are derived from it** (`{base}/auth/callback` for login, `{base}/connections/callback`
-for data sources — see `src/lik_ui/__main__.py`). It must match the redirect URIs registered
-with each OAuth provider. In the production Terraform deploy this value is not set by hand —
-it is computed from the container service's URL (or a custom domain when configured); see
-[`../infra/README.md`](../infra/README.md) "URL-derived env values and custom domains".
+### DONE: show full skill instructions (SKILL.md)
 
-## OAuth connector: why it's hand-rolled
+Expanding a skill's "Details" on the connections page shows its full `SKILL.md` alongside the
+name and description. The instructions come from **GitHub**, the single source of truth (skills
+are deployed *to* Managed Agents from `claude_platform/skills/<name>/` — see
+[`scripts/README.md`](../scripts/README.md)), not from Managed Agents:
+`beta.skills.versions.download` is a dead end (it 403s with "Downloading skill content is not
+supported with this credential type"). `skill_docs.py` fetches the raw
+`claude_platform/skills/<name>/SKILL.md` from the **public** repo with a plain unauthenticated GET —
+addressed by skill *name*, which the deploy pipeline guarantees equals the directory. The repo
+and ref are configurable via `LIK_UI_SKILLS_REPO` (default `navapbc/leverage-inst-knowl`) and
+`LIK_UI_SKILLS_REF` (default `main`).
 
-`src/lik_ui/oauth_connector.py` implements MCP OAuth from scratch rather than using a
-library. This is a deliberate choice, not an oversight.
+Any fetch failure (404, non-200, timeout, or the repo later going private) degrades gracefully:
+the view shows a fallback line linking the file on GitHub so the user can open it themselves,
+never a page or endpoint error. The `SKILL.md` is rendered as Markdown (headings/lists/links)
+client-side with the same `marked` + `DOMPurify` pipeline as the chat transcript — the endpoint
+still returns the raw text, and if the CDN libs don't load the view falls back to the literal
+text so instructions are never lost.
 
-The bulk of that file is discovery and client acquisition — RFC 9728 protected-resource
-metadata, RFC 8414 / OpenID authorization-server metadata, and RFC 7591 dynamic client
-registration. General OAuth libraries (authlib, httpx-oauth) don't cover any of these;
-they only handle the small, already-clean tail (PKCE, the authorization URL, and token
-exchange, ~40 lines). Adopting one would add a dependency without removing the hard parts.
+Deferred: caching the fetched file (align with the `describe`-caching TODO above if per-expand
+fetches become a concern).
 
-The one library that covers the whole chain is the official MCP Python SDK's OAuth client
-(`mcp.client.auth`). It's built for a client that *holds* the tokens and injects them into
-its own MCP requests. lik-ui deliberately splits **connection** (this app acquires tokens
-and deposits them in the user's vault) from **usage** (a separate Managed Agent consumes
-them), so the SDK's token-lifecycle model doesn't fit — we'd fight its assumptions to reuse
-its discovery internals. If a future SDK release exposes discovery + DCR as standalone
-helpers, revisit replacing `discover()` and `_acquire_via_dcr()`.
+### DONE: dedicated Claude Workspace for LIK
 
-## DONE: OAuth client registrations: ownership
+LIK's Anthropic usage now lives in its own Claude Workspace
+(https://platform.claude.com/settings/workspaces) rather than the org's default one. A
+dedicated workspace isolates LIK's spend, rate limits, and API keys, so its usage can be
+tracked and capped without affecting other Nava work, and access can be scoped to just the
+people who run it.
+
+**Why a separate workspace was required.** The lik-ui app uses the Claude
+Platform and stores its OAuth secrets in "Credential vaults", which are visible to *everyone*
+with access to the workspace they live in — and the vault IDs can be used to get access to
+data as other users, which is an impersonation risk. In the shared `Default` workspace,
+every member could therefore see LIK's OAuth secrets. To close that gap, a separate `lik-ui`
+workspace was created that only the LIK developers and IT admins can access, so the OAuth secrets
+are protected.
+
+More details at https://platform.claude.com/docs/en/manage-claude/workspaces.
+
+### DONE: streaming timeouts on the deployed ingress (infrastructure)
+
+The chat streams the agent's reply to the browser live. On the current Lightsail deployment,
+the connection is dropped if it stays quiet for about 60 seconds — and the agent often goes
+quiet that long while it's thinking between steps. When that happened, the reply was still
+finished and saved on the server, but it never showed up in the open chat.
+
+**Largely fixed** as of PR #33 (navapbc/leverage-inst-knowl):
+
+- A small "still here" signal is sent every 15 seconds during quiet stretches, so the
+  connection isn't dropped in the first place.
+- If it *is* dropped, the page automatically reconnects and picks up the reply — the user
+  doesn't lose it.
+
+**Workaround if a reply ever goes missing:** refresh the page. The reply is saved on the
+server, so reloading brings it back. (This is the fallback the automatic reconnect now
+handles for you.) The pinned status strip at the bottom of the chat is the cue: while the
+agent is busy it reads "⚙ Working…", "✍️ Responding…", "⏸ Waiting for your approval…", or
+"⚙ Reconnecting…", and it disappears when the turn is done. Normally you can just wait for
+it to clear. But if the underlying connection dies *silently* (a network partition the
+browser never detects), the strip can stay frozen on "⚙ Working…"/"✍️ Responding…" and
+never clear — so if it looks stuck with no new text arriving, refresh rather than keep
+waiting. A refresh always reloads the true state from the server.
+
+**Next step if needed:** we've confirmed the ~60s *idle* limit, but not whether the
+Lightsail container service also caps the *total* length of a single connection regardless
+of activity. Even if it does, the reply isn't lost: a hard cap closes the connection
+cleanly, so `onerror` fires and the auto-reconnect re-attaches via `/resume` and keeps
+streaming (the turn survives repeated culls by design). The only symptom would be a periodic
+"⚙ Reconnecting…" flicker every cap-interval — a UX blemish, not data loss — so this may not
+be worth fixing at all. If it is, options that keep the app in Lightsail come first:
+(1) **proactive connection cycling** — have the client close and re-open the stream on a
+timer just before the cap, reusing the existing `/resume` machinery, so the re-attach is
+seamless; (2) a **Lightsail VM instance** fronted by your own nginx, where `proxy_read_timeout`
+is yours to set. Moving off Lightsail to ECS/EC2 behind an ALB (configurable timeout) is only
+warranted if you're leaving Lightsail for other reasons too. Regardless of choice, do **not**
+front the app with a Lightsail distribution/CDN — its 30s limit breaks live streaming. See
+`../domain-name.md` (Caveat: real-time streaming and timeouts).
+
+### DONE: OAuth client registrations: ownership
 
 **All client registrations are now under Nava org ownership with more than one owner.**
 Background: OAuth *client* registrations (the client ID/secret in `.env`) identify **this

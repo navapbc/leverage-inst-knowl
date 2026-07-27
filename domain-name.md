@@ -215,20 +215,28 @@ retry before assuming something is broken.
 ## Caveat: real-time streaming and timeouts
 
 Both apps stream responses over **SSE** (`text/event-stream`): lik-ui streams chat tokens,
-and lik-mcp uses the MCP streamable-http transport (SSE under the hood). Two things to know
-when putting them behind a custom domain:
+and lik-mcp uses the MCP streamable-http transport (SSE under the hood). What to know when
+putting them behind a custom domain:
 
 - **Keep the routing records pointing *directly* at the container service (as Step 6 does).
   Do NOT insert a Lightsail distribution / CDN in front of these apps.** A Lightsail
   distribution has a 30-second origin-response timeout and only handles
   `Transfer-Encoding: chunked`, which breaks longer SSE streams.
-- **The container-service ingress has a fixed, undocumented, non-configurable timeout.** A
-  long stream (e.g. a lengthy LLM generation or a slow MCP tool call) can be cut mid-response
-  with a 504-class error, and there is no knob to raise the ceiling. If long streams die
-  mid-response, suspect the ingress timeout first — not the app code.
-- **Scaling fallback:** if reliable long-lived streaming becomes a hard requirement, the
-  managed Lightsail ingress is the wrong tier — move to ECS/EC2 behind an ALB, where the
-  idle timeout is configurable. See the apps' READMEs for the tracked TODO.
+- **The container-service ingress drops a connection after ~60 seconds of silence** — a
+  fixed, undocumented, non-configurable idle timeout. An LLM generation that goes quiet
+  between steps can exceed it. Whether the ingress *also* caps a single connection's **total**
+  duration regardless of activity is still being measured.
+- **The apps already tolerate this at the app layer, so it's largely a non-issue.** lik-ui
+  sends a keep-alive signal every ~15 seconds during quiet stretches so the idle timeout
+  doesn't fire, and if a connection is dropped anyway the browser auto-reconnects and resumes
+  the reply — the turn is saved server-side and survives repeated re-attaches by design. A
+  hard total-duration cap would show up only as a brief reconnect flicker, never lost data.
+  lik-mcp's risk is very low regardless: its tools run fast Postgres queries with no LLM, so
+  responses finish well under any plausible timeout.
+- **Scaling fallback:** if reliable long-lived streaming ever becomes a hard requirement the
+  app-layer reconnect can't cover, the managed Lightsail ingress is the wrong tier — move to
+  ECS/EC2 behind an ALB, where the idle timeout is configurable. See the apps' READMEs for
+  the tracked details.
 
 ## Summary of records in the `lik.navapbc.com` zone
 
