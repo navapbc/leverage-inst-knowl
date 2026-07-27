@@ -45,8 +45,23 @@ so it's a partial view when an answer spans many sources.
 **lik-ui** — searches across all of Nava's connected sources in one place, without copying
 everything into a new system, and makes connecting each source point-and-click rather than a
 technical chore. The agents and their skills are maintained centrally, so everyone is always
-on the latest version without doing anything. Limitations: it's an early system with rough
+on the latest version without doing anything. Sessions can also be shared read-only so others
+can see how you worked with the agent and build on it (see [Can I share a chat session with
+others?](#can-i-share-a-chat-session-with-others)). Limitations: it's an early system with rough
 edges (see below), and it only reaches sources that have a supported connector.
+
+## Can I share a chat session with others?
+
+Yes — a session can be shared as a read-only link so any logged-in user can see how you asked and guided the
+agent. A shared session shows the whole conversation, including any content the agent pulled in
+while answering, so only share the session ID with people you'd show that material to, and treat the link as
+exposing everything in the session.
+
+Sharing is also a starting point for collaboration: someone with the link can copy snippets from the session into
+their own chat and keep going — for example, adding context they can reach but you can't (e.g., Slack DMs or
+restricted Google Docs). They can ask the agent to summarize or aggregate as they go, but that's a
+convenience, not a privacy guarantee: the agent can't reliably strip sensitive details, so whoever
+adds or re-shares information is responsible for making sure it's appropriate to share onward.
 
 ## What can the agent do, and how does it work?
 
