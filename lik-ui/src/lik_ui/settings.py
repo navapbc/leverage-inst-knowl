@@ -24,14 +24,30 @@ _DEFAULT_AGENTS_CONFIG_PATH = Path(__file__).parent / "agents.toml"
 _DEFAULT_FAQ_PATH = Path(__file__).parent / "faq.md"
 
 
+class SectionDef(BaseModel):
+    """One picker section declared at the top of the roster. The declaration order of these
+    blocks is the order sections render in the picker. ``is_management`` marks a section whose
+    agents write shared data and are therefore hidden by default (revealed by the per-user
+    "show management agents" preference). This is a usability guardrail, not access control."""
+
+    name: str
+    is_management: bool = False
+
+
 class AgentRosterEntry(BaseModel):
     """One roster line: which agent to offer and which environment its sessions run in, both by
     *name*. No platform ids live in the repo — GitHub is the source of truth for agents/environments
     (see docs/plans/2026-07-24-001-...), and names survive re-initializing into a new workspace
-    without any id rewrite. Names are resolved to ids once at startup (see ``agents.resolve_agent_options``)."""
+    without any id rewrite. Names are resolved to ids once at startup (see ``agents.resolve_agent_options``).
+
+    ``section`` is the picker section this agent belongs to (empty ⇒ the default group).
+    ``is_management`` is derived from the section's declaration and cached here so downstream code
+    need not re-consult the section table."""
 
     agent_name: str
     environment_name: str
+    section: str = ""
+    is_management: bool = False
 
 
 class AgentOption(BaseModel):
@@ -42,10 +58,15 @@ class AgentOption(BaseModel):
     via the Claude SDK. The user picks one of these; lik-ui then queries the agent for the MCP
     servers it declares (the required connections). The list shape lets more agents be added
     via configuration without code changes.
+
+    ``section``/``is_management`` are display metadata carried through from the roster so the
+    picker can group agents and hide management sections without a second roster read.
     """
 
     agent_id: str
     environment_id: str
+    section: str = ""
+    is_management: bool = False
 
 
 class Settings(BaseSettings):
@@ -138,24 +159,50 @@ class Settings(BaseSettings):
     def allowed_hosts(self) -> list[str]:
         return [h.strip() for h in self.http_allowed_hosts.split(",") if h.strip()]
 
+    def _roster_data(self) -> dict:
+        """Load and parse the roster TOML once. A missing file yields ``{}`` (the production guard
+        turns an empty roster into a loud startup failure); malformed TOML raises."""
+        path = Path(self.agents_config_path)
+        if not path.is_file():
+            return {}
+        with path.open("rb") as fh:
+            return tomllib.load(fh)
+
+    @property
+    def agent_sections(self) -> list[SectionDef]:
+        """The picker sections declared at the top of the roster, in declaration order (which is
+        also their display order). Empty when the roster declares no ``[[sections]]`` — agents then
+        all fall into the default group."""
+        sections = []
+        for section in self._roster_data().get("sections", []):
+            name = str(section.get("name", "")).strip()
+            if name:
+                sections.append(SectionDef(name=name, is_management=bool(section.get("management", False))))
+        return sections
+
     @property
     def agent_roster(self) -> list[AgentRosterEntry]:
         """Parse the roster TOML into ``AgentRosterEntry``s (names, not ids). A top-level
-        ``default_environment`` applies to any agent that omits its own ``environment``. A missing
-        file yields an empty list (the production guard turns that into a loud startup failure);
-        malformed TOML raises. Name→id resolution happens later, at startup, via the SDK."""
-        path = Path(self.agents_config_path)
-        if not path.is_file():
-            return []
-        with path.open("rb") as fh:
-            data = tomllib.load(fh)
+        ``default_environment`` applies to any agent that omits its own ``environment``. Each agent's
+        ``section`` maps to a top-level ``[[sections]]`` block; ``is_management`` is copied from that
+        block (an agent whose section is undeclared falls into the default group, non-management).
+        A missing file yields an empty list (the production guard turns that into a loud startup
+        failure); malformed TOML raises. Name→id resolution happens later, at startup, via the SDK."""
+        data = self._roster_data()
         default_env = str(data.get("default_environment", "")).strip()
+        management_sections = {s.name for s in self.agent_sections if s.is_management}
         entries = []
         for entry in data.get("agents", []):
             agent_name = str(entry.get("agent", "")).strip()
             environment_name = str(entry.get("environment", "")).strip() or default_env
+            section = str(entry.get("section", "")).strip()
             if agent_name:
-                entries.append(AgentRosterEntry(agent_name=agent_name, environment_name=environment_name))
+                entries.append(AgentRosterEntry(
+                    agent_name=agent_name,
+                    environment_name=environment_name,
+                    section=section,
+                    is_management=section in management_sections,
+                ))
         return entries
 
     @property
