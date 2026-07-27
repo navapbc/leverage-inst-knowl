@@ -13,6 +13,7 @@
 # `prod` environment (see infra/iam_github_oidc.tf).
 
 name: Build and deploy images
+run-name: Deploy ${{ inputs.service }} @ ${{ github.sha }} by @${{ github.actor }}
 
 on:
   workflow_dispatch:
@@ -117,6 +118,16 @@ jobs:
       UI_CUSTOM_DOMAIN_URL: https://ui.lik.navapbc.com
     steps:
       - uses: actions/checkout@v6
+
+      - name: Show deployed commit
+        run: |
+          {
+            echo "### Commit"
+            echo ""
+            echo "\`${{ github.sha }}\`"
+            echo ""
+            git log -1 --pretty='format:%s%n%n%b' "${{ github.sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
