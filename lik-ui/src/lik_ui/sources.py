@@ -27,29 +27,40 @@ def normalize_url(url: str) -> str:
     return url.rstrip("/")
 
 
+# Per-source OAuth scopes. These are deliberate, security-relevant constants: a change here
+# must be reviewed, and for most sources is only valid alongside a matching change on the
+# provider's OAuth app. Keep them in code (not env/SSM) so the diff, history, and rationale
+# stay under review.
+LIKMCP_SCOPES = ["openid", "email"]
+GDRIVE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/drive.readonly"]
+# Read-focused GitHub access: repo + org + user identity. An empty scope yields a token the
+# GitHub MCP server rejects with 403, so request what the resource needs. (GitHub's `repo`
+# scope is read/write — there is no read-only private-repo scope.)
+GITHUB_SCOPES = ["repo", "read:org", "read:user"]
+# Read-focused Slack access for the server's curated tool subset (search, messages, canvases,
+# users). Per-user tokens already cap access at each user's own Slack permissions. Write scopes
+# are intentionally omitted; to let the agent post messages / edit canvases / add reactions,
+# add "chat:write", "canvases:write", "reactions:write" here AND configure them on the Slack app.
+SLACK_SCOPES = [
+    "search:read.public", "search:read.private", "search:read.mpim", "search:read.im",
+    "search:read.files", "search:read.users", "channels:history", "groups:history",
+    "mpim:history", "im:history", "channels:read", "groups:read", "mpim:read",
+    "canvases:read", "files:read", "users:read", "users:read.email", "emoji:read",
+]
+
+
 def build_source_registry(settings: Settings) -> dict[str, SourceConfig]:
     # One entry per no-DCR source; a source is included only when both its URL and client
     # id are configured. Each is keyed by the MCP server URL the agent declares.
     declared = [
         (settings.likmcp_resource_url, settings.likmcp_client_id, settings.likmcp_client_secret,
-         ["openid", "email"]),
+         LIKMCP_SCOPES),
         (settings.gdrivemcp_resource_url, settings.gdrivemcp_client_id, settings.gdrivemcp_client_secret,
-         ["openid", "email", "https://www.googleapis.com/auth/drive.readonly"]),
-        # Read-focused GitHub access: repo + org + user identity. An empty scope yields a
-        # token the GitHub MCP server rejects with 403, so request what the resource needs.
-        # (GitHub's `repo` scope is read/write — there is no read-only private-repo scope.)
+         GDRIVE_SCOPES),
         (settings.github_resource_url, settings.github_client_id, settings.github_client_secret,
-         ["repo", "read:org", "read:user"]),
-        # Read-focused Slack access for the server's curated tool subset (search, messages,
-        # canvases, users). Per-user tokens already cap access at each user's own Slack
-        # permissions. Write scopes are intentionally omitted; to let the agent post
-        # messages / edit canvases / add reactions, add "chat:write", "canvases:write",
-        # "reactions:write" here AND configure them on the Slack app.
+         GITHUB_SCOPES),
         (settings.slack_resource_url, settings.slack_client_id, settings.slack_client_secret,
-         ["search:read.public", "search:read.private", "search:read.mpim", "search:read.im",
-          "search:read.files", "search:read.users", "channels:history", "groups:history",
-          "mpim:history", "im:history", "channels:read", "groups:read", "mpim:read",
-          "canvases:read", "files:read", "users:read", "users:read.email", "emoji:read"]),
+         SLACK_SCOPES),
     ]
     registry: dict[str, SourceConfig] = {}
     for resource_url, client_id, client_secret, scopes in declared:
