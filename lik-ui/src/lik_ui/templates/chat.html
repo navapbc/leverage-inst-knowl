@@ -55,6 +55,11 @@
        data-agent-id="{{ session.agent_id }}"
        data-can-write="{{ 'true' if is_owner else 'false' }}"></div>
 
+  <!-- Session activity indicator, driven by chat.js. Kept outside #transcript so a history
+       reload doesn't remove it, and pinned so it stays visible whenever the agent is not idle
+       (queued, working, awaiting approval, or reconnecting). Hidden while idle. -->
+  <div id="agent-status" role="status" aria-live="polite" hidden></div>
+
   {% if is_owner %}
     <form id="composer">
       <input id="message" name="message" autocomplete="off" placeholder="Ask the agent a question or make a request…" style="width:75%">

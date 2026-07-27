@@ -162,9 +162,14 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 #auto-approve label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
 #auto-approve .auto-approve-label { cursor: default; }
 
-/* Queued/waiting indicator shown between submit and the turn's first event. */
-.card.pending { background: none; border: none; color: var(--muted); font-size: .9rem;
-  padding: .25rem; font-style: italic; }
+/* Session activity indicator: shown whenever the agent is not idle (queued, working, awaiting
+   approval, reconnecting). Sits just above the composer and sticks to the bottom of the
+   viewport so it stays visible on long transcripts; hidden while idle. Lives outside
+   #transcript so a history reload never removes it. */
+#agent-status { position: sticky; bottom: 0; z-index: 1; margin: .5rem 0; padding: .5rem .75rem;
+  color: var(--muted); font-size: .9rem; font-style: italic; background: var(--card);
+  border: 1px solid var(--line); border-radius: 8px; }
+#agent-status[hidden] { display: none; }
 
 /* Context-compaction divider: a quiet centered marker, not a card. */
 .card.compacted { border: none; background: none; text-align: center; color: var(--muted);

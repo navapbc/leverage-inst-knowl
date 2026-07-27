@@ -12,9 +12,17 @@ event mapping is validated at live integration (see the plan's deferred question
 """
 
 import json
+import queue
+import threading
 from collections.abc import Iterator
 from datetime import datetime
 from typing import Protocol
+
+# How often the SSE response emits a keepalive comment while the event generator is stalled.
+# Kept well under a typical load-balancer idle timeout (~60s) so a long silent stretch — the
+# agent thinking or running a slow tool for a minute-plus between emitted events — can't leave
+# the connection idle long enough to be culled.
+_SSE_HEARTBEAT_SECONDS = 15
 
 from .settings import Settings
 from .vault import ensure_user_vault
@@ -473,16 +481,46 @@ def register_chat_routes(app) -> None:
         return _sse(sessions_client.resume_stream(session["session_id"]))
 
     def _sse(events: Iterator[dict]) -> StreamingResponse:
-        """Wrap a normalized-event generator as an SSE response, converting a mid-stream
-        failure into a terminal error + done so the browser closes cleanly rather than 500ing."""
+        """Wrap a normalized-event generator as an SSE response.
+
+        A worker thread drains the (blocking) event generator into a queue while the response
+        body emits either the next event or, when the generator stalls past
+        ``_SSE_HEARTBEAT_SECONDS``, an SSE comment. The comment keeps the connection non-idle so
+        an intermediary (e.g. a load balancer's idle timeout) doesn't cull it during a long
+        silent stretch — the agent can think or run a slow tool for a minute-plus between emitted
+        events, which would otherwise drop the stream and strand the reply behind a page refresh.
+        A mid-stream failure becomes a terminal error + done so the browser closes cleanly rather
+        than 500ing."""
 
         def event_stream():
-            try:
-                for event in events:
-                    yield f"data: {json.dumps(event)}\n\n"
-            except Exception as exc:  # noqa: BLE001 - stream a terminal error, don't 500 mid-stream
-                yield f"data: {json.dumps({'type': 'error', 'error_type': 'stream_failed', 'detail': str(exc)})}\n\n"
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            q: queue.Queue = queue.Queue()
+            done = object()  # sentinel: the generator is exhausted (or errored) — stop emitting
+
+            def produce():
+                try:
+                    for event in events:
+                        q.put(("event", event))
+                except Exception as exc:  # noqa: BLE001 - forward as a terminal error, don't crash the thread
+                    q.put(("error", str(exc)))
+                finally:
+                    q.put((done, None))
+
+            # Daemon so a client that disconnects mid-turn never blocks process shutdown; the
+            # thread simply drains the finite turn to completion server-side and exits.
+            threading.Thread(target=produce, daemon=True).start()
+            while True:
+                try:
+                    kind, payload = q.get(timeout=_SSE_HEARTBEAT_SECONDS)
+                except queue.Empty:
+                    yield ": keepalive\n\n"  # SSE comment: keeps the connection alive, ignored by EventSource
+                    continue
+                if kind is done:
+                    break
+                if kind == "error":
+                    yield f"data: {json.dumps({'type': 'error', 'error_type': 'stream_failed', 'detail': payload})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                    break
+                yield f"data: {json.dumps(payload)}\n\n"
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
