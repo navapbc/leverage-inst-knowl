@@ -86,7 +86,7 @@ platform (deployed from GitHub, the source of truth) and an entry in lik-ui's **
 is a PR plus two manual deploy Actions — no ids are hand-copied anywhere; everything resolves by name.
 
 1. **Write the agent spec.** Add `claude_platform/agents/<stem>.yaml` — the platform's raw agent YAML
-   (see `lik-cross-source-reference.yaml` for a template): `name`, `model`, `description`, `system`,
+   (see `cross-source-reference.yaml` for a template): `name`, `model`, `description`, `system`,
    the `mcp_servers` it needs, a matching `mcp_toolset` under `tools` for each server, and `skills`.
    The `name` is the platform identity the deploy and the app match on. `skills` reference skills **by
    name** (the dir under `claude_platform/skills/`), never by id — use `skills: []` if the behavior

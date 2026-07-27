@@ -1,5 +1,5 @@
 ---
-name: lik-sync-catalog-from-project-indexes
+name: sync-catalog-from-project-indexes
 description: Catalog the project-index pages from Confluence into the Discovery Layer Catalog (the lik-mcp service). Fetches every Confluence page tagged `project-index` and upserts one Catalog row per page via `register_catalog_entry`. Use whenever someone says "sync the project indexes", "refresh the project-index catalog", "catalog the project indexes", or asks to (re)build Catalog rows from the Project Index Directory. This is a Catalog-registration skill: the project-index pages are authored by a separate process; this skill only registers them as Catalog rows — it writes to the Catalog, never to Confluence.
 ---
 
@@ -57,14 +57,14 @@ Match **only** an explicit don't-use instruction. Weaker status wording — "UNV
 `verification` still comes from Step 2). When unsure whether wording rises to a don't-use instruction, **register the
 page** rather than hold it back.
 
-## Content-state marker recipe (shared with `lik-query-project-index`)
+## Content-state marker recipe (shared with `query-project-index`)
 
 `source_state` = the SHA-256 hex digest of the page's markdown body:
 1. `getConfluencePage(pageId, contentFormat: "markdown")`, take the `body` **verbatim**.
 2. Write it to a file (no added trailing newline, no normalization) and hash: `shasum -a 256 FILE | cut -d' ' -f1` (or
    `sha256sum FILE | cut -d' ' -f1` — same digest for the same bytes).
 
-`lik-query-project-index` computes `source_state` the **identical** way, so a stored and a live marker compare equal
+`query-project-index` computes `source_state` the **identical** way, so a stored and a live marker compare equal
 when content is unchanged. Any change to this recipe must be mirrored in both skills, or "edited since" false-positives
 on every page.
 
@@ -116,7 +116,7 @@ are handled in Step 3b.
   compared by equality to detect "edited since")*
 - `verification`: from Step 2
 - `verified_by` / `verified_at`: from the Update History table, else null
-- `computed_by`: `"lik-sync-catalog-from-project-indexes"`
+- `computed_by`: `"sync-catalog-from-project-indexes"`
 - `row_provenance`: `"skill"`
 
 Leave other fields at defaults (`provenance=ai-generated`, `freshness=current`, `sensitivity=cleared`, empty

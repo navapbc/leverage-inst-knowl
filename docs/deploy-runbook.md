@@ -436,7 +436,7 @@ AWS_PROFILE=lik mise exec -- aws lightsail get-container-log \
 > *"<url> has no dynamic client registration and no configured client."*
 
 **Why this matters for this deploy:** the agent's spec
-(`claude_platform/agents/lik-query-project-index.yaml`) declares the lik-mcp server URL. If it was
+(under `claude_platform/agents/`) declares the lik-mcp server URL. If it was
 authored pointing at an old deployment (e.g. `https://leverage-inst-knowl.onrender.com/mcp`), update
 the `mcp_servers` URL in that spec and redeploy via `deploy-agents.yml` — for example the Lightsail URL:
 

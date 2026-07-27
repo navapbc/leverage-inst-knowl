@@ -1,5 +1,5 @@
 ---
-name: lik-query-project-index
+name: query-project-index
 description: Answer questions about Nava's projects using the Discovery Layer Catalog (the lik-mcp service) and the project-index pages it points to. Covers, per project: scope, impact and outcomes, client and agency, client satisfaction and CPARS ratings, workstreams, capabilities, tech stack, tools/templates/frameworks, best practices, team roster, artifacts and deliverables, research findings, case studies, and business-development assets. Use whenever someone asks about Nava's past or current work, or a project's people, technology, delivery approach, results, or client. Triggers on questions like "what has Nava done with X?", "find projects related to Y", "which projects involve Z agency", "what tech stack did a project use?", "who worked on a project?", "how satisfied was the client on a project?", "tell me about a named project". Do NOT use for HR/policy questions or general web research.
 ---
 
@@ -17,10 +17,14 @@ Two widening modes:
 
 ## Errors
 
-If any tool call fails or a required tool is unavailable, **stop** — don't fall through to the next level. Report:
+If a tool call fails or a required tool is unavailable, **don't abort the whole answer** — report it
+and continue with the steps and sources still available, making clear which were skipped. Report:
 - the error / missing tool;
 - likely causes (server down, tool not deployed, stale MCP session);
 - remedies (restart server, reconnect MCP, redeploy).
+
+A failure is still **not** a retrieval miss: surface the gap rather than silently widening (or
+falling to the next level) as if nothing was found.
 
 ## Level 1 — Catalog lookup (exact, then fuzzy)
 
@@ -137,7 +141,7 @@ Each citation:
 Compute the hash once per page per run and reuse it for both the citation and the `current_source_state` you read
 confirmations with.
 
-**Marker recipe (shared with `lik-sync-catalog-from-project-indexes`).** Take the `body` **verbatim** from
+**Marker recipe (shared with `sync-catalog-from-project-indexes`).** Take the `body` **verbatim** from
 `getConfluencePage(pageId, contentFormat:"markdown")`, write it to a file (no added trailing newline, no normalization),
 and hash: `shasum -a 256 FILE | cut -d' ' -f1` (or `sha256sum`). The sync skill stores `source_state` identically, so a
 live marker equals the stored one when content is unchanged. The connector exposes no stable native signal (no version

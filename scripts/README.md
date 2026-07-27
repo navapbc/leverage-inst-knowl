@@ -16,13 +16,14 @@ Packages a skill directory and creates a new **version** on the platform (or cre
 first deploy). Versions are immutable; agents that pin the skill to `latest` pick up the new version
 on their next session.
 
-Normally run by the **Deploy skills to Managed Agents** GitHub Action (manual dispatch, choose which
-skill). To run locally against the real API:
+Normally run by the **Deploy skills to Claude platform** GitHub Action (manual dispatch, choose which
+skill) — useful for updating a skill without redeploying its agents. `deploy_agents.py` also invokes
+it for each agent's referenced skills. To run locally against the real API:
 
 ```sh
 ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_skills.py --skill all
 # or a single skill:
-ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_skills.py --skill lik-query-project-index
+ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_skills.py --skill query-project-index
 ```
 
 `ANTHROPIC_API_KEY` must be a **standard org API key** scoped to the workspace that holds the
@@ -44,7 +45,7 @@ agent). To run locally against the real API:
 ```sh
 ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_agents.py --agent all
 # or a single agent (filename stem under claude_platform/agents/):
-ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_agents.py --agent lik-query-project-index
+ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_agents.py --agent knowledge-search
 # --dry-run prints the plan (still queries the platform to decide create-vs-update) without publishing.
 ```
 

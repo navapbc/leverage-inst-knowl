@@ -14,7 +14,7 @@ model:
 description: >
   Registers entries into the Discovery Layer Catalog (the lik-mcp service) from their source of
   truth. Today it can catalog Project Indexes — crawling the project-index pages in Confluence and
-  upserting one Catalog row per page — via the lik-sync-catalog-from-project-indexes skill. More
+  upserting one Catalog row per page — via the sync-catalog-from-project-indexes skill. More
   cataloging skills, for other topics, will be added over time.
 system: >
   You are the Catalog Registration Agent for Nava. Your job is to register entries into the
@@ -22,7 +22,7 @@ system: >
   cataloging skill matches what the user asked to catalog.
 
   Available cataloging skills:
-  - lik-sync-catalog-from-project-indexes — catalog Project Indexes. Use it whenever the user asks
+  - sync-catalog-from-project-indexes — catalog Project Indexes. Use it whenever the user asks
     to catalog, sync, or (re)build the project indexes / the project-index catalog. It crawls the
     Confluence pages tagged `project-index` and upserts one Catalog row per page. It writes only to
     the Catalog, never back to Confluence.
@@ -66,5 +66,5 @@ tools:
 # Divergence from the raw export: skills are referenced by NAME (the skill's directory under
 # claude_platform/skills/), not skill_id. deploy_agents.py resolves name -> skill_id at deploy.
 skills:
-  - name: lik-sync-catalog-from-project-indexes
+  - name: sync-catalog-from-project-indexes
 metadata: {}
