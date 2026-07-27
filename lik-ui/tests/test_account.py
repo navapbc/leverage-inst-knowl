@@ -46,6 +46,47 @@ def test_settings_page_lists_credentials(db):
     assert "vcrd_1" in r.text  # the delete button carries the credential id
 
 
+def test_settings_page_shows_management_agent_toggle_and_warning(db):
+    client, _ = _client(db)
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert 'name="show_management_agents"' in r.text
+    assert "Management agents write data." in r.text  # the guardrail warning
+
+
+def test_management_toggle_defaults_off(db):
+    client, _ = _client(db)
+    html = client.get("/settings").text
+    # Fresh session: the checkbox renders unchecked.
+    assert "show_management_agents" in html
+    assert "checked" not in html
+
+
+def test_enabling_management_toggle_persists_and_renders_checked(db):
+    client, _ = _client(db)
+    r = client.post("/settings/agent-visibility", data={"show_management_agents": "1"})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/settings"
+    # AE1/AE2: the preference sticks — a later GET in the same session renders it checked.
+    assert "checked" in client.get("/settings").text
+
+
+def test_disabling_management_toggle_persists_off(db):
+    client, _ = _client(db)
+    client.post("/settings/agent-visibility", data={"show_management_agents": "1"})
+    # Unchecked checkbox submits no field -> stored off.
+    client.post("/settings/agent-visibility", data={})
+    assert "checked" not in client.get("/settings").text
+
+
+def test_set_agent_visibility_requires_login(db):
+    oidc = FakeOidc({})
+    app = build_app(Settings(env="test"), store=Store(db), app_oidc=oidc, vault_client=FakeVaultClient())
+    r = TestClient(app, follow_redirects=False).post("/settings/agent-visibility", data={"show_management_agents": "1"})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/login"
+
+
 def test_delete_credential_deletes_only_that_credential(db):
     client, vc = _client(db)
     user = Store(db).get_user_vault(Store(db).get_user_by_email("alice@navapbc.com")["id"])

@@ -46,6 +46,23 @@ def require_user(request: Request) -> dict:
     return user
 
 
+# Key under which the per-user "show management agents" preference is stored in the signed
+# session cookie. Absent ⇒ off: management agents are hidden by default.
+_SHOW_MANAGEMENT_AGENTS_KEY = "show_management_agents"
+
+
+def show_management_agents(request: Request) -> bool:
+    """Whether this user has opted to see management (write-capable) agents in the picker.
+    Stored in the session cookie, so it sticks across pages/visits until changed or logout;
+    a fresh session has no key and defaults to False. This is a usability guardrail, not access
+    control — it only affects picker visibility, never whether an agent can be reached."""
+    return bool(request.session.get(_SHOW_MANAGEMENT_AGENTS_KEY, False))
+
+
+def set_show_management_agents(request: Request, value: bool) -> None:
+    request.session[_SHOW_MANAGEMENT_AGENTS_KEY] = bool(value)
+
+
 class GoogleOidcClient:
     """Identity-only OIDC client for app login. Endpoints and signing keys come from
     Google's discovery document; identity is read from the verified ID token."""

@@ -13,7 +13,7 @@ def register_account_routes(app) -> None:
     from fastapi.responses import HTMLResponse, RedirectResponse
 
     from .app import templates
-    from .app_auth import require_user
+    from .app_auth import require_user, set_show_management_agents, show_management_agents
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request, deleted: str = "", sessions_deleted: str = ""):
@@ -37,8 +37,19 @@ def register_account_routes(app) -> None:
                 "deleted": bool(deleted),
                 "session_count": len(store.list_sessions(user["id"])),
                 "sessions_deleted": bool(sessions_deleted),
+                "show_management_agents": show_management_agents(request),
             },
         )
+
+    @app.post("/settings/agent-visibility")
+    async def set_agent_visibility(request: Request):
+        """Toggle whether management (write-capable) agents show in the picker. A checkbox submits
+        its value only when checked, so an absent field means unchecked -> hidden. Persisted in the
+        session; guardrail only, so nothing else changes."""
+        require_user(request)
+        form = await request.form()
+        set_show_management_agents(request, form.get("show_management_agents") is not None)
+        return RedirectResponse("/settings", status_code=303)
 
     @app.post("/settings/vault/delete")
     async def delete_vault(request: Request):
