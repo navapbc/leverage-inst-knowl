@@ -21,9 +21,9 @@ on:
         type: choice
         options:
           - all
-          - lik-query-project-index
-          - lik-cross-source-reference
-          - lik-catalog-registration
+          - knowledge-search
+          - cross-source-reference
+          - catalog-registration
         default: all
 
 permissions:

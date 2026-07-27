@@ -26,29 +26,30 @@ default_environment = "lik-ui-env"
 name = "Knowledge"
 
 [[sections]]
-name = "Temporary"
+name = "Generic"
 
 [[sections]]
 name = "Sync to Catalog"
 management = true
 
-[[agents]]
-# Created by init-workspace.py
-agent = "Knowledge Search Agent"
-section = "Knowledge"
-# environment omitted -> uses default_environment above
+# [[agents]]
+# # Created by init-workspace.py
+# agent = "Knowledge Search Agent"
+# section = "Knowledge"
+# # environment omitted -> uses default_environment above
 
 [[agents]]
-# Defined by claude_platform/agents/lik-cross-source-reference.yaml
+# Defined by claude_platform/agents/cross-source-reference.yaml
 agent = "Cross-Source Referencing Agent"
-section = "Knowledge"
+section = "Generic"
 
 [[agents]]
-# Defined by claude_platform/agents/lik-query-project-index.yaml
-agent = "LIK Query: Project Index"
-section = "Temporary"
-
-[[agents]]
-# Defined by claude_platform/agents/lik-catalog-registration.yaml — writes to the shared Catalog.
+# Defined by claude_platform/agents/catalog-registration.yaml — writes to the shared Catalog.
 agent = "Catalog Registration Agent"
 section = "Sync to Catalog"
+
+[[agents]]
+# Defined by claude_platform/agents/knowledge-search.yaml — routes to the query skills.
+agent = "Knowledge Search Agent"
+section = "Knowledge"
+

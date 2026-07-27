@@ -19,8 +19,10 @@ on:
         type: choice
         options:
           - all
-          - lik-query-project-index
-          - lik-sync-catalog-from-project-indexes
+          - query-project-index
+          - query-org-guidance
+          - query-practice-knowledge
+          - sync-catalog-from-project-indexes
         default: all
 
 permissions:
