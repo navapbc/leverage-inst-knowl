@@ -18,6 +18,15 @@
     return el;
   }
 
+  // Session activity indicator. Lives OUTSIDE #transcript (so a history reload's transcript
+  // reset never removes it) and is pinned in view, so the user always knows when the agent is
+  // not idle — queued, working, waiting for approval, or reconnecting after a dropped stream.
+  // Hidden whenever the session is idle. One element, one source of truth, set from the turn
+  // lifecycle below.
+  const statusEl = document.getElementById("agent-status");
+  function setStatus(text) { if (statusEl) { statusEl.textContent = text; statusEl.hidden = false; } }
+  function clearStatus() { if (statusEl) { statusEl.hidden = true; statusEl.textContent = ""; } }
+
   // Render accumulated markdown to sanitized HTML; fall back to plain text if the CDN
   // libs didn't load (offline / blocked).
   function renderMarkdown(el, raw) {
@@ -334,15 +343,12 @@
   // and by answering a paused tool call (both stream the same normalized vocabulary), so the
   // rendering and reconcile logic lives in one place. `initial` is the first activity label.
   function streamTurn(url, initial) {
-    // One persistent activity indicator for the whole turn. It stays visible from start
-    // through tool calls and intermediate output — so the user always knows the agent is
-    // still working — and is removed only when the turn finishes (`done`), pauses for approval
-    // (`awaiting_confirmation`), or the connection drops. Kept pinned to the bottom as bubbles
-    // stream in.
-    let activity = bubble("pending", initial);
-    function setActivity(text) { if (activity) activity.textContent = text; }
-    function endActivity() { if (activity) { activity.remove(); activity = null; } }
-    function keepActivityLast() { if (activity) transcript.appendChild(activity); }
+    // Show the activity indicator for the whole turn: from start (`initial` label) through tool
+    // calls and intermediate output — so the user always knows the agent is still working — and
+    // clear it only when the turn finishes (`done`), pauses for approval (`awaiting_confirmation`
+    // with nothing left to auto-approve), or the connection drops without an in-flight turn to
+    // re-attach to.
+    setStatus(initial);
 
     let assistant = null;
     // Did the live stream render anything for this turn? If not, the reply was persisted but
@@ -359,7 +365,7 @@
       const event = JSON.parse(ev.data);
       if (event.type === "status") {
         // Advance the indicator queued -> running; it stays put until the turn ends.
-        if (event.state === "running") setActivity("⚙ Working — the agent is running…");
+        if (event.state === "running") setStatus("⚙ Working — the agent is running…");
         return;
       }
       if (event.type === "text") {
@@ -391,37 +397,40 @@
         // Approve/Deny prompt and a standing hint. If the pausing tool_use wasn't seen live
         // (e.g. we subscribed late), pull it from history first so its prompt/decision shows.
         source.close();
-        endActivity();
         setPromptsEnabled(true);
-        if (!produced) { reconcile(); return; }
+        if (!produced) { reconcile().then(resumeIfInFlight); return; }
         autoApproveNext(event.event_ids);
+        // An auto-approve reopens the stream (its own indicator takes over); otherwise show a
+        // standing "waiting for you" state for a call left needing a manual decision, or clear
+        // the indicator when nothing is pending.
         if (anyManualPending(event.event_ids)) {
-          activity = bubble("pending", "⏸ Waiting for your approval on the tool call above.");
-          keepActivityLast();
+          setStatus("⏸ Waiting for your approval on the tool call above.");
+        } else if (!pendingCallIds().length) {
+          clearStatus();
         }
         return;
       } else if (event.type === "done") {
-        endActivity();
         source.close();
         setPromptsEnabled(true);
+        clearStatus();
         // A completed turn has nothing paused, so no auto-approve here — just recover a reply
         // the stream may have missed. (awaiting_confirmation, not done, signals a pause.)
         if (!produced) loadHistory();
         return;
       }
-      keepActivityLast();  // a new bubble was appended above; move the indicator back to the end
     };
 
     source.onerror = function () {
-      endActivity();
       source.close();
       setPromptsEnabled(true);
-      // The connection dropped mid-turn; the agent keeps running server-side. Pull whatever
-      // was recorded so a completed reply isn't stranded behind a refresh — then, if the turn
-      // is still in flight, re-attach to it so its remaining output streams without a manual
+      // The connection dropped mid-turn; the agent keeps running server-side. Keep the indicator
+      // up as "reconnecting" so the page never looks idle while work continues, then pull
+      // whatever was recorded so a completed reply isn't stranded behind a refresh — and, if the
+      // turn is still in flight, re-attach to it so its remaining output streams without a manual
       // refresh. Re-attaching loops: if the resume stream also drops, this same handler fires
-      // again and re-attaches, so a turn survives no matter how long it runs or how many times
-      // an intermediary culls the (idle) connection.
+      // again, so a turn survives no matter how long it runs or how many times an intermediary
+      // culls the (idle) connection. resumeIfInFlight clears the indicator if the turn had ended.
+      setStatus("⚙ Reconnecting to the agent…");
       reconcile().then(resumeIfInFlight);
     };
   }
@@ -437,6 +446,8 @@
         ? "⏳ Queued — waiting for the agent…"
         : "⚙ Working — the agent is running…";
       streamTurn("/chat/" + sessionId + "/resume", label);
+    } else {
+      clearStatus();  // turn already finished — the reply is in the transcript; nothing pending
     }
   }
 
@@ -462,8 +473,10 @@
     });
   }
 
-  // A turn already in flight when the page loads (e.g. a queued retry after a reload) has no
-  // live stream attached yet, so history alone renders it silently. Re-attach so it streams to
-  // completion without a manual refresh.
+  // A turn already in flight when the page loads (e.g. the user reopened the tab while the agent
+  // was still working) has no live stream attached yet, so history alone renders it silently.
+  // Show a loading indicator immediately, then re-attach so an in-flight turn streams to
+  // completion without a manual refresh; resumeIfInFlight clears the indicator if it was idle.
+  setStatus("⏳ Loading session…");
   reconcile().then(resumeIfInFlight);
 })();

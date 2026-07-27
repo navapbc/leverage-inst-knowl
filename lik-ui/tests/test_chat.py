@@ -277,6 +277,28 @@ def test_chat_page_lists_declared_servers_for_auto_approve(db):
     assert 'class="auto-server" value="github" checked disabled' in page
 
 
+def test_chat_page_has_activity_indicator_outside_transcript(db):
+    # A dedicated, initially-hidden status element must be present (and outside #transcript so a
+    # history reload can't remove it) so chat.js can always show when the agent is not idle.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    loc = client.get("/chat?agent_id=agent_1").headers["location"]
+    page = client.get(loc).text
+    assert 'id="agent-status"' in page
+    assert "hidden" in page[page.index('id="agent-status"'):page.index('id="agent-status"') + 120]
+    # It sits after the transcript container, not nested inside it.
+    assert page.index('id="transcript"') < page.index('id="agent-status"')
+
+
+def test_chat_page_shows_activity_indicator_to_read_only_viewer(db):
+    # A shared-session viewer watches in-flight turns via resume, so they need the indicator too.
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert 'id="agent-status"' in viewer.get(f"/chat/{session_id}").text
+
+
 def test_delete_session_removes_row_and_deletes_platform_session(db):
     sc = FakeSessionsClient()
     client = TestClient(_app(db, sc), follow_redirects=False)
