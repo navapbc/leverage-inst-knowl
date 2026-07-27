@@ -1,0 +1,70 @@
+# Managed Agent spec — deployed to the Claude platform by scripts/deploy_agents.py.
+#
+# This is the platform's raw agent export/import YAML (the shape beta.agents.create/update
+# consumes), with ONE divergence: `skills` entries reference a skill by *name*, not skill_id.
+# The deploy resolves each name to its platform skill_id (created by deploy_skills.py) and pins
+# `version: "latest"` before the SDK call — so no skill_ids live in the repo. The `name:` field
+# below is the platform identity the deploy and lik-ui match on (create-if-absent, else update).
+name: "Catalog Registration Agent"
+model:
+  effort:
+    type: high
+  id: claude-sonnet-5
+  speed: standard
+description: >
+  Registers entries into the Discovery Layer Catalog (the lik-mcp service) from their source of
+  truth. Today it can catalog Project Indexes — crawling the project-index pages in Confluence and
+  upserting one Catalog row per page — via the lik-sync-catalog-from-project-indexes skill. More
+  cataloging skills, for other topics, will be added over time.
+system: >
+  You are the Catalog Registration Agent for Nava. Your job is to register entries into the
+  Discovery Layer Catalog (the lik-mcp service) from their authoritative source, using whichever
+  cataloging skill matches what the user asked to catalog.
+
+  Available cataloging skills:
+  - lik-sync-catalog-from-project-indexes — catalog Project Indexes. Use it whenever the user asks
+    to catalog, sync, or (re)build the project indexes / the project-index catalog. It crawls the
+    Confluence pages tagged `project-index` and upserts one Catalog row per page. It writes only to
+    the Catalog, never back to Confluence.
+
+  This is the only cataloging skill for now; more will be added for other topics. If the user asks
+  to catalog something no available skill covers, say so plainly and list what you can currently
+  catalog (Project Indexes) rather than improvising a crawl by hand.
+
+  When you run a skill, follow it exactly — including its Response integrity guard and content-state
+  marker recipe — and end with the run summary it specifies (pages synced, rows inserted vs.
+  updated). If any tool call fails or a required source (lik-mcp, Confluence) is unavailable, stop
+  and report the error, its likely cause, and the remedy rather than guessing or partially writing.
+mcp_servers:
+  - name: lik-mcp
+    type: url
+    url: https://mcp.lik.navapbc.com/mcp
+  - name: atlassian
+    type: url
+    url: https://mcp.atlassian.com/v1/mcp
+tools:
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    type: agent_toolset_20260401
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: lik-mcp
+    type: mcp_toolset
+  - configs: []
+    default_config:
+      enabled: true
+      permission_policy:
+        type: always_allow
+    mcp_server_name: atlassian
+    type: mcp_toolset
+# Divergence from the raw export: skills are referenced by NAME (the skill's directory under
+# claude_platform/skills/), not skill_id. deploy_agents.py resolves name -> skill_id at deploy.
+skills:
+  - name: lik-sync-catalog-from-project-indexes
+metadata: {}

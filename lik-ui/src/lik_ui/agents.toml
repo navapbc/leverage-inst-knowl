@@ -25,5 +25,9 @@ agent = "Knowledge Search Agent"
 agent = "LIK Query: Project Index"
 
 [[agents]]
+# Defined by claude_platform/agents/lik-catalog-registration.yaml
+agent = "Catalog Registration Agent"
+
+[[agents]]
 # Defined by claude_platform/agents/lik-cross-source-reference.yaml
 agent = "Cross-Source Referencing Agent"

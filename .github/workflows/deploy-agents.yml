@@ -22,6 +22,7 @@ on:
           - all
           - lik-query-project-index
           - lik-cross-source-reference
+          - lik-catalog-registration
         default: all
 
 permissions:
