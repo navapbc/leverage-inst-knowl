@@ -26,7 +26,10 @@ default_environment = "lik-ui-env"
 name = "Knowledge"
 
 [[sections]]
-name = "Management"
+name = "Temporary"
+
+[[sections]]
+name = "Sync to Catalog"
 management = true
 
 [[agents]]
@@ -36,14 +39,14 @@ section = "Knowledge"
 # environment omitted -> uses default_environment above
 
 [[agents]]
-# Defined by claude_platform/agents/lik-query-project-index.yaml
-agent = "LIK Query: Project Index"
-section = "Knowledge"
-
-[[agents]]
 # Defined by claude_platform/agents/lik-cross-source-reference.yaml
 agent = "Cross-Source Referencing Agent"
 section = "Knowledge"
+
+[[agents]]
+# Defined by claude_platform/agents/lik-query-project-index.yaml
+agent = "LIK Query: Project Index"
+section = "Temporary"
 
 [[agents]]
 # Defined by claude_platform/agents/lik-catalog-registration.yaml — writes to the shared Catalog.
