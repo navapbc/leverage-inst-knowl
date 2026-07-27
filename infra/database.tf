@@ -1,4 +1,4 @@
-# New, empty Lightsail managed Postgres in us-east-1. One instance hosts two databases:
+# Lightsail managed Postgres in us-east-1, holding production data. One instance hosts two databases:
 # the master DB (lik-mcp) plus a second DB (lik-ui) created during schema init. Public
 # mode is on (Container Services cannot reach the private endpoint); TLS is enforced
 # server-side by default on Postgres >= 15 (rds.force_ssl=1) and required client-side.
@@ -24,8 +24,9 @@ resource "aws_lightsail_database" "main" {
   backup_retention_enabled = true
   apply_immediately        = true
 
-  # Draft mode: no production data yet, so skip the final snapshot on destroy.
-  skip_final_snapshot = true
+  # Real production data now lives here: take a final snapshot on destroy/replace so the
+  # data survives a teardown (automated backups are deleted with the instance).
+  skip_final_snapshot = false
 }
 
 # Master password is the one secret Terraform authors (rather than reads). It lands in
