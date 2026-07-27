@@ -176,6 +176,7 @@ def register_agent_routes(app) -> None:
                 "user": user,
                 "agent": agent,
                 "agent_label": described["name"] or agent.agent_id,
+                "agent_version": described.get("version"),
                 "connections": conns,
                 "all_connected": all(c["connected"] for c in conns),
                 "system_prompt": described["system"],

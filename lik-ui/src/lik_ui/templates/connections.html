@@ -3,6 +3,7 @@
 {% block body_class %}connections-page{% endblock %}
 {% block content %}
   <h1>Connections for agent '{{ agent_label }}'</h1>
+  {% if agent_version %}<p class="agent-version"><small>version {{ agent_version }}</small></p>{% endif %}
 
   {% if system_prompt %}
     <details class="system-prompt">
@@ -17,7 +18,7 @@
       <ul>
         {% for s in skills %}
           <li>
-            {{ s.id }} <small>({{ s.type }} · v{{ s.version }})</small>
+            {{ s.id }} <small>(version {{ s.version }})</small>
             <button type="button" class="btn secondary skill-details-btn"
                     data-skill-id="{{ s.id }}" data-skill-version="{{ s.version }}">Details</button>
             <div class="skill-details" hidden></div>
