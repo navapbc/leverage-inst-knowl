@@ -9,6 +9,7 @@
 #     that holds the agents/skills. Not an admin key.
 
 name: Deploy skills to Claude platform
+run-name: Deploy ${{ inputs.skill }} skill to Claude platform
 
 on:
   workflow_dispatch:

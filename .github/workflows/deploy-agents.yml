@@ -10,7 +10,8 @@
 #   - Secret ANTHROPIC_API_KEY = a standard org API key (sk-ant-api03-...) scoped to the workspace
 #     that holds the agents/skills. Not an admin key. (Shared with deploy-skills.yml.)
 
-name: Deploy agents to Claude platform
+name: Deploy agent to Claude platform
+run-name: Deploy ${{ inputs.agent }} agent to Claude platform
 
 on:
   workflow_dispatch:
