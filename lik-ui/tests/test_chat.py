@@ -516,6 +516,45 @@ def test_stream_emits_terminal_error_when_client_raises(db):
     assert '"type": "done"' in r.text
 
 
+def test_sse_emits_heartbeat_while_the_stream_stalls(db, monkeypatch):
+    # A turn that goes silent longer than the heartbeat interval must keep the connection
+    # non-idle with SSE comments, so a load balancer doesn't cull it mid-turn and strand the
+    # reply. Drive a stall with a generator that blocks between events, and shrink the interval
+    # so the test doesn't wait on real seconds.
+    import threading
+
+    import lik_ui.chat as chat_mod
+
+    monkeypatch.setattr(chat_mod, "_SSE_HEARTBEAT_SECONDS", 0.05)
+    release = threading.Event()
+
+    def stalling_events(session_id, message):
+        yield {"type": "text", "text": "first"}
+        release.wait(2.0)  # simulate the agent thinking/working with nothing to emit
+        yield {"type": "text", "text": "second"}
+        yield {"type": "done"}
+
+    sc = FakeSessionsClient()
+    sc.send_and_stream = stalling_events
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    chunks = []
+    with client.stream("GET", f"/chat/{session_id}/stream?message=go") as r:
+        for line in r.iter_lines():
+            chunks.append(line)
+            if line.startswith(": keepalive"):
+                release.set()  # a heartbeat arrived during the stall — let the turn finish
+            if '"type": "done"' in line:
+                break
+
+    body = "\n".join(chunks)
+    assert ": keepalive" in body  # the connection was kept alive during the silent stretch
+    assert "first" in body and "second" in body  # and both real events still streamed
+    assert '"type": "done"' in body
+
+
 def test_history_replays_prior_events(db):
     sc = FakeSessionsClient(
         history=[

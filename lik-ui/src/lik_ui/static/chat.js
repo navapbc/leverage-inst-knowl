@@ -417,9 +417,27 @@
       source.close();
       setPromptsEnabled(true);
       // The connection dropped mid-turn; the agent keeps running server-side. Pull whatever
-      // was recorded so a completed reply isn't stranded behind a refresh.
-      reconcile();
+      // was recorded so a completed reply isn't stranded behind a refresh — then, if the turn
+      // is still in flight, re-attach to it so its remaining output streams without a manual
+      // refresh. Re-attaching loops: if the resume stream also drops, this same handler fires
+      // again and re-attaches, so a turn survives no matter how long it runs or how many times
+      // an intermediary culls the (idle) connection.
+      reconcile().then(resumeIfInFlight);
     };
+  }
+
+  // Attach to a turn still in flight (per the status from history) via the send-free /resume
+  // path, so its queued/running state shows and it streams to completion. A no-op when the
+  // session is idle (the turn already finished — history alone has the reply). Shared by the
+  // initial page load and the mid-turn drop-recovery above; never uses /stream, which would
+  // re-send the user message and duplicate the turn.
+  function resumeIfInFlight(status) {
+    if (status && status.toLowerCase() !== "idle") {
+      const label = status.toLowerCase().indexOf("queue") !== -1
+        ? "⏳ Queued — waiting for the agent…"
+        : "⚙ Working — the agent is running…";
+      streamTurn("/chat/" + sessionId + "/resume", label);
+    }
   }
 
   // Send an allow/deny decision for a paused tool call and stream the resumed turn.
@@ -444,15 +462,8 @@
     });
   }
 
-  reconcile().then(function (status) {
-    // A turn already in flight when the page loads (e.g. a queued retry after a reload) has
-    // no live stream attached yet, so history alone renders it silently. Attach to it so its
-    // queued/running state shows and it streams to completion without a manual refresh.
-    if (status && status.toLowerCase() !== "idle") {
-      const label = status.toLowerCase().indexOf("queue") !== -1
-        ? "⏳ Queued — waiting for the agent…"
-        : "⚙ Working — the agent is running…";
-      streamTurn("/chat/" + sessionId + "/resume", label);
-    }
-  });
+  // A turn already in flight when the page loads (e.g. a queued retry after a reload) has no
+  // live stream attached yet, so history alone renders it silently. Re-attach so it streams to
+  // completion without a manual refresh.
+  reconcile().then(resumeIfInFlight);
 })();
