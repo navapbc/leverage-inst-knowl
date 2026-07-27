@@ -38,6 +38,25 @@ only a relative string like `"about 5 hours ago"`), so the
 marker is a body hash. You may batch these fetches in parallel, but every response **must** pass the Response integrity
 guard before you hash it.
 
+While you have the body in hand, also **check it for a self-disclaiming warning** (see below) — the same body serves
+both the hash and this check, so no extra fetch is needed.
+
+## Self-disclaiming pages (content-warning exclusion)
+
+Some project-index pages carry a body banner **explicitly instructing readers not to use the page** — "DO NOT USE",
+"do not reference", or equivalent don't-use wording. This is a **content-level** signal in the page body and is
+independent of the Update History table: a page can show an approved edit trail (Step 2) yet still carry a "DO NOT USE"
+banner, in which case the mechanical `human-verified` result is misleading.
+
+When a page's body carries such a banner, **do not register it in Step 3.** Instead set it aside as a **held-back**
+page, recording its `title`, `webUrl`, and the disclaiming phrase you matched. These pages are surfaced to the user in
+Step 3b, who decides whether any should be registered anyway.
+
+Match **only** an explicit don't-use instruction. Weaker status wording — "UNVERIFIED", "under active review",
+"not yet approved", "draft", "in progress" — is **not** grounds to hold back; register those normally (their
+`verification` still comes from Step 2). When unsure whether wording rises to a don't-use instruction, **register the
+page** rather than hold it back.
+
 ## Content-state marker recipe (shared with `lik-query-project-index`)
 
 `source_state` = the SHA-256 hex digest of the page's markdown body:
@@ -84,6 +103,9 @@ only after its CQL returns a hit; apply the **Response integrity guard** to ever
 
 ## Step 3 — Register one Catalog row per page
 
+Register a row for every page **except** those held back as self-disclaiming (see "Self-disclaiming pages" above); those
+are handled in Step 3b.
+
 `register_catalog_entry` (lik-mcp) with an `entry`:
 - `entry_type`: `"index"`
 - `subject`: the page `title`, verbatim  *(e.g. `"Atlas"`)*
@@ -100,13 +122,34 @@ only after its CQL returns a hit; apply the **Response integrity guard** to ever
 Leave other fields at defaults (`provenance=ai-generated`, `freshness=current`, `sensitivity=cleared`, empty
 `access_groups`). Each call returns `inserted` or `updated` — tally for the summary.
 
+## Step 3b — Present held-back pages and ask
+
+If any pages were held back as self-disclaiming, list them for the user and ask whether to register any anyway. Show,
+per page, the `title`, the `webUrl`, and the disclaiming phrase matched — so the user can judge each on its merits:
+
+```
+N page(s) were held back because their body says not to use them:
+  1. <title> — <webUrl>
+     matched: "<disclaiming phrase>"
+  2. ...
+Register any of these anyway? Reply with the numbers (e.g. "1,3"), "all", or "none".
+```
+
+For each page the user chooses, register it as in Step 3, but **force `verification: "unverified"`** (with
+`verified_by`/`verified_at` null) regardless of what its Update History table showed — a page whose body tells readers
+not to use it must not carry a `human-verified` badge, even if its edit trail looks approved. Pages the user does not
+choose are left unregistered. If no pages were held back, skip this step silently.
+
 ## Step 4 — Summary
 
 ```
 Synced N project-index pages into the Catalog.
   • X new rows inserted
   • Y rows updated
+  • Z held back as self-disclaiming (W registered after confirmation)
 ```
+
+Omit the held-back line when Z is 0.
 
 ## Notes
 
