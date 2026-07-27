@@ -273,18 +273,54 @@ class AnthropicSessionsClient:
             event["deny_message"] = deny_message
         yield from self._stream(session_id, [event])
 
+    @staticmethod
+    def _as_datetime(value) -> datetime | None:
+        """Coerce an event's ``processed_at`` (a datetime, or an ISO-8601 string on some SDK
+        shapes) to a datetime for duration math, or None if it's absent/unparseable."""
+        if value is None or isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value))
+        except ValueError:
+            return None
+
     def list_events(self, session_id: str) -> Iterator[dict]:
         import anthropic
 
         try:
             events = self._client.beta.sessions.events.list(session_id, order="asc")
-            for event in events:
-                if normalized := self._normalize(event, include_user=True):
-                    if normalized["type"] == "status":
-                        continue  # live-only; a past turn's "running" means nothing on replay
-                    yield normalized
         except anthropic.NotFoundError as exc:
             raise SessionNotFound(session_id) from exc
+
+        # Emit each completed turn's working time as a ``turn_duration`` event so a replayed
+        # session shows how long the agent took, computed from the platform's own ``processed_at``
+        # timestamps (authoritative, independent of any browser/network lag). A turn spans from its
+        # user message to its last agent event; the duration is emitted at the turn boundary (just
+        # before the next user turn, or at the end), so it renders after that turn's reply. Queue
+        # wait is excluded — timing starts when the message was processed, not when it was queued.
+        turn_start: datetime | None = None
+        turn_end: datetime | None = None
+
+        def turn_duration() -> dict | None:
+            if turn_start is not None and turn_end is not None and turn_end >= turn_start:
+                return {"type": "turn_duration", "seconds": (turn_end - turn_start).total_seconds()}
+            return None
+
+        for event in events:
+            etype = getattr(event, "type", "")
+            ts = self._as_datetime(getattr(event, "processed_at", None))
+            if etype == "user.message":
+                if closed := turn_duration():
+                    yield closed  # close out the prior turn before its successor's bubble
+                turn_start, turn_end = ts, None
+            elif ts is not None and etype.startswith("agent."):
+                turn_end = ts  # last agent event so far marks the turn's end
+            if normalized := self._normalize(event, include_user=True):
+                if normalized["type"] == "status":
+                    continue  # live-only; a past turn's "running" means nothing on replay
+                yield normalized
+        if final := turn_duration():
+            yield final
 
     def status(self, session_id: str) -> str:
         import anthropic
