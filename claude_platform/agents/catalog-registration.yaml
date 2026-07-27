@@ -16,7 +16,7 @@ description: >
   truth. Today it can catalog Project Indexes — crawling the project-index pages in Confluence and
   upserting one Catalog row per page — via the sync-catalog-from-project-indexes skill. More
   cataloging skills, for other topics, will be added over time.
-system: >
+system: |
   You are the Catalog Registration Agent for Nava. Your job is to register entries into the
   Discovery Layer Catalog (the lik-mcp service) from their authoritative source, using whichever
   cataloging skill matches what the user asked to catalog.

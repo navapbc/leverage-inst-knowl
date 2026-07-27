@@ -98,16 +98,22 @@ a { color: var(--accent); }
 .card > details dt { color: var(--muted); }
 .card > details dd { margin: 0; word-break: break-all; }
 .card > details .prompt-label { margin-top: .6rem; font-size: .85rem; color: var(--muted); }
-.card > details pre { margin: .3rem 0 0; padding: .6rem .8rem; background: var(--bg);
-  border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere;
-  font-size: .82rem; max-height: 20rem; overflow-y: auto; }
 
 /* Agent system prompt on the connections page: collapsed by default, scrollable when long. */
 details.system-prompt { margin: .75rem 0; }
 details.system-prompt > summary { cursor: pointer; color: var(--accent); }
-details.system-prompt pre { margin: .5rem 0 0; padding: .6rem .8rem; background: var(--card);
-  border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere;
+
+/* Rendered-markdown system prompt (agents + connections pages): boxed and scrollable when long. */
+.markdown-body { margin: .3rem 0 0; padding: .6rem .8rem; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; overflow-wrap: anywhere;
   font-size: .85rem; max-height: 24rem; overflow-y: auto; }
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+.markdown-body p { margin: .5rem 0; }
+.markdown-body ul, .markdown-body ol { margin: .5rem 0; padding-left: 1.4rem; }
+.markdown-body li { margin: .15rem 0; }
+.markdown-body code { background: var(--card); padding: 0 .25rem; border-radius: 4px;
+  font-size: .9em; }
 
 details.skills { margin: .75rem 0; }
 details.skills > summary { cursor: pointer; color: var(--accent); }
