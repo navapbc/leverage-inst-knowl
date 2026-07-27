@@ -156,20 +156,31 @@ text so instructions are never lost.
 Deferred: caching the fetched file (align with the `describe`-caching TODO above if per-expand
 fetches become a concern).
 
-## TODO: decide how users get Anthropic API access
+## Workaround: per-user authorization and billing for Anthropic API access
 
-lik-ui talks to the Managed Agents platform with a single Anthropic credential today. Before
-multiple users depend on it, decide how each user's calls are authorized. Two options:
+lik-ui talks to the Managed Agents platform with a single shared Anthropic credential today, so
+every user's traffic bills and authorizes as one principal. It would be a **nice-to-have** for
+each user's calls to be authorized and billed as that user. Anthropic attributes usage to a
+credential, not to an
+application-level user identity we pass through, so true per-user attribution requires a distinct
+Anthropic API key per user — and the platform does not make that clean:
 
-1. **Each user provides their own Anthropic API key.** Simplest to reason about — every user's
-   agent traffic bills and authorizes under their own key, nothing is shared. Open questions:
-   whether managed agents and skills created under one user's key are visible to or usable by
-   others (sharing/visibility model), and where users obtain a key.
+**The only viable path is a per-user API key minted inside the `lik-ui` workspace.** An admin
+creates one key per user in the workspace (see the DONE section below), and lik-ui maps each
+app-user to their assigned key. Usage/cost reports can then break down per key, i.e. per user.
+The heavy caveat is provisioning: **key creation is Console-only — the Admin API cannot mint keys**
+("new API keys can only be created through the Claude Console"). So each key is a manual click,
+and offboarding a user means manually deactivating their key. The Admin API *can* automate the
+back half (list, rename, deactivate by `api_key_id`); only creation stays manual. Users do **not**
+need their own Console seat — the admin mints the keys on their behalf.
 
-2. **Configure Workload Identity Federation.** Map Nava users to Anthropic API access without
-   handing out per-user keys — see
-   https://platform.claude.com/settings/workload-identity-federation. Keeps agents and skills
-   under one org-owned identity while attributing calls to the mapped user.
+Two hard limits remain even with per-user keys: **rate limits are per-workspace** (all users share
+one pool, no per-user isolation) and there is **no per-key hard spend cap** on the standard API
+(the spend-limits API is Claude-Enterprise-only). So this buys per-user *cost reporting*, not
+per-user rate-limiting or spend enforcement.
+
+Keep the single shared workspace
+key and do per-user attribution in lik-ui's own DB, which we control and can fully automate.
 
 ## DONE: dedicated Claude Workspace for LIK
 
@@ -289,53 +300,32 @@ them), so the SDK's token-lifecycle model doesn't fit — we'd fight its assumpt
 its discovery internals. If a future SDK release exposes discovery + DCR as standalone
 helpers, revisit replacing `discover()` and `_acquire_via_dcr()`.
 
-## TODO: move OAuth client registrations off personal ownership
+## DONE: OAuth client registrations: ownership
 
-**Reminder to fix before other users depend on these connections.** Some source
-connections currently use OAuth *client* registrations (the client ID/secret in `.env`)
-owned by a personal account. This is a durability and trust liability: the client
-identifies **this app**, not the end user — one registration serves all users, and each
-user's own token is what lands in their vault. But if the registration is personally
-owned, the consent screen shows a personal app, quotas and security contacts route to an
-individual, and every user's connection breaks if that person leaves or loses access.
-
-The fix per source is to re-register (or transfer) the client under **Nava org
-ownership**, with more than one owner. This is configuration, not code — swap the resulting
-values into `.env`. Particulars differ by MCP service:
+**All client registrations are now under Nava org ownership with more than one owner.**
+Background: OAuth *client* registrations (the client ID/secret in `.env`) identify **this
+app**, not the end user — one registration serves all users, and each user's own token is
+what lands in their vault. When a registration is personally owned it is a durability and
+trust liability: the consent screen shows a personal app, quotas and security contacts
+route to an individual, and every user's connection breaks if that person leaves or loses
+access. The fix per source was to re-register (or transfer) each client under **Nava org
+ownership**, with more than one owner — configuration, not code. Per-source status:
 
 - **Atlassian (Confluence/Jira)** — No action. Atlassian supports Dynamic Client
   Registration, so lik-ui self-registers a client at runtime; there is no static client
   ID/secret to own. See `discover()` / `_acquire_via_dcr()` in `oauth_connector.py`.
 
-- **GitHub** — Currently a personal OAuth App. Transfer it to the Nava GitHub org
-  (the app's settings → *Transfer ownership*), or register a fresh org-owned OAuth App.
-  Org owners (plural) then control it. Client ID survives a transfer; rotate the secret and
-  update `LIK_UI_GITHUB_CLIENT_ID` / `LIK_UI_GITHUB_CLIENT_SECRET` if it changes. (If Nava
-  security later needs per-repo granularity or org-admin install approval, a GitHub *App* —
-  a different primitive with a different token model — is the stricter option; only switch
-  if required, as it is a larger change than a transfer.)
+- **GitHub** — Done: transferred to the Nava GitHub org, so org owners (plural) now control
+  it. The client ID survived the transfer; if the secret was rotated, keep
+  `LIK_UI_GITHUB_CLIENT_ID` / `LIK_UI_GITHUB_CLIENT_SECRET` in sync. (If Nava security later
+  needs per-repo granularity or org-admin install approval, a GitHub *App* — a different
+  primitive with a different token model — is the stricter option; only switch if required,
+  as it is a larger change than a transfer.)
 
-- **Google Drive** — Registered under a Google Workspace (enterprise) account; survival
-  after the registrant leaves is **not** guaranteed. The OAuth client lives inside a GCP
-  project and the consent screen is tied to that project. Verify in GCP Console → *IAM*
-  that the project sits under the Nava Google Cloud **organization** (not a standalone
-  personal project) and add a second **Owner** (a Nava admin or group). Keep the consent
-  screen *User Type* = **Internal** so consent is restricted to the Nava Workspace org.
-  Values: `LIK_UI_GDRIVEMCP_CLIENT_ID` / `LIK_UI_GDRIVEMCP_CLIENT_SECRET`.
-
-- **lik-mcp** — Same Google-client shape as Google Drive (Google is the AS, no DCR). The
-  client reuses lik-mcp's own `LIK_OAUTH_CLIENT_ID` (it is the audience lik-mcp validates),
-  so ownership follows wherever that Google client is registered — apply the same GCP
-  org-ownership check as Google Drive. Values: `LIK_UI_LIKMCP_CLIENT_ID` /
-  `LIK_UI_LIKMCP_CLIENT_SECRET`.
-
-- **App login (Google OIDC, identity-only)** — Not a data source, but the same GCP
-  project/consent-screen ownership applies to `LIK_UI_APP_OAUTH_CLIENT_ID` /
-  `LIK_UI_APP_OAUTH_CLIENT_SECRET`. Include it in the same GCP ownership check.
-
-- **Slack** — Not built yet, but the **official Slack MCP server** (hosted at
-  `https://mcp.slack.com/mcp`, GA Feb 2026) fits the existing connector like GitHub does —
-  no Slack-specific code. It does per-user OAuth 2.0/PKCE and issues per-user tokens that
+- **Slack** — Done: built and installed in the Nava Slack workspace, org-owned from the
+  start. It uses the **official Slack MCP server** (hosted at `https://mcp.slack.com/mcp`,
+  GA Feb 2026), which fits the existing connector like GitHub does — no Slack-specific code.
+  It does per-user OAuth 2.0/PKCE and issues per-user tokens that
   enforce each user's own Slack permissions (matches the no-shared-identity rule in
   `../v0.5/06-access-control.md`); the `xoxb`/`xoxp` / `authed_user` token details are
   handled inside the MCP server, not here. Slack does **not** support DCR, so it uses the
@@ -345,5 +335,22 @@ values into `.env`. Particulars differ by MCP service:
   has the pre-configured branch.) Constraints when building it: (1) the Slack app must be
   **directory-published or internal** — unlisted apps are rejected by the MCP server; (2)
   the server exposes a **curated tool subset** (search, messages, canvases, users) — no
-  file ops, reminders, workflow triggers, or admin methods. Register the app **org-owned
-  from the start**.
+  file ops, reminders, workflow triggers, or admin methods. The app was registered
+  **org-owned** and satisfies both constraints.
+
+The three Google clients below (Google Drive, lik-mcp, App login) all live in the same GCP
+project, **`lik-prod`**, under the Nava Google Cloud **organization**. A second project-level
+**Owner** has been added to `lik-prod`, so all three survive the original registrant leaving
+(three org Admins can also recover access). Consent screen *User Type* stays **Internal** so
+consent is restricted to the Nava Workspace org.
+
+- **Google Drive** — Done (see `lik-prod` above).
+  Values: `LIK_UI_GDRIVEMCP_CLIENT_ID` / `LIK_UI_GDRIVEMCP_CLIENT_SECRET`.
+
+- **lik-mcp** — Done (see `lik-prod` above). The client reuses lik-mcp's own
+  `LIK_OAUTH_CLIENT_ID` (it is the audience lik-mcp validates).
+  Values: `LIK_UI_LIKMCP_CLIENT_ID` / `LIK_UI_LIKMCP_CLIENT_SECRET`.
+
+- **App login (Google OIDC, identity-only)** — Done (see `lik-prod` above). Not a data
+  source, but shares the same GCP project/consent screen.
+  Values: `LIK_UI_APP_OAUTH_CLIENT_ID` / `LIK_UI_APP_OAUTH_CLIENT_SECRET`.

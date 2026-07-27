@@ -99,12 +99,3 @@ The full design lives in the [v0.5 documents](https://github.com/navapbc/leverag
 (overview, concepts, examples, strategy, architecture, access control, storage, open questions —
 all linked above). For how the agent runtime is divided between Anthropic's platform and Nava's own
 apps, see [Claude Managed Agents](https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md).
-
-### Open engineering items
-
-Tracked in the lik-ui [README](https://github.com/navapbc/leverage-inst-knowl/blob/main/lik-ui/README.md);
-the notable open ones:
-
-- [Decide how users get Anthropic API access](https://github.com/navapbc/leverage-inst-knowl/blob/main/lik-ui/README.md#todo-decide-how-users-get-anthropic-api-access) — per-user key vs. workload identity federation
-- [Move OAuth client registrations off personal ownership](https://github.com/navapbc/leverage-inst-knowl/blob/main/lik-ui/README.md#todo-move-oauth-client-registrations-off-personal-ownership) — re-register clients under Nava org ownership before others depend on them
-- [Streaming timeouts on the deployed ingress](https://github.com/navapbc/leverage-inst-knowl/blob/main/lik-ui/README.md#todo-streaming-timeouts-on-the-deployed-ingress-scaling) — the managed Lightsail ingress can cull idle SSE connections; largely mitigated by a keepalive heartbeat and drop re-attach, with a possible hard duration cap still to confirm
