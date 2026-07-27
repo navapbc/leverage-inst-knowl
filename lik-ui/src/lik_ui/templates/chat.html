@@ -12,6 +12,8 @@
 
   <details class="session-settings">
     <summary>Session settings</summary>
+    <p><a href="/connections?agent_id={{ session.agent_id | urlencode }}">Details for {{ agent_label }}</a></p>
+
     {% if is_owner %}
       <form method="post" action="/chat/{{ session.session_id | urlencode }}/share" class="share-form">
         <label>
@@ -20,8 +22,6 @@
         </label>
       </form>
     {% endif %}
-
-    <p><a href="/connections?agent_id={{ session.agent_id | urlencode }}">Connections for {{ agent_label }}</a></p>
 
     <div id="chat-controls">
       <label><input type="checkbox" id="toggle-mcp"> Show MCP tool use</label>
