@@ -188,17 +188,29 @@ More details at https://platform.claude.com/docs/en/manage-claude/workspaces.
 
 ## TODO: streaming timeouts on the deployed ingress (scaling)
 
-The chat endpoint streams tokens to the browser over **SSE** (`StreamingResponse` with
-`media_type="text/event-stream"`, consumed by an `EventSource`). On the current Lightsail
-container-service deployment, the managed ingress has a **fixed, undocumented,
-non-configurable timeout**: a long LLM generation whose stream exceeds it is cut
-mid-response with a 504-class error, and there is no knob to raise the ceiling. Do **not**
-front the app with a Lightsail distribution/CDN either — its 30s origin timeout and
-chunked-only handling break SSE. If long responses start dying mid-stream, suspect the
-ingress timeout before the app code. The fix when this becomes a hard limit is to move off
-the managed Lightsail ingress to ECS/EC2 behind an ALB (configurable idle timeout);
-switching the browser transport to WebSockets is a lighter mitigation if staying on
-Lightsail. See `../domain-name.md` (Caveat: real-time streaming and timeouts).
+The chat streams the agent's reply to the browser live. On the current Lightsail deployment,
+the connection is dropped if it stays quiet for about 60 seconds — and the agent often goes
+quiet that long while it's thinking between steps. When that happened, the reply was still
+finished and saved on the server, but it never showed up in the open chat.
+
+**Largely fixed** as of PR #33 (navapbc/leverage-inst-knowl):
+
+- A small "still here" signal is sent every 15 seconds during quiet stretches, so the
+  connection isn't dropped in the first place.
+- If it *is* dropped, the page automatically reconnects and picks up the reply — the user
+  doesn't lose it.
+
+**Workaround if a reply ever goes missing:** wait until the agent looks idle, then refresh
+the page. The reply is saved on the server, so reloading brings it back. (This is the
+fallback the automatic reconnect now handles for you.)
+
+**Remaining risk:** we've confirmed the ~60s *idle* limit, but not whether Lightsail also
+caps the *total* length of a single connection regardless of activity. If it does, the
+heartbeat won't help (the auto-reconnect still recovers the reply, and refreshing won't if
+the server never got to finish), and the real fix is to move off the Lightsail ingress to
+ECS/EC2 behind an ALB, where the timeout is configurable. Also avoid fronting the app with a
+Lightsail distribution/CDN — its 30s limit breaks live streaming. See `../domain-name.md`
+(Caveat: real-time streaming and timeouts).
 
 ## TODO: auto-archive or delete stale chat sessions
 
