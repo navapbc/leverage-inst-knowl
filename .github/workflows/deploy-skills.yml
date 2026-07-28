@@ -7,7 +7,8 @@
 # Prerequisites (set once in repo Settings, on the `prod` environment):
 #   - Variable AWS_SSM_READ_ROLE_ARN = the github_ssm_read_role_arn Terraform output.
 #   - Variable AWS_REGION            = us-east-1.
-#   - Variable SSM_PREFIX (optional)  = the Terraform var.ssm_prefix (defaults to /ik-arch/prod).
+#   - Variable SSM_PREFIX = the Terraform var.ssm_prefix (e.g. /ik-arch/prod). Required, set on
+#     the environment (resolves per the job's `environment:`), alongside AWS_REGION and the role.
 # The Anthropic API key is fetched from SSM ($SSM_PREFIX/shared/ANTHROPIC_API_KEY) via GitHub
 # OIDC — one shared key, no GitHub secret. Auth uses a role scoped to reading only that parameter
 # (see infra/iam_github_oidc.tf). Same pattern in deploy-agents.yml.
@@ -40,7 +41,7 @@ jobs:
     # deployment protection rules). Env-scoped vars only resolve when the job declares this.
     environment: prod
     env:
-      SSM_PREFIX: ${{ vars.SSM_PREFIX || '/ik-arch/prod' }}
+      SSM_PREFIX: ${{ vars.SSM_PREFIX }}
     steps:
       - uses: actions/checkout@v6
 

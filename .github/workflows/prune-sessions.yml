@@ -8,7 +8,8 @@
 # Prerequisites (set once in repo Settings, on the `prod` environment):
 #   - Variable AWS_SSM_READ_ROLE_ARN = the github_ssm_read_role_arn Terraform output.
 #   - Variable AWS_REGION            = us-east-1.
-#   - Variable SSM_PREFIX (optional) = the Terraform var.ssm_prefix (defaults to /ik-arch/prod).
+#   - Variable SSM_PREFIX = the Terraform var.ssm_prefix (e.g. /ik-arch/prod). Required, set on
+#     the environment (resolves per the job's `environment:`), alongside AWS_REGION and the role.
 # No LIK_UI_DB_* variables are needed: the DB password + Anthropic key are read from SSM, the DB
 # target (instance + db name) from the Terraform-authored $SSM_PREFIX/config/ params, and the DB
 # host/port/master-user are discovered from the Lightsail instance. All at run time — never GitHub
@@ -42,7 +43,7 @@ jobs:
     # when the job declares this.
     environment: prod
     env:
-      SSM_PREFIX: ${{ vars.SSM_PREFIX || '/ik-arch/prod' }}
+      SSM_PREFIX: ${{ vars.SSM_PREFIX }}
       LIK_UI_ENV: prod
       LIK_UI_DB_SSLMODE: require
       # DB_INSTANCE + LIK_UI_DB_NAME are no longer hardcoded here: they are read at run time from
