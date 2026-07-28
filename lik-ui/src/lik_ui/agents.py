@@ -176,6 +176,10 @@ def resolve_agent_options(settings: Settings, agents_client: AgentsClient | None
             section=entry.section,
             is_management=entry.is_management,
             user_prompt=entry.user_prompt,
+            agent_name=entry.agent_name,
+            schedulable=entry.schedulable,
+            auto_approve=entry.auto_approve,
+            max_runtime=entry.max_runtime,
         ))
     return options
 

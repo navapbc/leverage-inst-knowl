@@ -24,6 +24,21 @@ _DEFAULT_AGENTS_CONFIG_PATH = Path(__file__).parent / "agents.toml"
 _DEFAULT_FAQ_PATH = Path(__file__).parent / "faq.md"
 
 
+# Fallback used when a schedulable agent's roster entry omits ``max_runtime`` — a generous
+# bound (a full catalog sync is minutes-long with 60–90s silent windows). Per-agent values in
+# the roster override it; the scheduler's stuck-row reclaim cutoff derives from this per agent.
+DEFAULT_MAX_RUNTIME_SECONDS = 1800  # 30 minutes
+
+
+class AutoApproveTool(BaseModel):
+    """One allowlisted tool call a scheduled, unattended run may auto-approve. Always
+    server-qualified: a bare tool name would auto-approve a same-named tool on a different MCP
+    server, defeating the write backstop. Anything not on the allowlist is denied (skip-and-record)."""
+
+    server: str
+    tool: str
+
+
 class SectionDef(BaseModel):
     """One picker section declared at the top of the roster. The declaration order of these
     blocks is the order sections render in the picker. ``is_management`` marks a section whose
@@ -51,6 +66,14 @@ class AgentRosterEntry(BaseModel):
     section: str = ""
     is_management: bool = False
     user_prompt: str = ""
+    # Scheduling (see docs/plans/2026-07-28-002-...): ``schedulable`` gates whether this agent may
+    # be offered as a scheduled, unattended run — a curator's assertion that its skills are
+    # unattended-safe (skip-and-record, no indefinite waiting), which no automatic marker can verify.
+    # ``auto_approve`` is the allowlist of tool calls a scheduled run may approve unattended (the
+    # write backstop). ``max_runtime`` is the per-agent hard bound in seconds.
+    schedulable: bool = False
+    auto_approve: list[AutoApproveTool] = []
+    max_runtime: int = DEFAULT_MAX_RUNTIME_SECONDS
 
 
 class AgentOption(BaseModel):
@@ -71,6 +94,13 @@ class AgentOption(BaseModel):
     section: str = ""
     is_management: bool = False
     user_prompt: str = ""
+    # Carried through from the roster (see AgentRosterEntry). ``agent_name`` is retained here — unlike
+    # the other resolved fields it stays name-keyed — so the scheduled runner can match a
+    # ``scheduled_runs.agent_name`` back to its resolved ids and allowlist.
+    agent_name: str = ""
+    schedulable: bool = False
+    auto_approve: list[AutoApproveTool] = []
+    max_runtime: int = DEFAULT_MAX_RUNTIME_SECONDS
 
 
 class Settings(BaseSettings):
@@ -206,6 +236,13 @@ class Settings(BaseSettings):
             environment_name = str(entry.get("environment", "")).strip() or default_env
             section = str(entry.get("section", "")).strip()
             user_prompt = str(entry.get("user_prompt", "")).strip()
+            schedulable = bool(entry.get("schedulable", False))
+            max_runtime = int(entry.get("max_runtime", DEFAULT_MAX_RUNTIME_SECONDS))
+            auto_approve = [
+                AutoApproveTool(server=str(t.get("server", "")).strip(), tool=str(t.get("tool", "")).strip())
+                for t in entry.get("auto_approve", [])
+                if str(t.get("tool", "")).strip()
+            ]
             if agent_name:
                 entries.append(AgentRosterEntry(
                     agent_name=agent_name,
@@ -213,6 +250,9 @@ class Settings(BaseSettings):
                     section=section,
                     is_management=section in management_sections,
                     user_prompt=user_prompt,
+                    schedulable=schedulable,
+                    auto_approve=auto_approve,
+                    max_runtime=max_runtime,
                 ))
         return entries
 

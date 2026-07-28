@@ -199,6 +199,62 @@ def test_shipped_roster_agents_all_carry_a_user_prompt():
         assert entry.user_prompt, f"{entry.agent_name!r} is missing a user_prompt"
 
 
+def test_agent_roster_parses_scheduling_fields(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Catalog Registration Agent"
+        schedulable = true
+        max_runtime = 900
+        auto_approve = [
+            { server = "lik-mcp", tool = "register_catalog_entry" },
+            { server = "lik-mcp", tool = "list_catalog_entries" },
+        ]
+        """,
+    )
+    entry = Settings(env="test", agents_config_path=path).agent_roster[0]
+    assert entry.schedulable is True
+    assert entry.max_runtime == 900
+    assert [(t.server, t.tool) for t in entry.auto_approve] == [
+        ("lik-mcp", "register_catalog_entry"),
+        ("lik-mcp", "list_catalog_entries"),
+    ]
+
+
+def test_agent_roster_scheduling_fields_default_safely_when_omitted(tmp_path):
+    from lik_ui.settings import DEFAULT_MAX_RUNTIME_SECONDS
+
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Searcher"
+        """,
+    )
+    entry = Settings(env="test", agents_config_path=path).agent_roster[0]
+    # Not schedulable by default — an agent must be explicitly marked unattended-safe.
+    assert entry.schedulable is False
+    assert entry.auto_approve == []
+    assert entry.max_runtime == DEFAULT_MAX_RUNTIME_SECONDS
+
+
+def test_agent_roster_auto_approve_skips_entries_missing_tool(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Searcher"
+        auto_approve = [
+            { server = "lik-mcp", tool = "register_catalog_entry" },
+            { server = "lik-mcp" },
+        ]
+        """,
+    )
+    entry = Settings(env="test", agents_config_path=path).agent_roster[0]
+    assert [(t.server, t.tool) for t in entry.auto_approve] == [("lik-mcp", "register_catalog_entry")]
+
+
 def test_agent_sections_preserve_declaration_order(tmp_path):
     path = _roster(
         tmp_path,
