@@ -53,19 +53,19 @@
   <form class="start-chat" method="get" action="/chat">
     <input type="hidden" name="agent_id" value="{{ agent.agent_id }}">
     <label for="session-title">Chat title:</label>
-    <input id="session-title" name="title" autocomplete="off" placeholder="{{ agent_label }}"
+    <input id="session-title" name="title" autocomplete="off" placeholder="{{ session_title_prefix }}"
            {% if not all_connected %}disabled{% endif %}>
     <button class="btn" type="submit" {% if not all_connected %}disabled{% endif %}>Start chatting</button>
   </form>
   <div><a href="/sessions">or continue existing chat sessions</a></div>
   <script>
-    // Prefill the session title with the agent name plus the current local time so a session
-    // gets a meaningful name by default. The user can edit it before starting; if cleared,
-    // the server applies the same agent-name-plus-timestamp default.
+    // Prefill the session title with the agent's short prefix plus the current local time so a
+    // session gets a meaningful name by default. The user can edit it before starting; if cleared,
+    // the server applies the same prefix-plus-timestamp default.
     (function () {
       var el = document.getElementById("session-title");
       if (el && !el.value) {
-        el.value = {{ agent_label | tojson }} + " · " + new Date().toLocaleString();
+        el.value = {{ session_title_prefix | tojson }} + " · " + new Date().toLocaleString();
       }
     })();
 

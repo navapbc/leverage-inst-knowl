@@ -1,0 +1,13 @@
+# Test roster whose agent declares a session_title_prefix, so title-default tests can exercise the
+# prefix path (vs. the fallback-to-agent-name path covered by the default fixture). Name-based: the
+# fake agents client resolves "Test Agent" to agent_1 at startup.
+default_environment = "Test Env"
+
+[[sections]]
+name = "Knowledge"
+
+[[agents]]
+agent = "Test Agent"
+section = "Knowledge"
+session_title_prefix = "TP"
+user_prompt = "Ask the Test Agent about test things."

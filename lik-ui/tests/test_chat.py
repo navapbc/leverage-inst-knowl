@@ -81,10 +81,10 @@ class FakeAgentsClient:
         }
 
 
-def _app(db, sessions_client, vc=None, email="alice@navapbc.com"):
+def _app(db, sessions_client, vc=None, email="alice@navapbc.com", roster="agents.toml"):
     vc = vc or RecordingVaultClient()
     oidc = FakeOidc({"email": email, "email_verified": True})
-    settings = Settings(env="test", agents_config_path=Path(__file__).parent / "fixtures" / "agents.toml")
+    settings = Settings(env="test", agents_config_path=Path(__file__).parent / "fixtures" / roster)
     return build_app(settings, store=Store(db), app_oidc=oidc, vault_client=vc,
                      agents_client=FakeAgentsClient(), sessions_client=sessions_client)
 
@@ -253,11 +253,37 @@ def test_new_chat_uses_provided_title(db):
 
 
 def test_new_chat_defaults_title_when_blank(db):
+    # The fixture agent declares no session_title_prefix, so the blank-title default falls back to
+    # the agent's full name from describe() (pre-prefix behavior).
     sc = FakeSessionsClient()
     client = TestClient(_app(db, sc), follow_redirects=False)
     _login(client)
     client.get("/chat?agent_id=agent_1")  # no title -> agent name + timestamp default
     assert "Discovery Layer Agent" in client.get("/sessions").text
+
+
+def test_new_chat_uses_session_title_prefix_when_present(db):
+    # When the roster gives the agent a short prefix, the blank-title default leads with it instead
+    # of the long agent name.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc, roster="agents_prefixed.toml"), follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1")  # no title -> prefix + timestamp default
+    sessions = client.get("/sessions").text
+    assert "TP · " in sessions
+    assert "Discovery Layer Agent" not in sessions
+
+
+def test_connections_page_prefills_title_with_prefix(db):
+    # The connections page seeds the title input (placeholder + JS prefill) from the prefix, not the
+    # long agent name; the page heading still shows the full name.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc, roster="agents_prefixed.toml"), follow_redirects=False)
+    _login(client)
+    page = client.get("/connections?agent_id=agent_1").text
+    assert 'placeholder="TP"' in page  # input placeholder uses the prefix
+    assert '"TP" + " · " + new Date().toLocaleString()' in page  # JS prefill uses the prefix
+    assert "Discovery Layer Agent" in page  # heading keeps the full agent label
 
 
 def _start_session(db, sc, title="agent_1"):

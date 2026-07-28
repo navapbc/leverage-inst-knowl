@@ -176,6 +176,7 @@ def resolve_agent_options(settings: Settings, agents_client: AgentsClient | None
             section=entry.section,
             is_management=entry.is_management,
             user_prompt=entry.user_prompt,
+            session_title_prefix=entry.session_title_prefix,
             agent_name=entry.agent_name,
             schedulable=entry.schedulable,
             auto_approve=entry.auto_approve,
@@ -220,13 +221,17 @@ def register_agent_routes(app) -> None:
         except Exception as exc:  # noqa: BLE001 - surface SDK/agent/vault errors as a page, not a 500
             return HTMLResponse(f"Could not load the agent's required connections: {exc}", status_code=502)
 
+        agent_label = described["name"] or agent.agent_id
         return templates.TemplateResponse(
             request,
             "connections.html",
             {
                 "user": user,
                 "agent": agent,
-                "agent_label": described["name"] or agent.agent_id,
+                "agent_label": agent_label,
+                # Leading clause of the default session title: the roster's short prefix, or the
+                # agent's full name when it declares none (keeps the pre-prefix default).
+                "session_title_prefix": agent.session_title_prefix or agent_label,
                 "agent_version": described.get("version"),
                 "connections": conns,
                 "all_connected": all(c["connected"] for c in conns),

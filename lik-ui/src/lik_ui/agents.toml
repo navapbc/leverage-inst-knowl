@@ -42,6 +42,7 @@ management = true
 # Defined by claude_platform/agents/cross-source-reference.yaml
 agent = "Cross-Source Referencing Agent"
 section = "Generic"
+session_title_prefix = "Cross-Source"
 user_prompt = """\
     I'll answer your question/request by pulling from several sources at once — Nava's project \
     Catalog, Confluence/Jira, Google Drive, Slack, and GitHub — and give you one cited answer. \
@@ -52,6 +53,7 @@ user_prompt = """\
 # Defined by claude_platform/agents/catalog-registration.yaml — writes to the shared Catalog.
 agent = "Catalog Registration Agent"
 section = "Sync to Catalog"
+session_title_prefix = "Catalog"
 user_prompt = """\
     Tell me what to register into the Discovery Layer Catalog. Today I can catalog Project \
     Indexes — ask me to sync the project indexes and I'll crawl the project-index pages in \
@@ -82,6 +84,7 @@ auto_approve = [
 # Defined by claude_platform/agents/knowledge-search.yaml — routes to the query skills.
 agent = "Knowledge Search Agent"
 section = "Knowledge"
+session_title_prefix = "KS"
 user_prompt = """\
     Ask a Nava delivery-knowledge question and I'll route it to the right specialist — project \
     history (has anyone done X, which projects involve Y), organizational guidance (Nava's policy \

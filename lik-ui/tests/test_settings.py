@@ -199,6 +199,48 @@ def test_shipped_roster_agents_all_carry_a_user_prompt():
         assert entry.user_prompt, f"{entry.agent_name!r} is missing a user_prompt"
 
 
+def test_agent_roster_parses_session_title_prefix(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Searcher"
+        session_title_prefix = "Search"
+        """,
+    )
+    entry = Settings(env="test", agents_config_path=path).agent_roster[0]
+    assert entry.session_title_prefix == "Search"
+
+
+def test_agent_roster_session_title_prefix_defaults_empty_when_omitted(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Searcher"
+        """,
+    )
+    assert Settings(env="test", agents_config_path=path).agent_roster[0].session_title_prefix == ""
+
+
+def test_agent_roster_session_title_prefix_strips_whitespace(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Searcher"
+        session_title_prefix = "   "
+        """,
+    )
+    assert Settings(env="test", agents_config_path=path).agent_roster[0].session_title_prefix == ""
+
+
+def test_shipped_roster_agents_all_carry_a_session_title_prefix():
+    # Each shipped agent should carry a short prefix so session titles stay scannable.
+    for entry in Settings(env="test").agent_roster:
+        assert entry.session_title_prefix, f"{entry.agent_name!r} is missing a session_title_prefix"
+
+
 def test_agent_roster_parses_scheduling_fields(tmp_path):
     path = _roster(
         tmp_path,
