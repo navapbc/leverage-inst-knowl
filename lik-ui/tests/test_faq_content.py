@@ -23,7 +23,6 @@ R6_SOURCES = [
     "v0.5/01-overview.md",
     "limitations.md",
     "mcp-availability.md",
-    "lik-ui/README.md",
 ]
 
 _LINK_RE = re.compile(r"\[[^\]]*\]\((?P<url>[^)]+)\)")
