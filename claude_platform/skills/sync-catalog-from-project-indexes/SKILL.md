@@ -1,22 +1,39 @@
 ---
 name: sync-catalog-from-project-indexes
-description: Catalog the project-index pages from Confluence into the Discovery Layer Catalog (the lik-mcp service). Fetches every Confluence page tagged `project-index` and upserts one Catalog row per page via `register_catalog_entry`. Use whenever someone says "sync the project indexes", "refresh the project-index catalog", "catalog the project indexes", or asks to (re)build Catalog rows from the Project Index Directory. This is a Catalog-registration skill: the project-index pages are authored by a separate process; this skill only registers them as Catalog rows — it writes to the Catalog, never to Confluence.
+description: Catalog the project-index pages from Confluence into the Discovery Layer Catalog (the lik-mcp service). Lists the Confluence pages tagged `project-index` and upserts one Catalog row per page via `register_catalog_entry`. Runs in two modes — a fast default "routine" sync that only re-checks pages due for re-derivation or not yet catalogued, and a "full sweep" that re-checks every page (trigger it when someone says "full sweep", "full resync", or "re-check everything"). Use whenever someone says "sync the project indexes", "refresh the project-index catalog", "catalog the project indexes", or asks to (re)build Catalog rows from the Project Index Directory. This is a Catalog-registration skill: the project-index pages are authored by a separate process; this skill only registers them as Catalog rows — it writes to the Catalog, never to Confluence.
 ---
 
 # Sync Catalog from Project Indexes
 
-Crawl every Confluence page tagged `project-index` and register one **Catalog** row per page in the Discovery Layer's
+Crawl the Confluence pages tagged `project-index` and register one **Catalog** row per page in the Discovery Layer's
 Catalog store (fronted by the **lik-mcp** service). This is the Catalog-store counterpart of `discovery-catalog-sync`,
 which writes the same pages into a Confluence table instead.
 
-An expensive crawl — run on demand only. Re-running is safe: each row upserts on its key, so a second run updates in
-place rather than duplicating.
+Re-running is safe: each row upserts on its key, so a second run updates in place rather than duplicating.
+
+## Two modes: routine (default) and full sweep
+
+The expensive part of a sync is the **per-page** work — fetching each page's body to hash it (Step 1) and reading its
+Update History child (Step 2). The page **list** itself (the CQL in Step 1) is cheap. So the skill has two modes:
+
+- **Routine (the default).** Do the per-page work only for pages that actually need it — pages that are **past due**
+  for re-derivation, or **not yet in the Catalog**. Pages still within their refresh window are skipped this run. This
+  makes a routine sync much faster than crawling every page, at the cost of not re-checking still-fresh pages until they
+  come due. That trade is bounded: every row carries a `refresh_due_at` deadline (below), so nothing goes unchecked
+  indefinitely.
+- **Full sweep (explicit).** Re-check **every** page exactly as this skill always has, ignoring `refresh_due_at`. Run
+  this when the caller asks for a "full sweep" / "full resync" / "re-check everything", or periodically as a
+  completeness backstop. A full sweep re-stamps every row's `refresh_due_at`.
+
+**Pick the mode first.** Unless the caller explicitly asked for a full sweep, run **routine**. Everything below is
+written for routine mode; the "Full sweep" callouts note where it differs (it simply processes *all* pages instead of
+the selected subset).
 
 ## Prerequisites
 
 - **lik-mcp** connected
 
-## Step 1 — Fetch all project-index pages
+## Step 1 — Fetch the project-index page list (cheap)
 
 `searchConfluenceUsingCql` with:
 - cloudId: `navasage.atlassian.net`
@@ -30,7 +47,32 @@ Per result, collect:
 - `title` → project name
 - `webUrl` → page URL
 - page **ID**
-- optionally `space.name`, `summary`, `lastModified`, `author.displayName` for context
+- `lastModified` → the page's relative/absolute last-modified string (used by the routine-mode change hint below)
+- optionally `space.name`, `summary`, `author.displayName` for context
+
+This CQL call is the cheap part — it returns the whole list without any per-page body fetch.
+
+## Step 1b — Select which pages to process
+
+**Full sweep:** skip this step — every page is processed. Go straight to the per-page work below for all of them.
+
+**Routine mode:** first read the Catalog rows this skill already owns so you know each page's refresh deadline:
+
+`list_catalog_entries` (lik-mcp) with `entry_type: "index"`. Match each Catalog row to a page from Step 1 by key —
+the row's `subject` equals the page `title` and its `locator` equals the page **ID**. Each row carries a
+`refresh_due_at` (may be null on rows written before this field existed).
+
+Process a page when **either** of these holds; otherwise **skip** it this run:
+- **Past due** — the page has a matching row and `now` is at or after its `refresh_due_at`. A **null**
+  `refresh_due_at` counts as always due (so pre-existing rows are always processed until they get a deadline).
+- **Not yet catalogued** — no matching row exists for the page (a new project index).
+
+Order the pages you will process **most-urgent-first**: past-due rows first, then not-yet-catalogued pages. A run that
+is interrupted or capped then does the highest-value work first.
+
+## Per-page work (for each selected page)
+
+Do the following for each page selected in Step 1b (routine) or for every page (full sweep).
 
 **Compute the content-state marker** for each page from its body, per the recipe below — the **main** project-index
 page, not its Update History child. The connector exposes no stable change signal (no version number; `lastModified` is
@@ -112,15 +154,29 @@ are handled in Step 3b.
 - `location`: the page `webUrl`
 - `store_kind`: `"confluence"`
 - `locator`: the Confluence page ID
-- `source_refs`: `[{ "id": "<pageId>", "source_state": "<body hash from Step 1>" }]`  *(powers staleness checks;
-  compared by equality to detect "edited since")*
+- `source_refs`: `[{ "id": "<pageId>", "source_state": "<body hash from the per-page work>" }]`  *(powers staleness
+  checks; compared by equality to detect "edited since")*
 - `verification`: from Step 2
 - `verified_by` / `verified_at`: from the Update History table, else null
+- `refresh_due_at`: the row's next re-derivation deadline — see the interval policy below
 - `computed_by`: `"sync-catalog-from-project-indexes"`
 - `row_provenance`: `"skill"`
 
 Leave other fields at defaults (`provenance=ai-generated`, `freshness=current`, `sensitivity=cleared`, empty
 `access_groups`). Each call returns `inserted` or `updated` — tally for the summary.
+
+**`refresh_due_at` — trust-tiered interval (this skill's policy).** Set `refresh_due_at` to the current time plus an
+interval chosen from the row's trust/stability on *this* run. More-trusted, stable rows are re-checked less often;
+shakier ones sooner:
+
+| Row state this run | Interval | `refresh_due_at` |
+|---|---|---|
+| `verification = human-verified` **and** `freshness = current` | 30 days | now + 30 days |
+| `unverified` (and not stale/drifted) | 14 days | now + 14 days |
+| `freshness = stale` or the row drifted on this run | 3 days | now + 3 days |
+
+These numbers are **this skill's** to tune — only the ordering is fixed (verified-current ≥ unverified ≥
+stale/drifted). Both modes stamp `refresh_due_at` on every row they process (a full sweep re-stamps all of them).
 
 ## Step 3b — Present held-back pages and ask
 
@@ -142,14 +198,18 @@ choose are left unregistered. If no pages were held back, skip this step silentl
 
 ## Step 4 — Summary
 
+State which mode ran, and report how many pages were processed vs. skipped:
+
 ```
-Synced N project-index pages into the Catalog.
-  • X new rows inserted
-  • Y rows updated
+Synced the project-index Catalog (<routine | full sweep>).
+  • N pages found
+  • P processed (X new rows inserted, Y rows updated)
+  • S skipped as still fresh (not yet due for re-derivation)
   • Z held back as self-disclaiming (W registered after confirmation)
 ```
 
-Omit the held-back line when Z is 0.
+In full-sweep mode S is 0 (every page is processed). Omit the skipped line when S is 0, and the held-back line when
+Z is 0.
 
 ## Notes
 
