@@ -42,12 +42,15 @@ class AgentRosterEntry(BaseModel):
 
     ``section`` is the picker section this agent belongs to (empty ⇒ the default group).
     ``is_management`` is derived from the section's declaration and cached here so downstream code
-    need not re-consult the section table."""
+    need not re-consult the section table. ``user_prompt`` is an optional short, user-facing
+    invitation ("here's what to ask me") rendered above the chat transcript; it lives in the roster
+    because the Managed Agent spec has no field for it (empty ⇒ no block)."""
 
     agent_name: str
     environment_name: str
     section: str = ""
     is_management: bool = False
+    user_prompt: str = ""
 
 
 class AgentOption(BaseModel):
@@ -67,6 +70,7 @@ class AgentOption(BaseModel):
     environment_id: str
     section: str = ""
     is_management: bool = False
+    user_prompt: str = ""
 
 
 class Settings(BaseSettings):
@@ -201,12 +205,14 @@ class Settings(BaseSettings):
             agent_name = str(entry.get("agent", "")).strip()
             environment_name = str(entry.get("environment", "")).strip() or default_env
             section = str(entry.get("section", "")).strip()
+            user_prompt = str(entry.get("user_prompt", "")).strip()
             if agent_name:
                 entries.append(AgentRosterEntry(
                     agent_name=agent_name,
                     environment_name=environment_name,
                     section=section,
                     is_management=section in management_sections,
+                    user_prompt=user_prompt,
                 ))
         return entries
 

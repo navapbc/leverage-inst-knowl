@@ -374,6 +374,22 @@ def test_resolve_agent_options_carries_section_and_management(tmp_path):
     ]
 
 
+def test_resolve_agent_options_carries_user_prompt(tmp_path):
+    """The roster's user_prompt is carried onto the resolved AgentOption so the chat page can
+    render it above the transcript without re-reading the roster."""
+    from lik_ui.agents import resolve_agent_options
+    from lik_ui.settings import Settings
+
+    path = tmp_path / "agents.toml"
+    path.write_text(
+        'default_environment = "Env"\n\n'
+        '[[agents]]\nagent = "Test Agent"\nuser_prompt = "Ask me anything."\n'
+    )
+    settings = Settings(env="test", agents_config_path=path)
+    options = resolve_agent_options(settings, FakeAgentsClient([LIK]))
+    assert options[0].user_prompt == "Ask me anything."
+
+
 def test_resolve_agent_options_empty_without_client(tmp_path):
     """No agents client (local/test stub) -> empty resolved list, so the app still boots."""
     from lik_ui.agents import resolve_agent_options
