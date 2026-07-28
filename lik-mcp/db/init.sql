@@ -28,6 +28,14 @@ CREATE TABLE IF NOT EXISTS catalog (
     source_refs       jsonb       NOT NULL DEFAULT '[]'::jsonb,
     last_computed_at  timestamptz,
     last_validated_at timestamptz,
+    -- When this row is next due for re-derivation (a future target the owning skill sets).
+    -- Distinct from last_computed_at (past). NULL = always due. The interval policy lives in
+    -- the skill, not here — this column just stores whatever timestamp it is handed.
+    refresh_due_at    timestamptz,
+    -- The source's own last-modified day, a cheap change-detection hint (e.g. parsed from a
+    -- Confluence relative "lastModified" string). Day granularity is deliberate. NULL = day
+    -- unknown, so a skill must not skip on the hint. See limitations.md.
+    source_modified_date date,
     access_groups     text[]      NOT NULL DEFAULT '{}',
     sensitivity       text        NOT NULL DEFAULT 'restricted',
     category          text,
@@ -37,6 +45,12 @@ CREATE TABLE IF NOT EXISTS catalog (
     updated_at        timestamptz NOT NULL DEFAULT now(),
     updated_by        text
 );
+
+-- Non-destructive migrations for existing DBs. The CREATE TABLE above uses IF NOT EXISTS, so
+-- it will NOT add new columns to an already-created (e.g. prod) table — these idempotent
+-- ALTERs do. Both nullable, no default; the NULL semantics are documented on the columns above.
+ALTER TABLE catalog ADD COLUMN IF NOT EXISTS refresh_due_at       timestamptz;
+ALTER TABLE catalog ADD COLUMN IF NOT EXISTS source_modified_date date;
 
 -- A skill owns at most one row per (entry_type, subject) and re-derives it in place; this
 -- partial unique index is the upsert arbiter for skill rows. Human-saved rows (row_provenance
