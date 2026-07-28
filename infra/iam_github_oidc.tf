@@ -163,3 +163,30 @@ resource "aws_iam_role_policy" "apply" {
   role   = aws_iam_role.github_apply.id
   policy = data.aws_iam_policy_document.apply.json
 }
+
+# --- SSM-read role: deploy/cleanup workflows fetch the shared Anthropic key --------------
+# deploy-agents.yml / deploy-skills.yml (and the future session-cleanup workflow) need the
+# one shared Anthropic API key, now sourced from SSM instead of a GitHub secret. This role
+# grants ONLY GetParameter on that single shared parameter — deliberately narrower than the
+# apply role, so a skill/agent-deploy job cannot run terraform or touch Lightsail.
+# SecureString decryption uses the AWS-managed alias/aws/ssm key (see SsmRead note above),
+# so no explicit kms statement is needed.
+resource "aws_iam_role" "github_ssm_read" {
+  name               = "github-actions-lik-ssm-read"
+  assume_role_policy = data.aws_iam_policy_document.github_trust.json
+}
+
+data "aws_iam_policy_document" "ssm_read" {
+  statement {
+    sid       = "SharedAnthropicKeyRead"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/ANTHROPIC_API_KEY"]
+  }
+}
+
+resource "aws_iam_role_policy" "ssm_read" {
+  name   = "shared-ssm-read"
+  role   = aws_iam_role.github_ssm_read.id
+  policy = data.aws_iam_policy_document.ssm_read.json
+}

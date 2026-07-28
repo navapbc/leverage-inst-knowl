@@ -79,7 +79,8 @@ resource "aws_lightsail_container_service_deployment_version" "lik_ui" {
       LIK_UI_SLACK_CLIENT_SECRET = data.aws_ssm_parameter.ui["LIK_UI_SLACK_CLIENT_SECRET"].value
       LIK_UI_SLACK_RESOURCE_URL  = data.aws_ssm_parameter.ui["LIK_UI_SLACK_RESOURCE_URL"].value
 
-      LIK_UI_ANTHROPIC_API_KEY = data.aws_ssm_parameter.ui["LIK_UI_ANTHROPIC_API_KEY"].value
+      # One Anthropic key, shared with the deploy/cleanup workflows — read from /shared/.
+      LIK_UI_ANTHROPIC_API_KEY = data.aws_ssm_parameter.shared["ANTHROPIC_API_KEY"].value
       # The agent roster ships in the image (src/lik_ui/agents.toml); no env var needed.
     }
 

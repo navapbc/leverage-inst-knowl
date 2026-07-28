@@ -7,8 +7,11 @@
 # docs/plans/2026-07-24-001-feat-agent-spec-deploy-pipeline-plan.md.
 #
 # Prerequisites (set once in repo Settings, on the `prod` environment):
-#   - Secret ANTHROPIC_API_KEY = a standard org API key (sk-ant-api03-...) scoped to the workspace
-#     that holds the agents/skills. Not an admin key. (Shared with deploy-skills.yml.)
+#   - Variable AWS_SSM_READ_ROLE_ARN = the github_ssm_read_role_arn Terraform output.
+#   - Variable AWS_REGION            = us-east-1.
+# The Anthropic API key is fetched from SSM (/ik-arch/prod/shared/ANTHROPIC_API_KEY) via GitHub
+# OIDC — one shared key, no GitHub secret. Auth uses a role scoped to reading only that parameter
+# (see infra/iam_github_oidc.tf). Same pattern in deploy-skills.yml.
 
 name: Deploy agent to Claude platform
 run-name: Deploy ${{ inputs.agent }} agent to Claude platform
@@ -27,13 +30,14 @@ on:
         default: all
 
 permissions:
+  id-token: write   # required for OIDC
   contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # The prod environment scopes ANTHROPIC_API_KEY (and enables optional deployment protection
-    # rules). Env-scoped secrets only resolve when the job declares this.
+    # The prod environment scopes AWS_SSM_READ_ROLE_ARN / AWS_REGION (and enables optional
+    # deployment protection rules). Env-scoped vars only resolve when the job declares this.
     environment: prod
     steps:
       - uses: actions/checkout@v6
@@ -41,12 +45,23 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_SSM_READ_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Fetch Anthropic API key from SSM
+        run: |
+          key=$(aws ssm get-parameter --name /ik-arch/prod/shared/ANTHROPIC_API_KEY \
+            --with-decryption --query Parameter.Value --output text)
+          echo "::add-mask::$key"
+          echo "ANTHROPIC_API_KEY=$key" >> "$GITHUB_ENV"
+
       # deploy_agents.py deploys exactly the skills each selected agent references (create or new
       # version) before attaching them at latest — so only the skills an agent uses are published,
       # and there's no separate skills step here. To publish a skill independently of any agent, use
       # the "Deploy skills to Claude platform" workflow (deploy-skills.yml).
       - name: Deploy agent(s), their skills, and environment(s)
         working-directory: scripts
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python deploy_agents.py --agent "${{ inputs.agent }}"

@@ -142,7 +142,7 @@ cd infra
 >      lik-ui/LIK_UI_APP_OAUTH_CLIENT_SECRET lik-ui/LIK_UI_LIKMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_CLIENT_ID \
 >      lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL lik-ui/LIK_UI_GITHUB_CLIENT_ID \
 >      lik-ui/LIK_UI_GITHUB_CLIENT_SECRET lik-ui/LIK_UI_GITHUB_RESOURCE_URL lik-ui/LIK_UI_SLACK_CLIENT_ID \
->      lik-ui/LIK_UI_SLACK_CLIENT_SECRET lik-ui/LIK_UI_SLACK_RESOURCE_URL lik-ui/LIK_UI_ANTHROPIC_API_KEY; do
+>      lik-ui/LIK_UI_SLACK_CLIENT_SECRET lik-ui/LIK_UI_SLACK_RESOURCE_URL shared/ANTHROPIC_API_KEY; do
 >      AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 --type SecureString \
 >        --name "/ik-arch/prod/$n" --value PLACEHOLDER_REPLACE_ME; done
 >    ```
@@ -195,7 +195,8 @@ out-of-band: `AWS_PROFILE=lik mise exec -- aws ssm delete-parameter --region us-
 
 **Which params must be real vs. can stay placeholder:** the app's prod fail-closed guard only
 requires `LIK_UI_SESSION_SECRET`, `LIK_UI_APP_OAUTH_CLIENT_ID`, `LIK_UI_APP_OAUTH_CLIENT_SECRET`,
-`LIK_UI_ANTHROPIC_API_KEY`, plus lik-mcp's `LIK_OAUTH_CLIENT_ID` (and a non-empty `agents.toml`). The
+the shared `ANTHROPIC_API_KEY` (under `$P/shared/`), plus lik-mcp's `LIK_OAUTH_CLIENT_ID` (and a
+non-empty `agents.toml`). The
 per-connection groups (`LIK_UI_LIKMCP_*`, `LIK_UI_GDRIVEMCP_*`, `LIK_UI_GITHUB_*`) are only
 needed for the connections you actually enable — leave the others as `PLACEHOLDER_REPLACE_ME`
 (they must *exist* so Terraform's data sources resolve, but that connection simply won't work
@@ -246,7 +247,7 @@ AWS_PROFILE=lik mise exec -- aws ssm get-parameters-by-path --path /ik-arch/prod
   | grep -B1 PLACEHOLDER_REPLACE_ME | grep '"Name"'
 ```
 
-Any `LIK_UI_APP_*`, `LIK_UI_ANTHROPIC_API_KEY`, `LIK_UI_SESSION_SECRET`,
+Any `LIK_UI_APP_*`, `shared/ANTHROPIC_API_KEY`, `LIK_UI_SESSION_SECRET`,
 or `LIK_OAUTH_CLIENT_ID` still listed here will make the container fail its prod guard at boot.
 
 ### 4. Build and push images ✅ done (`:lik-mcp-prod.app.2`, `:lik-ui-prod.app.1`)
