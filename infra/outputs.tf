@@ -29,6 +29,24 @@ output "db_endpoint" {
   }
 }
 
+# Single-lookup environment config for developer CLI tooling (e.g. init_db): resolve the DB
+# connection + SSM prefix from `terraform output env_config` instead of hand-assembling
+# LIK_DB_* variables. Non-secret only — the DB password stays in SSM. CI does NOT read this
+# (it has no state access by design); CI reads the ${ssm_prefix}/config/ params (config.tf).
+output "env_config" {
+  description = "Non-secret environment config: DB connection + SSM prefix, for CLI tooling that has state access."
+  value = {
+    ssm_prefix  = var.ssm_prefix
+    region      = var.aws_region
+    db_instance = aws_lightsail_database.main.relational_database_name
+    db_host     = aws_lightsail_database.main.master_endpoint_address
+    db_port     = aws_lightsail_database.main.master_endpoint_port
+    db_user     = aws_lightsail_database.main.master_username
+    db_mcp_name = var.db_mcp_database_name
+    db_ui_name  = var.db_ui_database_name
+  }
+}
+
 output "github_image_push_role_arn" {
   description = "IAM role ARN for the GitHub Actions image-push workflow (configure-aws-credentials)."
   value       = aws_iam_role.github_image_push.arn

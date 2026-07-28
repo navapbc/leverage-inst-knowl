@@ -8,10 +8,12 @@
 # Prerequisites (set once in repo Settings, on the `prod` environment):
 #   - Variable AWS_SSM_READ_ROLE_ARN = the github_ssm_read_role_arn Terraform output.
 #   - Variable AWS_REGION            = us-east-1.
-#   - Variable SSM_PREFIX (optional) = the Terraform var.ssm_prefix (defaults to /ik-arch/prod).
-# No LIK_UI_DB_* variables are needed: the DB password + Anthropic key are read from SSM, and
-# the DB host/port/master-user are discovered from the Lightsail database (the db name is the
-# fixed second database `likuidb`). All at run time — never GitHub secrets/variables.
+#   - Variable SSM_PREFIX = the Terraform var.ssm_prefix (e.g. /ik-arch/prod). Required, set on
+#     the environment (resolves per the job's `environment:`), alongside AWS_REGION and the role.
+# No LIK_UI_DB_* variables are needed: the DB password + Anthropic key are read from SSM, the DB
+# target (instance + db name) from the Terraform-authored $SSM_PREFIX/config/ params, and the DB
+# host/port/master-user are discovered from the Lightsail instance. All at run time — never GitHub
+# secrets/variables.
 
 name: Prune expired sessions
 
@@ -41,11 +43,12 @@ jobs:
     # when the job declares this.
     environment: prod
     env:
-      SSM_PREFIX: ${{ vars.SSM_PREFIX || '/ik-arch/prod' }}
+      SSM_PREFIX: ${{ vars.SSM_PREFIX }}
       LIK_UI_ENV: prod
-      LIK_UI_DB_NAME: likuidb   # lik-ui's DB on the shared instance; not discoverable from Lightsail
       LIK_UI_DB_SSLMODE: require
-      DB_INSTANCE: lik-prod-db  # Lightsail relational database to discover host/port/user from
+      # DB_INSTANCE + LIK_UI_DB_NAME are no longer hardcoded here: they are read at run time from
+      # the Terraform-authored $SSM_PREFIX/config/ params (infra/config.tf), so a CI copy can
+      # never drift from infra.
     steps:
       - uses: actions/checkout@v6
 
@@ -58,8 +61,18 @@ jobs:
           role-to-assume: ${{ vars.AWS_SSM_READ_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Fetch secrets from SSM
+      - name: Fetch config + secrets from SSM
         run: |
+          # Non-secret config (String params) — resolve the DB target together, one source.
+          # A missing param makes get-parameter exit non-zero, which aborts the step (bash -e):
+          # a "staging" run can never half-resolve to the prod instance, or vice versa.
+          inst=$(aws ssm get-parameter --name "$SSM_PREFIX/config/DB_INSTANCE" \
+            --query Parameter.Value --output text)
+          echo "DB_INSTANCE=$inst" >> "$GITHUB_ENV"
+          uidb=$(aws ssm get-parameter --name "$SSM_PREFIX/config/LIK_UI_DB_NAME" \
+            --query Parameter.Value --output text)
+          echo "LIK_UI_DB_NAME=$uidb" >> "$GITHUB_ENV"
+          # Secrets (SecureString) — masked before they touch the log.
           key=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/ANTHROPIC_API_KEY" \
             --with-decryption --query Parameter.Value --output text)
           echo "::add-mask::$key"

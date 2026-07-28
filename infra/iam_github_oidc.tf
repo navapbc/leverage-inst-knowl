@@ -192,6 +192,18 @@ data "aws_iam_policy_document" "ssm_read" {
     ]
   }
 
+  # Non-secret environment config the workflows read instead of hardcoding it (config.tf):
+  # the prune cleanup resolves DB_INSTANCE + LIK_UI_DB_NAME here. Read-only GetParameter on the
+  # /config/ subtree only — deliberately NOT s3:GetObject on Terraform state, which holds every
+  # secret in plaintext. The role still cannot run terraform or read any secret beyond the two
+  # named above.
+  statement {
+    sid       = "ConfigParamsRead"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/config/*"]
+  }
+
   # Read-only: the prune cleanup discovers the DB host/port/master-user from the Lightsail
   # database instead of carrying them as GitHub variables. Lightsail does not support
   # resource-level ARNs, so this must be granted on "*" (mirrors the apply role's note).

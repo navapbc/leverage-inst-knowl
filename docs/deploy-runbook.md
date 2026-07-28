@@ -333,35 +333,35 @@ these once as the **master user** (needed for lik-mcp's `pg_trgm` extension + ro
 > `brew install libpq && brew link --force libpq` (macOS). The lik-mcp step uses the repo's
 > own Python script (psycopg), so it needs no psql.
 
-The DB host is fixed (also in the Deployment status table); the password comes from SSM:
+The DB connection comes from Terraform (the single source of truth) — no hardcoded host and no
+hand-set `LIK_DB_*`. Resolve it into your shell with the helper (needs terraform state access +
+AWS creds, which you already have if you run terraform); it exports `LIK_DB_*` + `SSM_PREFIX`:
 
 ```bash
-DB_HOST=ls-775fd23f9d76047da44b78ee7307c91023cfc535.celyyosemrsx.us-east-1.rds.amazonaws.com
-DB_PW=$(AWS_PROFILE=lik mise exec -- aws ssm get-parameter --region us-east-1 --with-decryption \
-  --name /ik-arch/prod/shared/DB_MASTER_PASSWORD --query Parameter.Value --output text)
+cd lik-mcp
+eval "$(AWS_PROFILE=lik mise exec -- scripts/db_env_from_terraform.sh)"   # LIK_DB_* for the master db (likdb)
 
 # 1. Create lik-ui's database on the shared instance (connect to the master DB 'likdb' first)
-psql "host=$DB_HOST port=5432 dbname=likdb user=lik password=$DB_PW sslmode=require" \
+psql "host=$LIK_DB_HOST port=$LIK_DB_PORT dbname=$LIK_DB_NAME user=$LIK_DB_USER password=$LIK_DB_PASSWORD sslmode=require" \
   -c "CREATE DATABASE likuidb;"
 
-# 2. lik-mcp schema — its script applies lik-mcp/db/init.sql via psycopg, as master user
-cd lik-mcp
-LIK_DB_HOST=$DB_HOST LIK_DB_NAME=likdb LIK_DB_USER=lik LIK_DB_PASSWORD="$DB_PW" LIK_DB_SSLMODE=require \
-  mise exec -- uv run python scripts/init_db.py
+# 2. lik-mcp schema — its script applies lik-mcp/db/init.sql via psycopg, as master user, using
+#    the LIK_DB_* already exported above.
+mise exec -- uv run python scripts/init_db.py
 cd ..
 
 # 3. lik-ui schema — its script applies lik-ui/db/init.sql via psycopg, as master user
 #    (also applies non-destructive migrations like auto_delete_at; idempotent, safe to re-run).
 #    --ssm-prefix reads the DB password from SSM and discovers host/port/user from Lightsail,
-#    so no LIK_UI_DB_* vars are needed (defaults: --db-instance lik-prod-db, --db-name likuidb).
+#    so no LIK_UI_DB_* vars are needed (db name defaults to likuidb).
 cd lik-ui
-AWS_PROFILE=lik mise exec -- uv run python scripts/init_db.py --ssm-prefix /ik-arch/prod
+AWS_PROFILE=lik mise exec -- uv run python scripts/init_db.py --ssm-prefix "$SSM_PREFIX"
 cd ..
 ```
 
-> `DB_PW` holds the special-char password. It's fine inside `"$DB_PW"` and the psql conninfo
-> string above (quoted), but never echo it onto an interactive command line bare (the mise
-> zsh hook parse-errors on `)`). If a command trips on it, run these from a `bash` script file.
+> `LIK_DB_PASSWORD` holds the special-char password. It's fine inside the quoted psql conninfo
+> string above, but never echo it onto an interactive command line bare (the mise zsh hook
+> parse-errors on `)`). If a command trips on it, run these from a `bash` script file.
 
 All init scripts are idempotent (`IF NOT EXISTS`), so re-running is safe. Verify afterward:
 `psql "...dbname=likdb..." -c '\dt'` shows `catalog`, `confirmations`; `...dbname=likuidb...`
