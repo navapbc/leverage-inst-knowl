@@ -39,26 +39,31 @@ docker compose up
 The app never creates its own schema, and there's no migration step on startup. When you
 deploy against an external/managed Postgres (not the compose one), the Docker entrypoint's
 `db/init.sql` hook does not run — apply the schema (and any later non-destructive migrations,
-e.g. the `auto_delete_at` column) by hand. The script reads the same `LIK_UI_DB_*` config the
-app uses and applies `db/init.sql` via psycopg (no `psql` needed):
+e.g. the `auto_delete_at` column) with `scripts/init_db.py`. It's idempotent — `db/init.sql`
+is `CREATE TABLE IF NOT EXISTS` plus `ADD COLUMN IF NOT EXISTS` migrations, so re-running only
+creates schema and applies non-destructive `ALTER`s, never dropping or truncating.
+
+**For the prod Lightsail DB**, resolve the connection from AWS with `--ssm-prefix`: the DB
+password comes from SSM and host/port/user are discovered from the Lightsail database, so you
+set no `LIK_UI_DB_*` vars (needs AWS creds + the aws CLI on PATH):
+
+```
+AWS_PROFILE=lik mise exec -- uv run python scripts/init_db.py --ssm-prefix /ik-arch/prod
+```
+
+Defaults target the `lik-prod-db` instance and the `likuidb` database; override with
+`--db-instance` / `--db-name` / `--region` if needed.
+
+Against any other managed Postgres, use the `LIK_UI_DB_*` config the app runs with (see
+`.env.example`) — the script reads `settings.conninfo`:
 
 ```
 LIK_UI_DB_HOST=... LIK_UI_DB_PORT=... LIK_UI_DB_NAME=... LIK_UI_DB_USER=... \
   LIK_UI_DB_PASSWORD=... LIK_UI_DB_SSLMODE=require uv run python scripts/init_db.py
 ```
 
-`db/init.sql` is idempotent (`CREATE TABLE IF NOT EXISTS` plus `ADD COLUMN IF NOT EXISTS`
-migrations), so re-running it is safe — it only creates schema and applies non-destructive
-`ALTER`s, never dropping or truncating. (`scripts/init_db.py` mirrors lik-mcp's
-`scripts/init_db.py`.)
-
-Alternatively, apply it with `psql` directly against `settings.conninfo`'s values:
-
-```
-psql "host=$LIK_UI_DB_HOST port=$LIK_UI_DB_PORT dbname=$LIK_UI_DB_NAME \
-  user=$LIK_UI_DB_USER password=$LIK_UI_DB_PASSWORD sslmode=$LIK_UI_DB_SSLMODE" \
-  -f db/init.sql
-```
+(Or apply `db/init.sql` with `psql` directly if you prefer.) `scripts/init_db.py` mirrors
+lik-mcp's `scripts/init_db.py`, extended with the `--ssm-prefix` prod path.
 
 ## Test
 

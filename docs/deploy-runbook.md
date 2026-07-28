@@ -341,10 +341,11 @@ LIK_DB_HOST=$DB_HOST LIK_DB_NAME=likdb LIK_DB_USER=lik LIK_DB_PASSWORD="$DB_PW" 
 cd ..
 
 # 3. lik-ui schema — its script applies lik-ui/db/init.sql via psycopg, as master user
-#    (also applies non-destructive migrations like auto_delete_at; idempotent, safe to re-run)
+#    (also applies non-destructive migrations like auto_delete_at; idempotent, safe to re-run).
+#    --ssm-prefix reads the DB password from SSM and discovers host/port/user from Lightsail,
+#    so no LIK_UI_DB_* vars are needed (defaults: --db-instance lik-prod-db, --db-name likuidb).
 cd lik-ui
-LIK_UI_DB_HOST=$DB_HOST LIK_UI_DB_PORT=5432 LIK_UI_DB_NAME=likuidb LIK_UI_DB_USER=lik \
-  LIK_UI_DB_PASSWORD="$DB_PW" LIK_UI_DB_SSLMODE=require mise exec -- uv run python scripts/init_db.py
+AWS_PROFILE=lik mise exec -- uv run python scripts/init_db.py --ssm-prefix /ik-arch/prod
 cd ..
 ```
 
