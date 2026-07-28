@@ -1,3 +1,5 @@
+from datetime import date, datetime, timezone
+
 import pytest
 from pydantic import ValidationError
 
@@ -145,6 +147,83 @@ def test_source_refs_rejects_removed_fields(db):
         SourceRef(id="p1", fetched_at="2026-06-24T00:00:00Z")
     with pytest.raises(ValidationError):
         SourceRef(id="p1", version="v5")
+
+
+def test_refresh_due_and_modified_date_round_trip(db):
+    """refresh_due_at (timestamptz) and source_modified_date (date) round-trip via the data
+    layer (R5): a datetime returns as an ISO datetime string, a date as YYYY-MM-DD."""
+    entry = _entry(
+        refresh_due_at=datetime(2026, 8, 15, 9, 30, tzinfo=timezone.utc),
+        source_modified_date=date(2026, 7, 20),
+    )
+    register_catalog_entry(db, entry, updated_by="svc")
+
+    row = list_catalog_entries(db, "project-summary").entries[0]
+    # Compare the instant, not the exact offset string: psycopg renders timestamptz in the
+    # session timezone, so the offset (+00:00 vs -04:00) varies by DB config while the instant
+    # is invariant. source_modified_date is a tz-less DATE, so its string is stable.
+    assert datetime.fromisoformat(row["refresh_due_at"]) == datetime(
+        2026, 8, 15, 9, 30, tzinfo=timezone.utc
+    )
+    assert row["source_modified_date"] == "2026-07-20"
+
+
+def test_refresh_due_and_modified_date_default_null(db):
+    """Both fields omitted come back null — the R4 defaults that let pre-migration rows be
+    treated as always-due / never-skip-on-hint (AE8)."""
+    register_catalog_entry(db, _entry(), updated_by="svc")
+
+    row = list_catalog_entries(db, "project-summary").entries[0]
+    assert row["refresh_due_at"] is None
+    assert row["source_modified_date"] is None
+
+
+def test_refresh_due_and_modified_date_upsert_restamps(db):
+    """Re-registering the same skill key with new values updates them in place (the
+    DO UPDATE SET path) — the routine/full-sweep re-stamp of both columns (R6, AE6/AE7)."""
+    first = register_catalog_entry(
+        db,
+        _entry(
+            refresh_due_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+            source_modified_date=date(2026, 7, 1),
+        ),
+        updated_by="svc",
+    )
+    second = register_catalog_entry(
+        db,
+        _entry(
+            refresh_due_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            source_modified_date=date(2026, 8, 1),
+        ),
+        updated_by="svc",
+    )
+    assert second.status == "updated"
+    assert second.id == first.id
+
+    row = list_catalog_entries(db, "project-summary").entries[0]
+    assert datetime.fromisoformat(row["refresh_due_at"]) == datetime(
+        2026, 9, 1, tzinfo=timezone.utc
+    )
+    assert row["source_modified_date"] == "2026-08-01"
+
+
+def test_refresh_due_and_modified_date_independent(db):
+    """Each field persists independently — one set while the other is null."""
+    register_catalog_entry(
+        db,
+        _entry(refresh_due_at=datetime(2026, 8, 15, tzinfo=timezone.utc)),
+        updated_by="svc",
+    )
+    row = list_catalog_entries(db, "project-summary").entries[0]
+    assert datetime.fromisoformat(row["refresh_due_at"]) == datetime(
+        2026, 8, 15, tzinfo=timezone.utc
+    )
+    assert row["source_modified_date"] is None
+
+    register_catalog_entry(db, _entry(source_modified_date=date(2026, 7, 20)), updated_by="svc")
+    row = list_catalog_entries(db, "project-summary").entries[0]
+    assert row["refresh_due_at"] is None
+    assert row["source_modified_date"] == "2026-07-20"
 
 
 def test_source_refs_empty_list(db):

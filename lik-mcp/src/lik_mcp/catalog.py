@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from psycopg.types.json import Json
@@ -40,6 +40,12 @@ class CatalogEntry(BaseModel):
     source_refs: list[SourceRef] = Field(default_factory=list)
     last_computed_at: Optional[datetime] = None
     last_validated_at: Optional[datetime] = None
+    # When this row is next due for re-derivation. A future target the owning skill sets;
+    # None = always due. The trust-tiered interval policy lives in the skill, not here.
+    refresh_due_at: Optional[datetime] = None
+    # The source's own last-modified day — a cheap, day-granular change hint. None = day
+    # unknown, so a skill must not skip on the hint. See limitations.md / the origin doc.
+    source_modified_date: Optional[date] = None
     # Propagated ACL hint — the output's single assigned audience group. Never trusted for enforcement.
     access_groups: list[str] = Field(default_factory=list)
     sensitivity: str = "restricted"  # restricted (default) | cleared
@@ -86,11 +92,13 @@ _UPSERT = """
 INSERT INTO catalog (
     entry_type, subject, location, store_kind, locator, provenance, verification,
     verified_by, verified_at, freshness, source_refs, last_computed_at, last_validated_at,
+    refresh_due_at, source_modified_date,
     access_groups, sensitivity, category, computed_by, row_provenance, updated_by
 ) VALUES (
     %(entry_type)s, %(subject)s, %(location)s, %(store_kind)s, %(locator)s, %(provenance)s,
     %(verification)s, %(verified_by)s, %(verified_at)s, %(freshness)s, %(source_refs)s,
-    %(last_computed_at)s, %(last_validated_at)s, %(access_groups)s, %(sensitivity)s,
+    %(last_computed_at)s, %(last_validated_at)s, %(refresh_due_at)s, %(source_modified_date)s,
+    %(access_groups)s, %(sensitivity)s,
     %(category)s, %(computed_by)s, %(row_provenance)s, %(updated_by)s
 )
 ON CONFLICT (entry_type, subject, computed_by) WHERE row_provenance = 'skill' DO UPDATE SET
@@ -99,6 +107,7 @@ ON CONFLICT (entry_type, subject, computed_by) WHERE row_provenance = 'skill' DO
     verified_by = EXCLUDED.verified_by, verified_at = EXCLUDED.verified_at,
     freshness = EXCLUDED.freshness, source_refs = EXCLUDED.source_refs,
     last_computed_at = EXCLUDED.last_computed_at, last_validated_at = EXCLUDED.last_validated_at,
+    refresh_due_at = EXCLUDED.refresh_due_at, source_modified_date = EXCLUDED.source_modified_date,
     access_groups = EXCLUDED.access_groups, sensitivity = EXCLUDED.sensitivity,
     category = EXCLUDED.category, computed_by = EXCLUDED.computed_by,
     row_provenance = EXCLUDED.row_provenance, updated_by = EXCLUDED.updated_by,
@@ -121,7 +130,9 @@ ORDER BY (verification = 'human-verified') DESC,
 
 
 def _serialize(row: dict) -> dict:
-    return {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in row.items()}
+    # datetime is a subclass of date, so this ISO-formats both: a timestamptz column yields a
+    # full ISO datetime and a date column (source_modified_date) yields YYYY-MM-DD.
+    return {k: (v.isoformat() if isinstance(v, date) else v) for k, v in row.items()}
 
 
 def register_catalog_entry(db: Database, entry: CatalogEntry, updated_by: str) -> RegisterResult:
