@@ -108,8 +108,12 @@ is a PR plus two manual deploy Actions — no ids are hand-copied anywhere; ever
 
 2. **Add it to the roster.** Add a `[[agents]]` block naming the agent in
    [`src/lik_ui/agents.toml`](src/lik_ui/agents.toml). Omit `environment` to use `default_environment`
-   (`lik-ui-env`), or set it to override. The app reads this file **once at startup** — a new agent
-   appears only after a redeploy (step 5), there is no runtime reload.
+   (`lik-ui-env`), or set it to override. Optionally set `user_prompt` — a short, user-facing
+   invitation ("here's what to ask me") shown as a block above the chat transcript. It lives here,
+   not in the agent spec, because the Managed Agent spec (step 1) has no field for it. Write it
+   concisely from the agent's `description` and `system` prompt, addressed to the user with a couple
+   of example asks; omitting it simply renders no block. The app reads this file **once at startup** —
+   a new agent appears only after a redeploy (step 5), there is no runtime reload.
 
 3. **Expose it in the deploy workflow's picker.** Add the spec's filename stem to the `agent` choice
    `options` in [`.github/workflows/deploy-agents.yml`](../.github/workflows/deploy-agents.yml) (and,
