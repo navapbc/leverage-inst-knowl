@@ -340,9 +340,12 @@ LIK_DB_HOST=$DB_HOST LIK_DB_NAME=likdb LIK_DB_USER=lik LIK_DB_PASSWORD="$DB_PW" 
   mise exec -- uv run python scripts/init_db.py
 cd ..
 
-# 3. lik-ui schema
-psql "host=$DB_HOST port=5432 dbname=likuidb user=lik password=$DB_PW sslmode=require" \
-  -f lik-ui/db/init.sql
+# 3. lik-ui schema — its script applies lik-ui/db/init.sql via psycopg, as master user
+#    (also applies non-destructive migrations like auto_delete_at; idempotent, safe to re-run)
+cd lik-ui
+LIK_UI_DB_HOST=$DB_HOST LIK_UI_DB_PORT=5432 LIK_UI_DB_NAME=likuidb LIK_UI_DB_USER=lik \
+  LIK_UI_DB_PASSWORD="$DB_PW" LIK_UI_DB_SSLMODE=require mise exec -- uv run python scripts/init_db.py
+cd ..
 ```
 
 > `DB_PW` holds the special-char password. It's fine inside `"$DB_PW"` and the psql conninfo
