@@ -185,6 +185,26 @@ per-user rate-limiting or spend enforcement.
 Keep the single shared workspace
 key and do per-user attribution in lik-ui's own DB, which we control and can fully automate.
 
+### TODO: least-privilege credentials for the session-cleanup cron
+
+The daily `prune-sessions` workflow currently connects to Postgres with the **DB master
+(superuser) credential** (`DB_MASTER_PASSWORD`), and the single `github-actions-lik-ssm-read`
+role that grants it is shared with `deploy-agents` / `deploy-skills` — so those deploy
+workflows can now also read the DB master password even though they never touch the database.
+Two least-privilege follow-ups (surfaced by code review of PR #45, both infrastructure-only):
+
+- **Dedicated Postgres role for the cron.** Provision a role with only `SELECT, DELETE ON
+  sessions` (plus `USAGE` on the schema), store its password at
+  `$SSM_PREFIX/shared/PRUNE_DB_PASSWORD`, and point `prune-sessions.yml` at it instead of the
+  master credential. Keeps the master password confined to AWS even if a runner or a CI
+  dependency is compromised.
+- **Split the SSM-read role.** Give the cron its own role that reads the Anthropic key **and**
+  the prune DB password; narrow `github-actions-lik-ssm-read` back to the Anthropic key only so
+  the deploy workflows can never read a DB credential.
+
+Not blocking — the current setup works and the role is trust-scoped to the repo's `prod`
+environment — but it widens the blast radius of a compromised workflow more than necessary.
+
 ### DONE: auto-delete stale chat sessions
 
 Sessions no longer live forever. Each `sessions` row carries an `auto_delete_at` timestamp

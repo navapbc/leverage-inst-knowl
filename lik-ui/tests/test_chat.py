@@ -891,8 +891,10 @@ def test_owner_reschedules_auto_delete_to_a_future_date(db):
     r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": future.isoformat()})
     assert r.status_code == 303 and r.headers["location"] == f"/chat/{session_id}"
     stored = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
-    # The picked date is the start of that day in Eastern Time, stored as the equivalent UTC instant.
-    expected = datetime(future.year, future.month, future.day, tzinfo=ZoneInfo("America/New_York")).astimezone(timezone.utc)
+    # The picked date is stored as the END of that day in Eastern Time (survives through the
+    # whole chosen day), as the equivalent UTC instant.
+    expected = datetime(future.year, future.month, future.day, 23, 59, 59,
+                        tzinfo=ZoneInfo("America/New_York")).astimezone(timezone.utc)
     assert stored == expected
 
 
@@ -943,6 +945,19 @@ def test_auto_delete_form_shows_only_for_owner(db):
     Store(db).set_session_shared(session_id, _owner_id(db), True)
     assert "/auto-delete" in owner.get(f"/chat/{session_id}").text        # owner sees the reschedule form
     assert "/auto-delete" not in viewer.get(f"/chat/{session_id}").text   # shared viewer does not
+
+
+def test_shared_viewer_sees_deletion_notice_and_warning(db):
+    from datetime import datetime, timedelta, timezone
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    # Near deletion -> the viewer (who has no picker) is still warned it's about to disappear.
+    Store(db).set_session_auto_delete_at(session_id, _owner_id(db), datetime.now(timezone.utc) + timedelta(days=1))
+    text = viewer.get(f"/chat/{session_id}").text
+    assert "auto-deletes on" in text
+    assert "delete-warning" in text
 
 
 def test_chat_history_deletes_stale_session_when_platform_gone(db):

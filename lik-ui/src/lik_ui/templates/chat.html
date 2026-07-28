@@ -8,6 +8,9 @@
   </div>
   {% if not is_owner %}
     <p class="muted-note">You're viewing a shared session read-only. Only its owner can send messages.</p>
+    <p class="muted-note{% if session.delete_soon %} delete-warning{% endif %}">
+      This shared session auto-deletes on {{ session.auto_delete_local }} (end of day ET).{% if session.delete_soon %} Ask its owner to extend it if you still need it.{% endif %}
+    </p>
   {% endif %}
 
   <details class="session-settings">
@@ -24,7 +27,7 @@
 
       <form method="post" action="/chat/{{ session.session_id | urlencode }}/auto-delete" class="auto-delete-form">
         <label>
-          Auto-deletes on (Eastern Time)
+          Auto-deletes at end of the chosen day (Eastern Time)
           <input type="date" name="auto_delete_date" value="{{ session.auto_delete_local }}">
         </label>
         <button class="btn" type="submit">Update</button>
