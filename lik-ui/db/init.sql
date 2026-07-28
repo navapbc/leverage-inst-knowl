@@ -79,6 +79,10 @@ CREATE TABLE IF NOT EXISTS scheduled_runs (
     prompt        text        NOT NULL,
     -- Preset cadence stored as a Postgres interval; next_run_at advances by this on completion.
     run_interval  interval    NOT NULL,
+    -- Per-schedule hard runtime bound in seconds (materialized from the agent's roster max_runtime
+    -- at creation). Single source of truth for BOTH the runner's watchdog and the scanner's stuck-row
+    -- reclaim cutoff, so the invariant "reclaim only after max_runtime + margin" holds by construction.
+    max_runtime_s integer     NOT NULL DEFAULT 1800,
     next_run_at   timestamptz NOT NULL DEFAULT now(),
     -- In-flight marker: set when a scan claims the row, cleared on completion. A row with
     -- started_at set and completed_at null is running (or was abandoned — see reclaim).
