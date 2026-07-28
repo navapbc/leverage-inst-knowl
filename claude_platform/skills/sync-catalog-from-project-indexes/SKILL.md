@@ -21,9 +21,10 @@ Update History child (Step 2). The page **list** itself (the CQL in Step 1) is c
   makes a routine sync much faster than crawling every page, at the cost of not re-checking still-fresh pages until they
   come due. That trade is bounded: every row carries a `refresh_due_at` deadline (below), so nothing goes unchecked
   indefinitely.
-- **Full sweep (explicit).** Re-check **every** page exactly as this skill always has, ignoring `refresh_due_at`. Run
-  this when the caller asks for a "full sweep" / "full resync" / "re-check everything", or periodically as a
-  completeness backstop. A full sweep re-stamps every row's `refresh_due_at`.
+- **Full sweep (explicit).** Re-check **every** page exactly as this skill always has, ignoring `refresh_due_at` and
+  the change hint. Run this when the caller asks for a "full sweep" / "full resync" / "re-check everything", or
+  periodically as a completeness backstop. A full sweep re-stamps every row's `refresh_due_at` and
+  `source_modified_date`.
 
 **Pick the mode first.** Unless the caller explicitly asked for a full sweep, run **routine**. Everything below is
 written for routine mode; the "Full sweep" callouts note where it differs (it simply processes *all* pages instead of
@@ -54,7 +55,9 @@ This CQL call is the cheap part — it returns the whole list without any per-pa
 
 ## Step 1b — Select which pages to process
 
-**Full sweep:** skip this step — every page is processed. Go straight to the per-page work below for all of them.
+**Full sweep:** skip the *selection* below — every page is processed regardless. (You still parse each page's
+`lastModified` into `source_modified_date` when you register it in Step 3, per the change hint below; a full sweep just
+doesn't use it to decide what to skip.) Go straight to the per-page work below for all pages.
 
 **Routine mode:** first read the Catalog rows this skill already owns so you know each page's refresh deadline:
 
@@ -62,13 +65,39 @@ This CQL call is the cheap part — it returns the whole list without any per-pa
 the row's `subject` equals the page `title` and its `locator` equals the page **ID**. Each row carries a
 `refresh_due_at` (may be null on rows written before this field existed).
 
-Process a page when **either** of these holds; otherwise **skip** it this run:
+Process a page when **any** of these holds; otherwise **skip** it this run:
 - **Past due** — the page has a matching row and `now` is at or after its `refresh_due_at`. A **null**
   `refresh_due_at` counts as always due (so pre-existing rows are always processed until they get a deadline).
 - **Not yet catalogued** — no matching row exists for the page (a new project index).
+- **Changed since last sync** — the page's freshly-parsed modification day (from its `lastModified` string, per the
+  change hint below) is **later than** the `source_modified_date` stored on its row. This catches edits before the
+  row's `refresh_due_at` comes due.
 
-Order the pages you will process **most-urgent-first**: past-due rows first, then not-yet-catalogued pages. A run that
-is interrupted or capped then does the highest-value work first.
+Order the pages you will process **most-urgent-first**: past-due rows first, then not-yet-catalogued pages, then
+changed-since-last-sync pages. A run that is interrupted or capped then does the highest-value work first.
+
+### The change hint (`source_modified_date`)
+
+A cheap way to notice a page probably changed without fetching its body. Derive it from the `lastModified` string that
+**already rode the Step 1 CQL result** — this is a hard rule:
+
+- **Source it ONLY from the CQL search result's `lastModified`.** Never read `lastModified` from a `getConfluencePage`
+  response for this: that field is cached/stale (a live spike saw it return a 21-day-old value right after a real edit
+  while the CQL field updated correctly). The body hash — not this hint — remains the source of truth for drift.
+- **Parse to a calendar day, normalized to UTC.** Known formats: `less than a minute ago`, `about N hours ago`, and
+  `Mon DD, YYYY` (date-only). The first two mean "today (UTC)"; the third is that date. Day granularity is
+  deliberate — finer resolution jitters.
+- **Any unrecognized shape → process the page** (the always-process fallback). Never skip a page on a `lastModified`
+  string you couldn't parse (e.g. `yesterday`, `last week`, a localized or abbreviated form). Over-processing costs an
+  extra fetch; under-processing would miss an edit.
+- A row whose stored `source_modified_date` is **null** is never skipped on this hint (treat as "changed").
+
+This hint under-flags a same-day edit (two edits on the same UTC day share a day marker), which is acceptable: the
+row's `refresh_due_at` and the periodic full sweep still catch it — it is never a silent, permanent miss.
+
+**This whole "changed since last sync" bucket is optional.** If Atlassian changes the `lastModified` format and the
+parser becomes unreliable, drop this trigger (and the `source_modified_date` stamping in Step 3). Routine mode still
+works on past-due + not-yet-catalogued alone; only the early-edit detection is lost.
 
 ## Per-page work (for each selected page)
 
@@ -159,6 +188,9 @@ are handled in Step 3b.
 - `verification`: from Step 2
 - `verified_by` / `verified_at`: from the Update History table, else null
 - `refresh_due_at`: the row's next re-derivation deadline — see the interval policy below
+- `source_modified_date`: the page's parsed modification day (UTC), per the change hint in Step 1b. Omit (leave null)
+  when the `lastModified` string didn't parse — the row then always processes next run rather than skipping on a bad
+  hint. *(Omit this field entirely if the change-hint bucket has been dropped.)*
 - `computed_by`: `"sync-catalog-from-project-indexes"`
 - `row_provenance`: `"skill"`
 
