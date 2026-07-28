@@ -8,10 +8,10 @@
 # Prerequisites (set once in repo Settings, on the `prod` environment):
 #   - Variable AWS_SSM_READ_ROLE_ARN = the github_ssm_read_role_arn Terraform output.
 #   - Variable AWS_REGION            = us-east-1.
-#   - Variables LIK_UI_DB_HOST (= db_endpoint output), LIK_UI_DB_PORT (5432),
-#     LIK_UI_DB_NAME (lik-ui database name), LIK_UI_DB_USER (master username).
 #   - Variable SSM_PREFIX (optional) = the Terraform var.ssm_prefix (defaults to /ik-arch/prod).
-# The DB password and Anthropic key are read from SSM at run time (never GitHub secrets).
+# No LIK_UI_DB_* variables are needed: the DB password + Anthropic key are read from SSM, and
+# the DB host/port/master-user are discovered from the Lightsail database (the db name is the
+# fixed second database `likuidb`). All at run time — never GitHub secrets/variables.
 
 name: Prune expired sessions
 
@@ -43,11 +43,9 @@ jobs:
     env:
       SSM_PREFIX: ${{ vars.SSM_PREFIX || '/ik-arch/prod' }}
       LIK_UI_ENV: prod
-      LIK_UI_DB_HOST: ${{ vars.LIK_UI_DB_HOST }}
-      LIK_UI_DB_PORT: ${{ vars.LIK_UI_DB_PORT }}
-      LIK_UI_DB_NAME: ${{ vars.LIK_UI_DB_NAME }}
-      LIK_UI_DB_USER: ${{ vars.LIK_UI_DB_USER }}
+      LIK_UI_DB_NAME: likuidb   # lik-ui's DB on the shared instance; not discoverable from Lightsail
       LIK_UI_DB_SSLMODE: require
+      DB_INSTANCE: lik-prod-db  # Lightsail relational database to discover host/port/user from
     steps:
       - uses: actions/checkout@v6
 
@@ -70,6 +68,17 @@ jobs:
             --with-decryption --query Parameter.Value --output text)
           echo "::add-mask::$pw"
           echo "LIK_UI_DB_PASSWORD=$pw" >> "$GITHUB_ENV"
+
+      - name: Discover DB host/port/user from Lightsail
+        run: |
+          read -r host port user < <(aws lightsail get-relational-database \
+            --relational-database-name "$DB_INSTANCE" \
+            --query 'relationalDatabase.[masterEndpoint.address,masterEndpoint.port,masterUsername]' \
+            --output text)
+          if [ -z "$host" ] || [ "$host" = "None" ]; then
+            echo "::error::could not resolve Lightsail endpoint for $DB_INSTANCE"; exit 1
+          fi
+          { echo "LIK_UI_DB_HOST=$host"; echo "LIK_UI_DB_PORT=$port"; echo "LIK_UI_DB_USER=$user"; } >> "$GITHUB_ENV"
 
       - name: Prune expired sessions
         working-directory: lik-ui

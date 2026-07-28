@@ -166,12 +166,15 @@ resource "aws_iam_role_policy" "apply" {
 
 # --- SSM-read role: deploy/cleanup workflows fetch shared secrets ------------------------
 # deploy-agents.yml / deploy-skills.yml need the shared Anthropic API key; the daily
-# prune-sessions.yml cleanup additionally needs the shared DB master password to connect to
-# Postgres directly. Both are sourced from SSM instead of GitHub secrets. This role grants
-# ONLY GetParameter on those two named shared parameters — deliberately narrower than the
-# apply role, so a deploy/cleanup job cannot run terraform or touch Lightsail. SecureString
+# prune-sessions.yml cleanup additionally needs the shared DB master password and reads the
+# Lightsail DB endpoint (host/port/user) so it doesn't hardcode them as GitHub variables.
+# Secrets come from SSM (not GitHub secrets). The role grants GetParameter on the two named
+# shared parameters plus a read-only Lightsail describe — deliberately narrower than the apply
+# role, so a deploy/cleanup job still cannot run terraform or mutate Lightsail. SecureString
 # decryption uses the AWS-managed alias/aws/ssm key (see SsmRead note above), so no explicit
 # kms statement is needed.
+# (TODO in lik-ui/README.md: split this shared role so the deploy workflows don't also carry
+# the DB password read / DB describe they don't need.)
 resource "aws_iam_role" "github_ssm_read" {
   name               = "github-actions-lik-ssm-read"
   assume_role_policy = data.aws_iam_policy_document.github_trust.json
@@ -186,6 +189,16 @@ data "aws_iam_policy_document" "ssm_read" {
       "arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/ANTHROPIC_API_KEY",
       "arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/DB_MASTER_PASSWORD",
     ]
+  }
+
+  # Read-only: the prune cleanup discovers the DB host/port/master-user from the Lightsail
+  # database instead of carrying them as GitHub variables. Lightsail does not support
+  # resource-level ARNs, so this must be granted on "*" (mirrors the apply role's note).
+  statement {
+    sid       = "LightsailDbDescribe"
+    effect    = "Allow"
+    actions   = ["lightsail:GetRelationalDatabase"]
+    resources = ["*"]
   }
 }
 
