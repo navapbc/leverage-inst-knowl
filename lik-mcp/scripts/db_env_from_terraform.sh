@@ -27,15 +27,21 @@ esac
 
 ssm_prefix="$(get ssm_prefix)"
 region="$(get region)"
+# Resolve every value into a variable first: a failed `get` (missing key) aborts here under
+# set -e. Doing these lookups inside the heredoc below would swallow the failure (errexit does
+# not propagate from a command substitution feeding `cat`) and emit an empty export instead.
+db_host="$(get db_host)"
+db_port="$(get db_port)"
+db_user="$(get db_user)"
 password="$(aws ssm get-parameter --region "$region" --with-decryption \
   --name "$ssm_prefix/shared/DB_MASTER_PASSWORD" --query Parameter.Value --output text)"
 
 # The master password's charset excludes single quotes and backslashes (see database.tf
 # override_special), so single-quoting is safe for eval.
 cat <<EOF
-export LIK_DB_HOST='$(get db_host)'
-export LIK_DB_PORT='$(get db_port)'
-export LIK_DB_USER='$(get db_user)'
+export LIK_DB_HOST='$db_host'
+export LIK_DB_PORT='$db_port'
+export LIK_DB_USER='$db_user'
 export LIK_DB_NAME='$db_name'
 export LIK_DB_SSLMODE='require'
 export LIK_DB_PASSWORD='$password'
