@@ -10,13 +10,36 @@ from datetime import timedelta
 
 from .vault import VaultClient, delete_user_vault
 
-# Preset cadences offered in the scheduler UI (v1 — free cron expressions are deferred). The label
-# is what the user picks; the timedelta is stored as the schedule's run_interval. Ordered
-# longest-first so the least-frequent cadence is the default selection in the picker.
-CADENCES: dict[str, timedelta] = {
-    "weekly": timedelta(weeks=1),
-    "daily": timedelta(days=1),
-}
+# Cadence in the scheduler UI (v1 — free cron expressions are deferred): the user picks a whole
+# number of one of these units, and the run_interval stored is timedelta(<unit>=<count>). Ordered
+# longest-first so the least-frequent unit is the default selection in the picker. Sub-day units
+# are intentionally omitted — unattended runs shouldn't recur more often than daily.
+CADENCE_UNITS: tuple[str, ...] = ("weeks", "days")
+# Guardrail on the count so a typo can't schedule an absurd interval; ~a year at the coarsest unit.
+MAX_CADENCE_COUNT = 52
+
+
+def parse_cadence(count_raw: str, unit: str) -> timedelta | None:
+    """Turn the submitted count + unit into a run_interval, or None if either is invalid. A valid
+    cadence is a known unit and a whole count in [1, MAX_CADENCE_COUNT]."""
+    try:
+        count = int(count_raw)
+    except ValueError:
+        return None
+    if unit not in CADENCE_UNITS or not (1 <= count <= MAX_CADENCE_COUNT):
+        return None
+    return timedelta(**{unit: count})
+
+
+def format_cadence(interval: timedelta) -> str:
+    """Human label for a schedule's run_interval, e.g. 'every week', 'every 3 days'. The stored
+    interval is always a whole number of days or weeks (see parse_cadence), so render it in weeks
+    when it divides evenly and in days otherwise."""
+    days = round(interval.total_seconds() / 86400)
+    if days % 7 == 0 and days > 0:
+        weeks = days // 7
+        return "every week" if weeks == 1 else f"every {weeks} weeks"
+    return "every day" if days == 1 else f"every {days} days"
 
 
 def register_account_routes(app) -> None:
@@ -56,7 +79,8 @@ def register_account_routes(app) -> None:
                 # (only those the roster marks unattended-safe). agent_name is the display label.
                 "scheduled_runs": store.list_scheduled_runs(user["id"]),
                 "schedulable_agents": [a.agent_name for a in request.app.state.agents if a.schedulable],
-                "cadences": list(CADENCES),
+                "cadence_units": list(CADENCE_UNITS),
+                "max_cadence_count": MAX_CADENCE_COUNT,
                 "scheduled_created": bool(scheduled),
                 "scheduled_error": bool(scheduled_error),
             },
@@ -66,17 +90,17 @@ def register_account_routes(app) -> None:
     async def create_scheduled_run(request: Request):
         """Create a schedule for the current user. The agent must be marked schedulable in the
         roster (a user can't schedule an agent that isn't unattended-safe); the cadence must be a
-        known preset; a triggering message is required. max_runtime is materialized from the agent's
-        roster value so the runner watchdog and the reclaim cutoff share one source."""
+        whole count of a known unit; a triggering message is required. max_runtime is materialized
+        from the agent's roster value so the runner watchdog and the reclaim cutoff share one source."""
         user = require_user(request)
         form = await request.form()
         agent_name = str(form.get("agent_name", "")).strip()
-        cadence = str(form.get("cadence", "")).strip()
         prompt = str(form.get("prompt", "")).strip()
         option = next(
             (a for a in request.app.state.agents if a.agent_name == agent_name and a.schedulable), None
         )
-        interval = CADENCES.get(cadence)
+        interval = parse_cadence(str(form.get("interval_count", "")).strip(),
+                                 str(form.get("interval_unit", "")).strip())
         if option is None or interval is None or not prompt:
             return RedirectResponse("/settings?scheduled_error=1", status_code=303)
         request.app.state.store.create_scheduled_run(

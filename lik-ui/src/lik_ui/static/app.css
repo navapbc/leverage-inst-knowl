@@ -105,8 +105,12 @@ form.session-row input { flex: 1; }
 /* Scheduled-runs form: each label stacks its control on its own line. */
 .schedule-form { display: flex; flex-direction: column; gap: .6rem; align-items: flex-start; }
 .schedule-form label { display: flex; flex-direction: column; gap: .25rem; width: 100%; max-width: 32rem; }
-.schedule-form textarea { resize: vertical; font: inherit; padding: .4rem .5rem;
-  border: 1px solid var(--line); border-radius: 6px; }
+.schedule-form textarea, .schedule-form input, .schedule-form select {
+  font: inherit; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 6px; }
+.schedule-form textarea { resize: vertical; }
+/* Cadence count + unit sit on one row: a narrow number field and a unit dropdown. */
+.schedule-form .cadence-fields { display: flex; gap: .5rem; }
+.schedule-form .cadence-fields input { width: 5rem; }
 /* Collapsible per-agent details on the agent-selection page. */
 .card > details { margin-top: .6rem; }
 .card > details > summary { cursor: pointer; color: var(--accent); }

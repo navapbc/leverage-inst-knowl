@@ -203,7 +203,8 @@ def test_create_schedule_lists_it_for_the_owner(db):
     client, _ = _client(db)
     _with_schedulable(client, _sched_agent())
     r = client.post("/settings/scheduled-runs",
-                    data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "sync the indexes"})
+                    data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days",
+                          "prompt": "sync the indexes"})
     assert r.status_code == 303
     assert r.headers["location"] == "/settings?scheduled=1"
     runs = Store(db).list_scheduled_runs(_uid(db))
@@ -212,6 +213,33 @@ def test_create_schedule_lists_it_for_the_owner(db):
     # AE1: it appears on the page with a next-run time.
     html = client.get("/settings").text
     assert "Sched Agent" in html and "Next run:" in html
+
+
+def test_create_schedule_accepts_a_multi_week_cadence(db):
+    from datetime import timedelta
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    r = client.post("/settings/scheduled-runs",
+                    data={"agent_name": "Sched Agent", "interval_count": "3", "interval_unit": "weeks",
+                          "prompt": "go"})
+    assert r.headers["location"] == "/settings?scheduled=1"
+    assert Store(db).list_scheduled_runs(_uid(db))[0]["run_interval"] == timedelta(weeks=3)
+    # The list renders the interval as a human cadence, not a raw timedelta.
+    html = client.get("/settings").text
+    assert "every 3 weeks" in html
+
+
+def test_create_rejects_bad_cadence(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    for bad in ({"interval_count": "0", "interval_unit": "days"},      # below the minimum
+                {"interval_count": "99", "interval_unit": "weeks"},    # above MAX_CADENCE_COUNT
+                {"interval_count": "abc", "interval_unit": "days"},     # not a number
+                {"interval_count": "1", "interval_unit": "hours"}):     # unknown unit
+        r = client.post("/settings/scheduled-runs",
+                        data={"agent_name": "Sched Agent", "prompt": "go", **bad})
+        assert r.headers["location"] == "/settings?scheduled_error=1"
+    assert Store(db).list_scheduled_runs(_uid(db)) == []
 
 
 def test_scheduler_only_offers_schedulable_agents(db):
@@ -227,7 +255,7 @@ def test_create_rejects_non_schedulable_agent(db):
     client, _ = _client(db)
     _with_schedulable(client, _sched_agent("Plain Agent", schedulable=False))
     r = client.post("/settings/scheduled-runs",
-                    data={"agent_name": "Plain Agent", "cadence": "daily", "prompt": "go"})
+                    data={"agent_name": "Plain Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
     assert r.headers["location"] == "/settings?scheduled_error=1"
     assert Store(db).list_scheduled_runs(_uid(db)) == []
 
@@ -236,7 +264,7 @@ def test_create_rejects_missing_prompt(db):
     client, _ = _client(db)
     _with_schedulable(client, _sched_agent())
     r = client.post("/settings/scheduled-runs",
-                    data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "  "})
+                    data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "  "})
     assert r.headers["location"] == "/settings?scheduled_error=1"
     assert Store(db).list_scheduled_runs(_uid(db)) == []
 
@@ -245,7 +273,7 @@ def test_pause_and_resume_schedule(db):
     client, _ = _client(db)
     _with_schedulable(client, _sched_agent())
     client.post("/settings/scheduled-runs",
-                data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "go"})
+                data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
     run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
     client.post(f"/settings/scheduled-runs/{run_id}/pause", data={"paused": "true"})
     assert Store(db).list_scheduled_runs(_uid(db))[0]["paused"] is True
@@ -258,7 +286,7 @@ def test_delete_schedule(db):
     client, _ = _client(db)
     _with_schedulable(client, _sched_agent())
     client.post("/settings/scheduled-runs",
-                data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "go"})
+                data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
     run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
     r = client.post(f"/settings/scheduled-runs/{run_id}/delete")
     assert r.status_code == 303
@@ -269,7 +297,7 @@ def test_needs_reauth_badge_renders(db):
     client, _ = _client(db)
     _with_schedulable(client, _sched_agent())
     client.post("/settings/scheduled-runs",
-                data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "go"})
+                data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
     run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
     # Simulate a lapsed-credential run outcome (what the scanner's pause_and_flag records).
     Store(db).pause_and_flag(run_id, "needs_reauth", error="Confluence auth lapsed")
@@ -281,7 +309,7 @@ def test_delete_vault_cancels_schedules(db):
     client, _ = _client(db)
     _with_schedulable(client, _sched_agent())
     client.post("/settings/scheduled-runs",
-                data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "go"})
+                data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
     assert Store(db).list_scheduled_runs(_uid(db)) != []
     client.post("/settings/vault/delete")
     # R19: deleting the vault cancels the user's schedules so none can run without credentials.
@@ -292,7 +320,7 @@ def test_create_schedule_requires_login(db):
     oidc = FakeOidc({})
     app = build_app(Settings(env="test"), store=Store(db), app_oidc=oidc, vault_client=FakeVaultClient())
     r = TestClient(app, follow_redirects=False).post(
-        "/settings/scheduled-runs", data={"agent_name": "x", "cadence": "daily", "prompt": "y"}
+        "/settings/scheduled-runs", data={"agent_name": "x", "interval_count": "1", "interval_unit": "days", "prompt": "y"}
     )
     assert r.status_code == 303
     assert r.headers["location"] == "/login"
