@@ -1,11 +1,22 @@
 """Account settings — user-facing management of their own data.
 
-Two actions: deleting a single credential from the vault, or deleting the whole vault.
-Deleting the vault removes every source credential the user has connected; a fresh, empty
-vault is provisioned the next time an agent needs it.
+Credential/vault management, session cleanup, and self-service scheduled runs: a user schedules
+an eligible (unattended-safe) agent to run on a cadence using their own vault, and reviews each
+schedule's health. Deleting the vault also cancels the user's schedules (they can't run without
+credentials).
 """
 
+from datetime import timedelta
+
 from .vault import VaultClient, delete_user_vault
+
+# Preset cadences offered in the scheduler UI (v1 — free cron expressions are deferred). The label
+# is what the user picks; the timedelta is stored as the schedule's run_interval.
+CADENCES: dict[str, timedelta] = {
+    "hourly": timedelta(hours=1),
+    "daily": timedelta(days=1),
+    "weekly": timedelta(weeks=1),
+}
 
 
 def register_account_routes(app) -> None:
@@ -16,7 +27,10 @@ def register_account_routes(app) -> None:
     from .app_auth import require_user, set_show_management_agents, show_management_agents
 
     @app.get("/settings", response_class=HTMLResponse)
-    async def settings_page(request: Request, deleted: str = "", sessions_deleted: str = ""):
+    async def settings_page(
+        request: Request, deleted: str = "", sessions_deleted: str = "",
+        scheduled: str = "", scheduled_error: str = "",
+    ):
         user = require_user(request)
         store = request.app.state.store
         vault_id = store.get_user_vault(user["id"])
@@ -38,8 +52,53 @@ def register_account_routes(app) -> None:
                 "session_count": len(store.list_sessions(user["id"])),
                 "sessions_deleted": bool(sessions_deleted),
                 "show_management_agents": show_management_agents(request),
+                # Scheduled runs: the user's own schedules, and the agents they may schedule
+                # (only those the roster marks unattended-safe). agent_name is the display label.
+                "scheduled_runs": store.list_scheduled_runs(user["id"]),
+                "schedulable_agents": [a.agent_name for a in request.app.state.agents if a.schedulable],
+                "cadences": list(CADENCES),
+                "scheduled_created": bool(scheduled),
+                "scheduled_error": bool(scheduled_error),
             },
         )
+
+    @app.post("/settings/scheduled-runs")
+    async def create_scheduled_run(request: Request):
+        """Create a schedule for the current user. The agent must be marked schedulable in the
+        roster (a user can't schedule an agent that isn't unattended-safe); the cadence must be a
+        known preset; a triggering message is required. max_runtime is materialized from the agent's
+        roster value so the runner watchdog and the reclaim cutoff share one source."""
+        user = require_user(request)
+        form = await request.form()
+        agent_name = str(form.get("agent_name", "")).strip()
+        cadence = str(form.get("cadence", "")).strip()
+        prompt = str(form.get("prompt", "")).strip()
+        option = next(
+            (a for a in request.app.state.agents if a.agent_name == agent_name and a.schedulable), None
+        )
+        interval = CADENCES.get(cadence)
+        if option is None or interval is None or not prompt:
+            return RedirectResponse("/settings?scheduled_error=1", status_code=303)
+        request.app.state.store.create_scheduled_run(
+            user["id"], agent_name, prompt, interval, option.max_runtime
+        )
+        return RedirectResponse("/settings?scheduled=1", status_code=303)
+
+    @app.post("/settings/scheduled-runs/{run_id}/delete")
+    async def delete_scheduled_run(request: Request, run_id: int):
+        user = require_user(request)
+        request.app.state.store.delete_scheduled_run(run_id, user["id"])  # owner-scoped no-op if not theirs
+        return RedirectResponse("/settings", status_code=303)
+
+    @app.post("/settings/scheduled-runs/{run_id}/pause")
+    async def pause_scheduled_run(request: Request, run_id: int):
+        """Pause or resume a schedule. Resuming also clears a needs_reauth flag, so re-authenticating
+        and resuming brings a lapsed schedule back."""
+        user = require_user(request)
+        form = await request.form()
+        paused = str(form.get("paused", "")) == "true"
+        request.app.state.store.set_scheduled_run_paused(run_id, user["id"], paused)
+        return RedirectResponse("/settings", status_code=303)
 
     @app.post("/settings/agent-visibility")
     async def set_agent_visibility(request: Request):
@@ -54,11 +113,15 @@ def register_account_routes(app) -> None:
     @app.post("/settings/vault/delete")
     async def delete_vault(request: Request):
         user = require_user(request)
+        store = request.app.state.store
         vault_client: VaultClient | None = request.app.state.vault_client
         try:
-            delete_user_vault(request.app.state.store, vault_client, user)
+            delete_user_vault(store, vault_client, user)
         except Exception as exc:  # noqa: BLE001 - surface vault/SDK errors as a page, not a 500
             return HTMLResponse(f"Could not delete your vault: {exc}", status_code=502)
+        # R19: a schedule must not keep running with revoked credentials. Cancel the user's
+        # schedules when their vault is deleted (they can recreate them after reconnecting).
+        store.delete_scheduled_runs_for_user(user["id"])
         return RedirectResponse("/settings?deleted=1", status_code=303)
 
     @app.post("/settings/sessions/delete-all")

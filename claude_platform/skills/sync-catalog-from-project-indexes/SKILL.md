@@ -128,6 +128,15 @@ Match **only** an explicit don't-use instruction. Weaker status wording — "UNV
 `verification` still comes from Step 2). When unsure whether wording rises to a don't-use instruction, **register the
 page** rather than hold it back.
 
+## Unattended (scheduled) runs
+
+This skill is safe to run unattended (on a schedule, with no human present). It never blocks waiting for input:
+held-back self-disclaiming pages are **recorded and reported** in the final summary (Step 3b), not paused on — a
+scheduled run completes and leaves the held-back list for a human to review later, rather than waiting for a decision
+that will never come. Likewise, if a routine write is not approved, **skip that page, record it, and continue** — do
+not retry the same write in a loop or wait indefinitely. The goal is always a completed run with an accurate summary of
+what was registered, held back, or skipped.
+
 ## Content-state marker recipe (shared with `query-project-index`)
 
 `source_state` = the SHA-256 hex digest of the page's markdown body:

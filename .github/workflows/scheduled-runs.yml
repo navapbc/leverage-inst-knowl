@@ -1,0 +1,113 @@
+# Run due, unattended scheduled agent runs (lik-ui/scripts/run_scheduled.py). Runs on a cadence
+# with no internet-facing endpoint and no long-lived GitHub secret: GitHub OIDC assumes the
+# SSM-read role, fetches the shared Anthropic key + a table-SCOPED DB credential from SSM, and
+# connects to the public Lightsail Postgres directly. Mirrors prune-sessions.yml; see
+# docs/plans/2026-07-28-002-feat-scheduled-unattended-agent-runs-plan.md.
+#
+# Least privilege (R18/U9): this job connects with a dedicated DB role granted only on the
+# scheduled_runs + sessions tables — NOT the master credential — so a compromise of the CI
+# credential cannot read/write the whole database over the public endpoint. The scoped role's
+# user + password live in SSM ($SSM_PREFIX/shared/SCHEDULED_RUNS_DB_{USER,PASSWORD}); U9 provisions
+# the role and grants the SSM-read OIDC role access to those params.
+#
+# Prerequisites (set once in repo Settings, on the `prod` environment), same as prune-sessions.yml:
+#   - Variable AWS_SSM_READ_ROLE_ARN, AWS_REGION, SSM_PREFIX.
+
+name: Scheduled agent runs
+
+on:
+  schedule:
+    - cron: "23 * * * *"    # hourly at :23 — the scan cadence bounds scheduling granularity (tunable)
+  workflow_dispatch: {}      # manual run for verification / catch-up
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+  issues: write     # a failed scan opens a tracking issue (ops-level alerting; owner-level is in-app)
+
+# Never let two scans overlap (a slow run + the next tick) — the atomic claim also guards this,
+# but serializing avoids racing on the same due rows at all.
+concurrency:
+  group: scheduled-runs
+  cancel-in-progress: false
+
+jobs:
+  run-scheduled:
+    runs-on: ubuntu-latest
+    # Fail fast instead of hanging: a stalled scan otherwise holds the concurrency group and
+    # starves the next tick. Must exceed one run's per-agent max_runtime; if many schedules are
+    # due at once they run sequentially within the job, so raise this or cap the scan if that grows.
+    timeout-minutes: 45
+    # The prod environment scopes the vars/role below and its `main` branch policy; scheduled runs
+    # execute on the default branch, which satisfies it.
+    environment: prod
+    env:
+      SSM_PREFIX: ${{ vars.SSM_PREFIX }}
+      LIK_UI_ENV: prod
+      LIK_UI_DB_SSLMODE: require
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_SSM_READ_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Fetch config + secrets from SSM
+        run: |
+          # Non-secret config (String params) — the DB target, one source shared with infra.
+          inst=$(aws ssm get-parameter --name "$SSM_PREFIX/config/DB_INSTANCE" \
+            --query Parameter.Value --output text)
+          echo "DB_INSTANCE=$inst" >> "$GITHUB_ENV"
+          uidb=$(aws ssm get-parameter --name "$SSM_PREFIX/config/LIK_UI_DB_NAME" \
+            --query Parameter.Value --output text)
+          echo "LIK_UI_DB_NAME=$uidb" >> "$GITHUB_ENV"
+          # Secrets (SecureString) — masked before they touch the log.
+          key=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/ANTHROPIC_API_KEY" \
+            --with-decryption --query Parameter.Value --output text)
+          echo "::add-mask::$key"
+          echo "LIK_UI_ANTHROPIC_API_KEY=$key" >> "$GITHUB_ENV"
+          # Table-scoped DB role (NOT the master credential) — least privilege (R18/U9).
+          dbuser=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/SCHEDULED_RUNS_DB_USER" \
+            --query Parameter.Value --output text)
+          echo "LIK_UI_DB_USER=$dbuser" >> "$GITHUB_ENV"
+          pw=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/SCHEDULED_RUNS_DB_PASSWORD" \
+            --with-decryption --query Parameter.Value --output text)
+          echo "::add-mask::$pw"
+          echo "LIK_UI_DB_PASSWORD=$pw" >> "$GITHUB_ENV"
+
+      - name: Discover DB host/port from Lightsail
+        run: |
+          read -r host port < <(aws lightsail get-relational-database \
+            --relational-database-name "$DB_INSTANCE" \
+            --query 'relationalDatabase.[masterEndpoint.address,masterEndpoint.port]' \
+            --output text)
+          if [ -z "$host" ] || [ "$host" = "None" ]; then
+            echo "::error::could not resolve Lightsail endpoint for $DB_INSTANCE"; exit 1
+          fi
+          { echo "LIK_UI_DB_HOST=$host"; echo "LIK_UI_DB_PORT=$port"; } >> "$GITHUB_ENV"
+
+      - name: Run due scheduled agent runs
+        working-directory: lik-ui
+        run: uv run python scripts/run_scheduled.py
+
+      # Ops-level alerting for an otherwise-invisible unattended job (owner-level failure/skip
+      # surfaces in the Settings "Scheduled runs" health badge). A non-zero exit means at least one
+      # run failed/timed-out/lapsed; open a tracking issue so a silent stop doesn't go unnoticed.
+      - name: Open a tracking issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue create \
+            --title "scheduled-runs cron failed" \
+            --body "The scheduled agent-runs workflow failed or a run errored: $run_url
+
+          Investigate before the next scheduled tick. Owner-facing failures also show in each
+          schedule's health badge on the lik-ui Settings page." \
+            || echo "::warning::scheduled-runs failed and the tracking issue could not be created"

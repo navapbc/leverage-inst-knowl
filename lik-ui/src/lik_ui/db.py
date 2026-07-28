@@ -7,9 +7,10 @@ handles.
 """
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from psycopg.rows import dict_row
+from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
 
@@ -55,6 +56,15 @@ class Store:
         with self.db.connection() as conn:
             return conn.execute(
                 "SELECT id, email, created_at FROM users WHERE email = %s", (email,)
+            ).fetchone()
+
+    def get_user_by_id(self, user_id: int) -> dict | None:
+        """Resolve a user by id. Used by the scheduled runner, which starts from a
+        ``scheduled_runs.user_id`` (not an email) and needs the ``{id, email}`` shape
+        ``ensure_user_vault`` expects."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                "SELECT id, email, created_at FROM users WHERE id = %s", (user_id,)
             ).fetchone()
 
     # --- user -> vault mapping -------------------------------------------------
@@ -198,3 +208,163 @@ class Store:
             ).fetchone()
             conn.commit()
             return row is not None
+
+    # --- scheduled runs --------------------------------------------------------
+    # CRUD here is owner-scoped (the Settings UI). The scanner's cross-user claim/complete
+    # live below in the "scheduled runs (scanner)" section.
+    _SCHEDULED_RUN_COLS = (
+        "id, user_id, agent_name, prompt, run_interval, max_runtime_s, next_run_at, started_at, "
+        "completed_at, last_status, last_error, last_skipped, paused, pause_reason, created_at"
+    )
+
+    def create_scheduled_run(
+        self,
+        user_id: int,
+        agent_name: str,
+        prompt: str,
+        run_interval: timedelta,
+        max_runtime_s: int = 1800,
+    ) -> dict:
+        """Create a schedule owned by ``user_id``. It becomes due immediately (next_run_at
+        defaults to now()) and recurs every ``run_interval``. ``max_runtime_s`` is materialized
+        from the agent's roster ``max_runtime`` and feeds both the runner watchdog and the reclaim
+        cutoff."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                f"""
+                INSERT INTO scheduled_runs (user_id, agent_name, prompt, run_interval, max_runtime_s)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING {self._SCHEDULED_RUN_COLS}
+                """,
+                (user_id, agent_name, prompt, run_interval, max_runtime_s),
+            ).fetchone()
+            conn.commit()
+            return row
+
+    def list_scheduled_runs(self, user_id: int) -> list[dict]:
+        """This user's schedules, newest first. Owner-scoped for the Settings list."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"SELECT {self._SCHEDULED_RUN_COLS} FROM scheduled_runs "
+                "WHERE user_id = %s ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+
+    def delete_scheduled_run(self, run_id: int, user_id: int) -> bool:
+        """Delete a schedule. Owner-scoped so one user can't delete another's. Returns
+        whether a row was removed."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                "DELETE FROM scheduled_runs WHERE id = %s AND user_id = %s RETURNING id",
+                (run_id, user_id),
+            ).fetchone()
+            conn.commit()
+            return row is not None
+
+    def set_scheduled_run_paused(self, run_id: int, user_id: int, paused: bool) -> bool:
+        """Pause or resume a schedule (owner-scoped). Resuming clears any pause_reason (e.g.
+        after the owner re-authenticates a lapsed connection). Returns whether a row updated."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                """
+                UPDATE scheduled_runs
+                SET paused = %s, pause_reason = CASE WHEN %s THEN pause_reason ELSE NULL END
+                WHERE id = %s AND user_id = %s
+                RETURNING id
+                """,
+                (paused, paused, run_id, user_id),
+            ).fetchone()
+            conn.commit()
+            return row is not None
+
+    def delete_scheduled_runs_for_user(self, user_id: int) -> int:
+        """Remove all of a user's schedules — used when their vault is deleted so a schedule
+        cannot keep running with revoked credentials (R19). Returns the count removed."""
+        with self.db.connection() as conn:
+            rows = conn.execute(
+                "DELETE FROM scheduled_runs WHERE user_id = %s RETURNING id", (user_id,)
+            ).fetchall()
+            conn.commit()
+            return len(rows)
+
+    # --- scheduled runs (scanner: cross-user, not owner-scoped) ----------------
+    # These run inside the scheduled GitHub Action, which acts as no single user (like
+    # ``list_sessions_due``). The claim is atomic so overlapping scans can't double-run a row.
+    def claim_due_runs(self, margin_s: int = 300) -> list[dict]:
+        """Atomically claim and return every runnable row: due-and-idle schedules, plus stuck
+        rows whose runner died. A row is *due* when ``next_run_at <= now`` and not in flight
+        (``started_at IS NULL``); a row is *stuck* when it has been in flight past its own
+        ``max_runtime_s + margin_s`` (the runner crashed without completing). Claiming sets
+        ``started_at = now`` so a concurrent scan can't take the same row (``FOR UPDATE SKIP
+        LOCKED`` plus the row-level guard). Reclaimed rows are stamped ``abandoned`` so the dead
+        run's failure is surfaced. Never claims a paused row.
+
+        "Now" is the database clock (``now()`` in SQL), not a caller-supplied timestamp — rows are
+        stamped with the DB clock, so comparing against a client clock would be subject to skew.
+        The reclaim cutoff is computed per row from ``max_runtime_s`` — the same value the runner
+        uses as its watchdog budget — so a scan can never reclaim a runner still within its own
+        runtime bound (the double-run invariant)."""
+        with self.db.connection() as conn:
+            rows = conn.execute(
+                f"""
+                UPDATE scheduled_runs AS s
+                SET started_at   = now(),
+                    completed_at = NULL,
+                    last_status  = CASE WHEN s.started_at IS NOT NULL THEN 'abandoned' ELSE s.last_status END,
+                    last_error   = CASE WHEN s.started_at IS NOT NULL
+                                        THEN 'reclaimed after exceeding max runtime' ELSE s.last_error END
+                WHERE s.id IN (
+                    SELECT id FROM scheduled_runs
+                    WHERE NOT paused AND (
+                        (started_at IS NULL AND next_run_at <= now())
+                        OR (started_at IS NOT NULL AND completed_at IS NULL
+                            AND started_at + make_interval(secs => max_runtime_s + %(margin)s) < now())
+                    )
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING {self._SCHEDULED_RUN_COLS}
+                """,
+                {"margin": margin_s},
+            ).fetchall()
+            conn.commit()
+            return rows
+
+    def complete_run(
+        self,
+        run_id: int,
+        status: str,
+        error: str | None,
+        skipped: list | None,
+    ) -> None:
+        """Record a finished run and advance the schedule: clear the in-flight marker, stamp the
+        outcome (R4), and set the next due time to ``now() + run_interval`` (computed in SQL from
+        the row's own cadence, so it is skew-free and uses the stored interval). Used for every
+        terminal outcome except a lapsed credential, which pauses instead (see ``pause_and_flag``)."""
+        with self.db.connection() as conn:
+            conn.execute(
+                """
+                UPDATE scheduled_runs
+                SET started_at = NULL, completed_at = now(), last_status = %s, last_error = %s,
+                    last_skipped = %s, next_run_at = now() + run_interval
+                WHERE id = %s
+                """,
+                (status, error, Json(skipped) if skipped is not None else None, run_id),
+            )
+            conn.commit()
+
+    def pause_and_flag(self, run_id: int, reason: str, error: str | None = None) -> None:
+        """Pause a schedule and flag why, instead of advancing it — used when a run fails on a
+        lapsed credential (only interactive re-auth fixes it, so re-running every cadence would
+        just re-fail). Clears the in-flight marker and records the outcome; ``next_run_at`` is left
+        unchanged (a paused row is never claimed). The owner resuming (or re-authing) unpauses it."""
+        with self.db.connection() as conn:
+            conn.execute(
+                """
+                UPDATE scheduled_runs
+                SET started_at = NULL, completed_at = now(), paused = true, pause_reason = %s,
+                    last_status = 'auth_lapsed', last_error = %s
+                WHERE id = %s
+                """,
+                (reason, error, run_id),
+            )
+            conn.commit()

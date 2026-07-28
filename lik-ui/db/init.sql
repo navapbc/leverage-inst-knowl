@@ -62,3 +62,42 @@ CREATE TABLE IF NOT EXISTS pending_connections (
     client_secret  text,
     created_at     timestamptz NOT NULL DEFAULT now()
 );
+
+-- Recurring, unattended agent runs a user has scheduled for themselves. This table is the
+-- cron-like state of record: what to run (agent_name + prompt), how often (run_interval),
+-- when it is next due, whether a run is in flight (started_at set, completed_at null), and
+-- the last run's outcome. A scheduled GitHub Action scans it for due rows, claims each
+-- atomically, drives the agent session to completion as the owning user, and updates timing.
+-- Each run executes with the owner's own vault; ownership is scoped by user_id everywhere
+-- except the scanner's cross-user claim (see Store.claim_due_runs).
+CREATE TABLE IF NOT EXISTS scheduled_runs (
+    id            bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id       bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    -- Agent referenced by roster name (never a platform id), resolved to an id at run time,
+    -- consistent with the "no platform ids pinned in the repo/DB config" convention.
+    agent_name    text        NOT NULL,
+    prompt        text        NOT NULL,
+    -- Preset cadence stored as a Postgres interval; next_run_at advances by this on completion.
+    run_interval  interval    NOT NULL,
+    -- Per-schedule hard runtime bound in seconds (materialized from the agent's roster max_runtime
+    -- at creation). Single source of truth for BOTH the runner's watchdog and the scanner's stuck-row
+    -- reclaim cutoff, so the invariant "reclaim only after max_runtime + margin" holds by construction.
+    max_runtime_s integer     NOT NULL DEFAULT 1800,
+    next_run_at   timestamptz NOT NULL DEFAULT now(),
+    -- In-flight marker: set when a scan claims the row, cleared on completion. A row with
+    -- started_at set and completed_at null is running (or was abandoned — see reclaim).
+    started_at    timestamptz,
+    completed_at  timestamptz,
+    -- Last run's outcome, so the Settings UI and the scanner can see health without opening
+    -- the session (and it survives deletion of an empty failed session).
+    last_status   text,
+    last_error    text,
+    last_skipped  jsonb,
+    -- Paused schedules are never claimed. pause_reason distinguishes a user pause from an
+    -- auto-pause (e.g. 'needs_reauth' after a lapsed-credential run).
+    paused        boolean     NOT NULL DEFAULT false,
+    pause_reason  text,
+    created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS scheduled_runs_user_idx ON scheduled_runs (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS scheduled_runs_due_idx ON scheduled_runs (next_run_at);

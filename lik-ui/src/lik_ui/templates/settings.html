@@ -59,6 +59,74 @@
   </div>
 
   <div class="card">
+    <h2>Scheduled runs</h2>
+    <p>Schedule an agent to run automatically on a cadence, using your own connected credentials.
+       Runs happen unattended: routine steps proceed on their own, anything that needs a decision is
+       skipped and recorded, and each run shows up in <a href="/sessions">your sessions</a>.</p>
+
+    {% if scheduled_created %}<p class="status-connected">✓ Schedule created.</p>{% endif %}
+    {% if scheduled_error %}<p class="cred-url">Couldn't create that schedule — pick an agent and cadence and enter a message.</p>{% endif %}
+
+    {% if schedulable_agents %}
+      <form method="post" action="/settings/scheduled-runs" class="schedule-form">
+        <label>Agent
+          <select name="agent_name" required>
+            {% for a in schedulable_agents %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Cadence
+          <select name="cadence" required>
+            {% for c in cadences %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Message to send
+          <input type="text" name="prompt" required placeholder="e.g. sync the project indexes">
+        </label>
+        <button class="btn" type="submit">Schedule</button>
+      </form>
+    {% else %}
+      <p>No agents are available for scheduling. (Only agents marked safe to run unattended can be
+         scheduled.)</p>
+    {% endif %}
+
+    {% if scheduled_runs %}
+      <ul class="cred-list">
+        {% for r in scheduled_runs %}
+          <li>
+            <div>
+              <strong>{{ r.agent_name }}</strong> · every {{ r.run_interval }}
+              <div class="cred-url">
+                {% if r.paused %}
+                  Paused{% if r.pause_reason == 'needs_reauth' %} · needs re-authentication (reconnect the source, then Resume){% endif %}
+                {% else %}
+                  Next run: {{ r.next_run_at.strftime('%Y-%m-%d %H:%M UTC') }}
+                {% endif %}
+              </div>
+              {% if r.last_status %}
+                <div class="cred-url">
+                  Last run: {{ r.last_status }}{% if r.last_skipped %} · {{ r.last_skipped|length }} item(s) skipped{% endif %}{% if r.last_error %} · {{ r.last_error }}{% endif %}
+                </div>
+              {% endif %}
+            </div>
+            <div>
+              <form method="post" action="/settings/scheduled-runs/{{ r.id }}/pause" style="display:inline">
+                <input type="hidden" name="paused" value="{{ 'false' if r.paused else 'true' }}">
+                <button class="btn" type="submit">{{ 'Resume' if r.paused else 'Pause' }}</button>
+              </form>
+              <form method="post" action="/settings/scheduled-runs/{{ r.id }}/delete" style="display:inline"
+                    onsubmit="return confirm('Delete this schedule?');">
+                <button class="btn danger" type="submit">Delete</button>
+              </form>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>You have no scheduled runs.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
     <h2>Agent picker</h2>
     <p><strong>Management agents write data.</strong> They change shared knowledge that everyone
        relies on (for example, registering entries into the catalog), so they are hidden from the

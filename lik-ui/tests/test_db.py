@@ -141,3 +141,141 @@ def test_migration_backfills_existing_rows_to_now_plus_seven_days(store, db):
     backfilled = store.get_session("old", a["id"])["auto_delete_at"]
     # ~now()+7d (fresh window), decidedly NOT created_at+7d (which would be ~83 days in the past).
     assert now + timedelta(days=6) < backfilled < now + timedelta(days=8)
+
+
+# --- scheduled runs (U1: owner-scoped CRUD) ------------------------------------
+
+
+def test_get_user_by_id_roundtrips(store):
+    a = store.upsert_user("a@navapbc.com")
+    got = store.get_user_by_id(a["id"])
+    assert got["id"] == a["id"] and got["email"] == "a@navapbc.com"
+    assert store.get_user_by_id(999999) is None
+
+
+def test_create_scheduled_run_roundtrips(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "Catalog Registration Agent", "sync the indexes", timedelta(days=1))
+    assert run["agent_name"] == "Catalog Registration Agent"
+    assert run["prompt"] == "sync the indexes"
+    assert run["run_interval"] == timedelta(days=1)
+    assert run["paused"] is False and run["pause_reason"] is None
+    assert run["started_at"] is None and run["completed_at"] is None
+    # Due immediately on creation so the first scan picks it up.
+    assert run["next_run_at"] is not None
+    listed = store.list_scheduled_runs(a["id"])
+    assert [r["id"] for r in listed] == [run["id"]]
+
+
+def test_scheduled_runs_are_owner_scoped(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(hours=1))
+    # b sees none of a's schedules.
+    assert store.list_scheduled_runs(b["id"]) == []
+    # b cannot delete a's schedule; a can.
+    assert store.delete_scheduled_run(run["id"], b["id"]) is False
+    assert store.list_scheduled_runs(a["id"]) != []
+    assert store.delete_scheduled_run(run["id"], a["id"]) is True
+    assert store.list_scheduled_runs(a["id"]) == []
+
+
+def test_set_scheduled_run_paused_is_owner_scoped(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(hours=1))
+    assert store.set_scheduled_run_paused(run["id"], b["id"], True) is False
+    assert store.set_scheduled_run_paused(run["id"], a["id"], True) is True
+    assert store.list_scheduled_runs(a["id"])[0]["paused"] is True
+    # Resuming clears any pause_reason.
+    assert store.set_scheduled_run_paused(run["id"], a["id"], False) is True
+    row = store.list_scheduled_runs(a["id"])[0]
+    assert row["paused"] is False and row["pause_reason"] is None
+
+
+def test_delete_scheduled_runs_for_user_removes_all(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    store.create_scheduled_run(a["id"], "agent", "one", timedelta(hours=1))
+    store.create_scheduled_run(a["id"], "agent", "two", timedelta(hours=2))
+    store.create_scheduled_run(b["id"], "agent", "other", timedelta(hours=1))
+    assert store.delete_scheduled_runs_for_user(a["id"]) == 2
+    assert store.list_scheduled_runs(a["id"]) == []
+    # b's schedule is untouched.
+    assert len(store.list_scheduled_runs(b["id"])) == 1
+
+
+# --- scheduled runs (U4: scanner claim / complete / pause) ---------------------
+
+
+def _set_run(db, run_id, **cols):
+    """Poke scheduled_runs columns directly to simulate scheduler state (in-flight, due times)."""
+    assigns = ", ".join(f"{k} = %s" for k in cols)
+    with db.connection() as conn:
+        conn.execute(f"UPDATE scheduled_runs SET {assigns} WHERE id = %s", (*cols.values(), run_id))
+        conn.commit()
+
+
+def test_claim_due_runs_claims_due_and_marks_in_flight(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(hours=1))  # due immediately
+    claimed = store.claim_due_runs()
+    assert [r["id"] for r in claimed] == [run["id"]]
+    assert claimed[0]["started_at"] is not None  # marked in flight
+    # A second scan does not re-claim it (atomic claim; started_at now set, not yet stuck).
+    assert store.claim_due_runs() == []
+
+
+def test_claim_due_runs_skips_paused_and_not_yet_due(store):
+    a = store.upsert_user("a@navapbc.com")
+    paused = store.create_scheduled_run(a["id"], "agent", "p", timedelta(hours=1))
+    store.set_scheduled_run_paused(paused["id"], a["id"], True)
+    future = store.create_scheduled_run(a["id"], "agent", "f", timedelta(hours=1))
+    _set_run(store.db, future["id"], next_run_at=datetime(2999, 1, 1, tzinfo=timezone.utc))
+    assert store.claim_due_runs() == []
+
+
+def test_claim_due_runs_reclaims_stuck_but_not_live(store):
+    a = store.upsert_user("a@navapbc.com")
+    now = datetime.now(timezone.utc)
+    # A live run: in flight, started 1 min ago, max_runtime 1800s -> well within budget.
+    live = store.create_scheduled_run(a["id"], "agent", "live", timedelta(hours=1), max_runtime_s=1800)
+    _set_run(store.db, live["id"], started_at=now - timedelta(minutes=1), completed_at=None)
+    # A stuck run: in flight, started 40 min ago, max_runtime 60s -> far past 60s + margin.
+    stuck = store.create_scheduled_run(a["id"], "agent", "stuck", timedelta(hours=1), max_runtime_s=60)
+    _set_run(store.db, stuck["id"], started_at=now - timedelta(minutes=40), completed_at=None)
+
+    claimed = store.claim_due_runs()
+
+    # Only the stuck one is reclaimed; the live runner (within its budget) is left alone.
+    assert [r["id"] for r in claimed] == [stuck["id"]]
+    assert claimed[0]["last_status"] == "abandoned"
+
+
+def test_complete_run_records_outcome_and_advances(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(hours=1))
+    store.claim_due_runs()  # in flight
+    store.complete_run(run["id"], "success", None, [{"server": "s", "tool": "t"}])
+    row = store.list_scheduled_runs(a["id"])[0]
+    assert row["started_at"] is None  # no longer in flight
+    assert row["last_status"] == "success"
+    assert row["last_skipped"] == [{"server": "s", "tool": "t"}]
+    # next_run_at advanced to ~now + run_interval (1 hour).
+    now = datetime.now(timezone.utc)
+    assert now + timedelta(minutes=55) < row["next_run_at"] < now + timedelta(minutes=65)
+
+
+def test_pause_and_flag_pauses_without_advancing(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(hours=1))
+    original_due = run["next_run_at"]
+    store.claim_due_runs()
+    store.pause_and_flag(run["id"], "needs_reauth", error="Confluence auth lapsed")
+    row = store.list_scheduled_runs(a["id"])[0]
+    assert row["paused"] is True and row["pause_reason"] == "needs_reauth"
+    assert row["last_status"] == "auth_lapsed"
+    assert row["started_at"] is None
+    assert row["next_run_at"] == original_due  # not advanced
+    # A paused row is never claimed even though it's due.
+    assert store.claim_due_runs() == []
