@@ -102,6 +102,11 @@ a { color: var(--accent); }
 /* Open-by-id row: label and button hug their content, input fills the rest. */
 form.session-row { display: flex; align-items: center; gap: 1rem; }
 form.session-row input { flex: 1; }
+/* Scheduled-runs form: each label stacks its control on its own line. */
+.schedule-form { display: flex; flex-direction: column; gap: .6rem; align-items: flex-start; }
+.schedule-form label { display: flex; flex-direction: column; gap: .25rem; width: 100%; max-width: 32rem; }
+.schedule-form textarea { resize: vertical; font: inherit; padding: .4rem .5rem;
+  border: 1px solid var(--line); border-radius: 6px; }
 /* Collapsible per-agent details on the agent-selection page. */
 .card > details { margin-top: .6rem; }
 .card > details > summary { cursor: pointer; color: var(--accent); }

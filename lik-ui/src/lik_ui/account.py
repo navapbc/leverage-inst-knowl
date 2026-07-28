@@ -11,11 +11,11 @@ from datetime import timedelta
 from .vault import VaultClient, delete_user_vault
 
 # Preset cadences offered in the scheduler UI (v1 — free cron expressions are deferred). The label
-# is what the user picks; the timedelta is stored as the schedule's run_interval.
+# is what the user picks; the timedelta is stored as the schedule's run_interval. Ordered
+# longest-first so the least-frequent cadence is the default selection in the picker.
 CADENCES: dict[str, timedelta] = {
-    "hourly": timedelta(hours=1),
-    "daily": timedelta(days=1),
     "weekly": timedelta(weeks=1),
+    "daily": timedelta(days=1),
 }
 
 
