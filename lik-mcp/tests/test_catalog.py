@@ -168,13 +168,41 @@ def test_refresh_due_and_modified_date_round_trip(db):
     assert row["source_modified_date"] == "2026-07-20"
 
 
-def test_refresh_due_and_modified_date_default_null(db):
-    """Both fields omitted come back null — the R4 defaults that let pre-migration rows be
-    treated as always-due / never-skip-on-hint (AE8)."""
-    register_catalog_entry(db, _entry(), updated_by="svc")
+def test_skill_row_omitting_refresh_due_gets_a_server_default(db):
+    """A skill row that omits refresh_due_at (the observed agent-omission bug) must NOT come back
+    null — a null is "always due" and silently disables the routine-sync skip. The tool defaults it
+    (and last_computed_at) server-side so the optimization can't be turned off by an omission.
+    source_modified_date has no such default (a bad change-hint should force reprocessing)."""
+    before = datetime.now(timezone.utc)
+    register_catalog_entry(db, _entry(), updated_by="svc")  # _entry() defaults row_provenance="skill"
 
     row = list_catalog_entries(db, "project-summary").entries[0]
+    assert row["refresh_due_at"] is not None
+    assert row["last_computed_at"] is not None
+    # Conservative floor: ~14 days out, and clearly in the future so the row is skipped next run.
+    due = datetime.fromisoformat(row["refresh_due_at"])
+    assert due > before  # future -> skippable
+    assert 13 <= (due - before).days <= 15
+    assert row["source_modified_date"] is None
+
+
+def test_skill_explicit_refresh_due_overrides_the_default(db):
+    """The skill's own trust-tiered value always wins over the server floor (COALESCE order)."""
+    explicit = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)
+    register_catalog_entry(db, _entry(refresh_due_at=explicit), updated_by="svc")
+    row = list_catalog_entries(db, "project-summary").entries[0]
+    assert datetime.fromisoformat(row["refresh_due_at"]) == explicit
+
+
+def test_human_row_omitting_refresh_due_stays_null(db):
+    """A human row is a one-off save, not on a refresh cycle, so the server default does NOT apply
+    — it stays null (the R4 default preserved for non-skill rows)."""
+    register_catalog_entry(
+        db, _entry(provenance="human-created", row_provenance="human"), updated_by="alice"
+    )
+    row = list_catalog_entries(db, "project-summary").entries[0]
     assert row["refresh_due_at"] is None
+    assert row["last_computed_at"] is None
     assert row["source_modified_date"] is None
 
 
@@ -208,7 +236,9 @@ def test_refresh_due_and_modified_date_upsert_restamps(db):
 
 
 def test_refresh_due_and_modified_date_independent(db):
-    """Each field persists independently — one set while the other is null."""
+    """Each field persists independently. An explicit refresh_due_at is kept and source_modified_date
+    stays null when omitted; conversely setting only source_modified_date leaves it set while
+    refresh_due_at falls back to its server default (a skill row is never left always-due)."""
     register_catalog_entry(
         db,
         _entry(refresh_due_at=datetime(2026, 8, 15, tzinfo=timezone.utc)),
@@ -222,7 +252,7 @@ def test_refresh_due_and_modified_date_independent(db):
 
     register_catalog_entry(db, _entry(source_modified_date=date(2026, 7, 20)), updated_by="svc")
     row = list_catalog_entries(db, "project-summary").entries[0]
-    assert row["refresh_due_at"] is None
+    assert row["refresh_due_at"] is not None  # defaulted, not forced to null — no policy coupling
     assert row["source_modified_date"] == "2026-07-20"
 
 

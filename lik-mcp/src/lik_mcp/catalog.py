@@ -38,10 +38,15 @@ class CatalogEntry(BaseModel):
     # The DS records this row was derived from; a list so a row synthesized from
     # several sources can detect drift in any one independently. See SourceRef.
     source_refs: list[SourceRef] = Field(default_factory=list)
+    # For a skill row, defaults server-side to now() when omitted (see _UPSERT); a skill re-derives
+    # the row each run, so "last computed" is the write time unless the skill states otherwise.
     last_computed_at: Optional[datetime] = None
     last_validated_at: Optional[datetime] = None
-    # When this row is next due for re-derivation. A future target the owning skill sets;
-    # None = always due. The trust-tiered interval policy lives in the skill, not here.
+    # When this row is next due for re-derivation; None = always due. The trust-tiered interval is
+    # the owning skill's to set and it should on every processed row. Because a missing value
+    # silently makes the row always-due (disabling the routine-sync skip), a skill row that omits it
+    # gets a conservative server-side default (now + 14 days; see _UPSERT) as a floor — the skill's
+    # explicit, tier-tuned value always overrides. Human rows are not on a refresh cycle: they keep null.
     refresh_due_at: Optional[datetime] = None
     # The source's own last-modified day — a cheap, day-granular change hint. None = day
     # unknown, so a skill must not skip on the hint. See limitations.md / the origin doc.
@@ -97,7 +102,18 @@ INSERT INTO catalog (
 ) VALUES (
     %(entry_type)s, %(subject)s, %(location)s, %(store_kind)s, %(locator)s, %(provenance)s,
     %(verification)s, %(verified_by)s, %(verified_at)s, %(freshness)s, %(source_refs)s,
-    %(last_computed_at)s, %(last_validated_at)s, %(refresh_due_at)s, %(source_modified_date)s,
+    -- Skill rows are re-derived on a schedule, so they must carry the derivation metadata that
+    -- drives it. A skill run is supposed to stamp last_computed_at + refresh_due_at, but that is a
+    -- per-row step an agent can silently skip — and a null refresh_due_at means "always due", which
+    -- silently disables the routine-sync skip optimization for that row forever. Default them
+    -- server-side (skill rows only) so the optimization can't be turned off by an omission: an
+    -- explicit value from the skill (its trust-tiered interval) always wins via COALESCE; only a
+    -- missing one falls back. Computed with the DB clock (skew-free), consistent with updated_at.
+    -- Human rows are one-off saves, not on a refresh cycle, so they keep null.
+    COALESCE(%(last_computed_at)s, CASE WHEN %(row_provenance)s = 'skill' THEN now() END),
+    %(last_validated_at)s,
+    COALESCE(%(refresh_due_at)s, CASE WHEN %(row_provenance)s = 'skill' THEN now() + interval '14 days' END),
+    %(source_modified_date)s,
     %(access_groups)s, %(sensitivity)s,
     %(category)s, %(computed_by)s, %(row_provenance)s, %(updated_by)s
 )
