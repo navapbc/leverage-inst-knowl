@@ -59,13 +59,19 @@ class AgentRosterEntry(BaseModel):
     ``is_management`` is derived from the section's declaration and cached here so downstream code
     need not re-consult the section table. ``user_prompt`` is an optional short, user-facing
     invitation ("here's what to ask me") rendered above the chat transcript; it lives in the roster
-    because the Managed Agent spec has no field for it (empty ⇒ no block)."""
+    because the Managed Agent spec has no field for it (empty ⇒ no block).
+
+    ``session_title_prefix`` is an optional short label used as the leading clause of a session's
+    default title (``"<prefix> · <timestamp>"``), in place of the agent's long platform name. Empty ⇒
+    the default title falls back to the agent's full name, so behavior is unchanged for agents that
+    omit it."""
 
     agent_name: str
     environment_name: str
     section: str = ""
     is_management: bool = False
     user_prompt: str = ""
+    session_title_prefix: str = ""
     # Scheduling (see docs/plans/2026-07-28-002-...): ``schedulable`` gates whether this agent may
     # be offered as a scheduled, unattended run — a curator's assertion that its skills are
     # unattended-safe (skip-and-record, no indefinite waiting), which no automatic marker can verify.
@@ -101,6 +107,9 @@ class AgentOption(BaseModel):
     schedulable: bool = False
     auto_approve: list[AutoApproveTool] = []
     max_runtime: int = DEFAULT_MAX_RUNTIME_SECONDS
+    # Carried through from the roster (see AgentRosterEntry). Empty ⇒ the session-title default falls
+    # back to the agent's full platform name.
+    session_title_prefix: str = ""
 
 
 class Settings(BaseSettings):
@@ -236,6 +245,7 @@ class Settings(BaseSettings):
             environment_name = str(entry.get("environment", "")).strip() or default_env
             section = str(entry.get("section", "")).strip()
             user_prompt = str(entry.get("user_prompt", "")).strip()
+            session_title_prefix = str(entry.get("session_title_prefix", "")).strip()
             schedulable = bool(entry.get("schedulable", False))
             max_runtime = int(entry.get("max_runtime", DEFAULT_MAX_RUNTIME_SECONDS))
             auto_approve = [
@@ -250,6 +260,7 @@ class Settings(BaseSettings):
                     section=section,
                     is_management=section in management_sections,
                     user_prompt=user_prompt,
+                    session_title_prefix=session_title_prefix,
                     schedulable=schedulable,
                     auto_approve=auto_approve,
                     max_runtime=max_runtime,

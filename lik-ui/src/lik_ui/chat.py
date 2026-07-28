@@ -392,9 +392,10 @@ def register_chat_routes(app) -> None:
         if not agent:
             return HTMLResponse("Unknown agent.", status_code=404)
 
-        # Fall back to the agent name plus a timestamp when the user leaves the title blank,
-        # so every session is named (matches the placeholder shown next to "Start chatting").
-        # The label comes from the agent's own definition via the SDK; fall back to its id.
+        # Fall back to a prefix plus a timestamp when the user leaves the title blank, so every
+        # session is named (matches the placeholder shown next to "Start chatting"). The roster's
+        # short session_title_prefix is preferred; when an agent omits it, fall back to the agent's
+        # full name from its definition via the SDK, and finally to its id.
         label = agent.agent_id
         agents_client = request.app.state.agents_client
         if agents_client is not None:
@@ -402,7 +403,8 @@ def register_chat_routes(app) -> None:
                 label = agents_client.describe(agent.agent_id)["name"] or agent.agent_id
             except Exception:  # noqa: BLE001 - a label lookup failure shouldn't block starting a chat
                 pass
-        title = title.strip() or f"{label} · {datetime.now():%b %d, %Y %H:%M}"
+        prefix = agent.session_title_prefix or label
+        title = title.strip() or f"{prefix} · {datetime.now():%b %d, %Y %H:%M}"
         try:
             vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
             session_id = request.app.state.sessions_client.create_session(
