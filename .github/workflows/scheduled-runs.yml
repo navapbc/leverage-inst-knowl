@@ -45,6 +45,10 @@ jobs:
       SSM_PREFIX: ${{ vars.SSM_PREFIX }}
       LIK_UI_ENV: prod
       LIK_UI_DB_SSLMODE: require
+      # Only used to log each run's owner-facing chat page in the job output (this job serves no
+      # HTTP and builds no callbacks). The custom domain is stable and already hardcoded in
+      # deploy-images.yml; SSM has no such param (terraform computes it from the Lightsail URL).
+      LIK_UI_APP_BASE_URL: https://ui.lik.navapbc.com
     steps:
       - uses: actions/checkout@v6
 
