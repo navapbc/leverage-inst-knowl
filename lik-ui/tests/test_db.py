@@ -114,3 +114,30 @@ def test_list_sessions_due_empty_when_nothing_expired(store):
     a = store.upsert_user("a@navapbc.com")
     store.create_session(a["id"], "agent_1", "sess_1")  # default +7d, not yet due
     assert store.list_sessions_due(datetime.now(timezone.utc)) == []
+
+
+def test_migration_backfills_existing_rows_to_now_plus_seven_days(store, db):
+    """Exercise the prod-migration branch (not just the fresh-CREATE-TABLE default): an
+    existing row from before the column existed must be backfilled to now()+7d — a fresh
+    window — NOT created_at+7d, which for an old session would already be in the past."""
+    from tests.conftest import INIT_SQL
+
+    a = store.upsert_user("old@navapbc.com")
+    # Simulate a pre-existing table: drop the column, insert a session with an old created_at.
+    with db.connection() as conn:
+        conn.execute("ALTER TABLE sessions DROP COLUMN auto_delete_at")
+        conn.execute(
+            "INSERT INTO sessions (session_id, user_id, agent_id, created_at) "
+            "VALUES ('old', %s, 'agent_1', now() - interval '90 days')",
+            (a["id"],),
+        )
+        conn.commit()
+    # Re-apply init.sql (idempotent) -> runs the ADD COLUMN ... NOT NULL DEFAULT migration.
+    with db.connection() as conn:
+        conn.execute(INIT_SQL.read_text())
+        conn.commit()
+
+    now = datetime.now(timezone.utc)
+    backfilled = store.get_session("old", a["id"])["auto_delete_at"]
+    # ~now()+7d (fresh window), decidedly NOT created_at+7d (which would be ~83 days in the past).
+    assert now + timedelta(days=6) < backfilled < now + timedelta(days=8)

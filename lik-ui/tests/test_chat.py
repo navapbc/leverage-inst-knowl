@@ -288,6 +288,16 @@ def test_sessions_list_flags_same_day_deletion_as_today(db):
     assert "Deletes today" in text
 
 
+def test_sessions_list_flags_session_at_window_boundary(db):
+    from datetime import datetime, timedelta, timezone
+
+    client, session_id = _start_session(db, FakeSessionsClient())
+    # ~3 days out — the inclusive edge of the 3-day warning window. (A `<` off-by-one that
+    # excluded the boundary would drop the flag here.)
+    Store(db).set_session_auto_delete_at(session_id, _owner_id(db), datetime.now(timezone.utc) + timedelta(days=3))
+    assert "delete-warning" in client.get("/sessions").text
+
+
 def test_sessions_list_shows_plain_date_when_not_near(db):
     from zoneinfo import ZoneInfo
 
@@ -887,7 +897,6 @@ def test_owner_reschedules_auto_delete_to_a_future_date(db):
 
 
 def test_reschedule_rejects_past_date_and_leaves_row_unchanged(db):
-    from datetime import datetime, timezone
 
     sc = FakeSessionsClient()
     owner, viewer, session_id = _owner_and_viewer(db, sc)
@@ -901,6 +910,18 @@ def test_reschedule_rejects_malformed_date(db):
     sc = FakeSessionsClient()
     owner, viewer, session_id = _owner_and_viewer(db, sc)
     r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": "not-a-date"})
+    assert r.status_code == 400
+
+
+def test_reschedule_rejects_todays_et_date(db):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    today_et = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+    # Today is not a future date — immediate deletion is the Delete button's job.
+    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": today_et})
     assert r.status_code == 400
 
 

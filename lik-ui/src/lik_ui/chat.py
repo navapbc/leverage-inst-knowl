@@ -33,6 +33,15 @@ from .vault import ensure_user_vault
 # boundary so the picker never depends on the DB connection's session time zone.
 EASTERN = ZoneInfo("America/New_York")
 
+# Sessions within this many days of their auto-delete time are flagged in the sessions list.
+AUTO_DELETE_WARN_WINDOW = timedelta(days=3)
+
+
+def _auto_delete_local(dt: datetime) -> str:
+    """The auto-delete instant as its Eastern-Time calendar date (YYYY-MM-DD) — the form the
+    date picker shows and the sessions list displays."""
+    return dt.astimezone(EASTERN).strftime("%Y-%m-%d")
+
 
 class SessionNotFound(Exception):
     """The platform session no longer exists in the current workspace — e.g. the app's API
@@ -404,9 +413,6 @@ def register_chat_routes(app) -> None:
         request.app.state.store.create_session(user["id"], agent.agent_id, session_id, title)
         return RedirectResponse(f"/chat/{session_id}", status_code=303)
 
-    # Sessions within this many days of their auto-delete time are flagged in the list.
-    AUTO_DELETE_WARN_WINDOW = timedelta(days=3)
-
     @app.get("/sessions", response_class=HTMLResponse)
     async def sessions_page(request: Request):
         user = require_user(request)
@@ -417,7 +423,7 @@ def register_chat_routes(app) -> None:
         for s in sessions:
             s["delete_days"] = max((s["auto_delete_at"] - now).days, 0)
             s["delete_soon"] = s["auto_delete_at"] <= now + AUTO_DELETE_WARN_WINDOW
-            s["auto_delete_local"] = s["auto_delete_at"].astimezone(EASTERN).strftime("%Y-%m-%d")
+            s["auto_delete_local"] = _auto_delete_local(s["auto_delete_at"])
         return templates.TemplateResponse(
             request, "sessions.html", {"user": user, "sessions": sessions}
         )
@@ -483,7 +489,7 @@ def register_chat_routes(app) -> None:
         is_owner = session["user_id"] == user["id"]
         # Prefill the reschedule picker with the auto-delete day in Eastern Time (the tz the
         # control uses), independent of the DB connection's session time zone.
-        session["auto_delete_local"] = session["auto_delete_at"].astimezone(EASTERN).strftime("%Y-%m-%d")
+        session["auto_delete_local"] = _auto_delete_local(session["auto_delete_at"])
         # Show the agent's display name and its declared MCP servers; both come from the
         # agent's own definition via the SDK. Each server carries its permission_policy so the
         # auto-approve checklist can lock a server that already always-allows server-side (its

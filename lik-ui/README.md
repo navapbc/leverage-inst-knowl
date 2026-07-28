@@ -188,8 +188,10 @@ key and do per-user attribution in lik-ui's own DB, which we control and can ful
 ### DONE: auto-delete stale chat sessions
 
 Sessions no longer live forever. Each `sessions` row carries an `auto_delete_at` timestamp
-(`timestamptz`, default `now() + 7 days`); existing rows were backfilled to `created_at + 7
-days` by the non-destructive migration in `db/init.sql`. The owner can push the date out — or
+(`timestamptz`, default `now() + 7 days`); existing rows get `now() + 7 days` (a fresh window
+from migration time) via the non-destructive migration in `db/init.sql` — deliberately not
+`created_at + 7 days`, which would put every session older than 7 days in the past and delete
+them all on the first cleanup run with no warning. The owner can push the date out — or
 pull it in — from a date picker in the chat's **Session settings** (`POST
 /chat/{session_id}/auto-delete`, owner-scoped), but there is no way to disable it: a session
 always has a date. The sessions list flags rows within 3 days of deletion ("Deletes in N days"
