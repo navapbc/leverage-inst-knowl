@@ -7,7 +7,7 @@ handles.
 """
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -55,6 +55,15 @@ class Store:
         with self.db.connection() as conn:
             return conn.execute(
                 "SELECT id, email, created_at FROM users WHERE email = %s", (email,)
+            ).fetchone()
+
+    def get_user_by_id(self, user_id: int) -> dict | None:
+        """Resolve a user by id. Used by the scheduled runner, which starts from a
+        ``scheduled_runs.user_id`` (not an email) and needs the ``{id, email}`` shape
+        ``ensure_user_vault`` expects."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                "SELECT id, email, created_at FROM users WHERE id = %s", (user_id,)
             ).fetchone()
 
     # --- user -> vault mapping -------------------------------------------------
@@ -198,3 +207,74 @@ class Store:
             ).fetchone()
             conn.commit()
             return row is not None
+
+    # --- scheduled runs --------------------------------------------------------
+    # CRUD here is owner-scoped (the Settings UI). The scanner's cross-user claim/complete
+    # live below in the "scheduled runs (scanner)" section.
+    _SCHEDULED_RUN_COLS = (
+        "id, user_id, agent_name, prompt, run_interval, next_run_at, started_at, completed_at, "
+        "last_status, last_error, last_skipped, paused, pause_reason, created_at"
+    )
+
+    def create_scheduled_run(
+        self, user_id: int, agent_name: str, prompt: str, run_interval: timedelta
+    ) -> dict:
+        """Create a schedule owned by ``user_id``. It becomes due immediately (next_run_at
+        defaults to now()) and recurs every ``run_interval``."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                f"""
+                INSERT INTO scheduled_runs (user_id, agent_name, prompt, run_interval)
+                VALUES (%s, %s, %s, %s)
+                RETURNING {self._SCHEDULED_RUN_COLS}
+                """,
+                (user_id, agent_name, prompt, run_interval),
+            ).fetchone()
+            conn.commit()
+            return row
+
+    def list_scheduled_runs(self, user_id: int) -> list[dict]:
+        """This user's schedules, newest first. Owner-scoped for the Settings list."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"SELECT {self._SCHEDULED_RUN_COLS} FROM scheduled_runs "
+                "WHERE user_id = %s ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+
+    def delete_scheduled_run(self, run_id: int, user_id: int) -> bool:
+        """Delete a schedule. Owner-scoped so one user can't delete another's. Returns
+        whether a row was removed."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                "DELETE FROM scheduled_runs WHERE id = %s AND user_id = %s RETURNING id",
+                (run_id, user_id),
+            ).fetchone()
+            conn.commit()
+            return row is not None
+
+    def set_scheduled_run_paused(self, run_id: int, user_id: int, paused: bool) -> bool:
+        """Pause or resume a schedule (owner-scoped). Resuming clears any pause_reason (e.g.
+        after the owner re-authenticates a lapsed connection). Returns whether a row updated."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                """
+                UPDATE scheduled_runs
+                SET paused = %s, pause_reason = CASE WHEN %s THEN pause_reason ELSE NULL END
+                WHERE id = %s AND user_id = %s
+                RETURNING id
+                """,
+                (paused, paused, run_id, user_id),
+            ).fetchone()
+            conn.commit()
+            return row is not None
+
+    def delete_scheduled_runs_for_user(self, user_id: int) -> int:
+        """Remove all of a user's schedules — used when their vault is deleted so a schedule
+        cannot keep running with revoked credentials (R19). Returns the count removed."""
+        with self.db.connection() as conn:
+            rows = conn.execute(
+                "DELETE FROM scheduled_runs WHERE user_id = %s RETURNING id", (user_id,)
+            ).fetchall()
+            conn.commit()
+            return len(rows)

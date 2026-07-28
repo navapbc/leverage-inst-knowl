@@ -141,3 +141,65 @@ def test_migration_backfills_existing_rows_to_now_plus_seven_days(store, db):
     backfilled = store.get_session("old", a["id"])["auto_delete_at"]
     # ~now()+7d (fresh window), decidedly NOT created_at+7d (which would be ~83 days in the past).
     assert now + timedelta(days=6) < backfilled < now + timedelta(days=8)
+
+
+# --- scheduled runs (U1: owner-scoped CRUD) ------------------------------------
+
+
+def test_get_user_by_id_roundtrips(store):
+    a = store.upsert_user("a@navapbc.com")
+    got = store.get_user_by_id(a["id"])
+    assert got["id"] == a["id"] and got["email"] == "a@navapbc.com"
+    assert store.get_user_by_id(999999) is None
+
+
+def test_create_scheduled_run_roundtrips(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "Catalog Registration Agent", "sync the indexes", timedelta(days=1))
+    assert run["agent_name"] == "Catalog Registration Agent"
+    assert run["prompt"] == "sync the indexes"
+    assert run["run_interval"] == timedelta(days=1)
+    assert run["paused"] is False and run["pause_reason"] is None
+    assert run["started_at"] is None and run["completed_at"] is None
+    # Due immediately on creation so the first scan picks it up.
+    assert run["next_run_at"] is not None
+    listed = store.list_scheduled_runs(a["id"])
+    assert [r["id"] for r in listed] == [run["id"]]
+
+
+def test_scheduled_runs_are_owner_scoped(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(hours=1))
+    # b sees none of a's schedules.
+    assert store.list_scheduled_runs(b["id"]) == []
+    # b cannot delete a's schedule; a can.
+    assert store.delete_scheduled_run(run["id"], b["id"]) is False
+    assert store.list_scheduled_runs(a["id"]) != []
+    assert store.delete_scheduled_run(run["id"], a["id"]) is True
+    assert store.list_scheduled_runs(a["id"]) == []
+
+
+def test_set_scheduled_run_paused_is_owner_scoped(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(hours=1))
+    assert store.set_scheduled_run_paused(run["id"], b["id"], True) is False
+    assert store.set_scheduled_run_paused(run["id"], a["id"], True) is True
+    assert store.list_scheduled_runs(a["id"])[0]["paused"] is True
+    # Resuming clears any pause_reason.
+    assert store.set_scheduled_run_paused(run["id"], a["id"], False) is True
+    row = store.list_scheduled_runs(a["id"])[0]
+    assert row["paused"] is False and row["pause_reason"] is None
+
+
+def test_delete_scheduled_runs_for_user_removes_all(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    store.create_scheduled_run(a["id"], "agent", "one", timedelta(hours=1))
+    store.create_scheduled_run(a["id"], "agent", "two", timedelta(hours=2))
+    store.create_scheduled_run(b["id"], "agent", "other", timedelta(hours=1))
+    assert store.delete_scheduled_runs_for_user(a["id"]) == 2
+    assert store.list_scheduled_runs(a["id"]) == []
+    # b's schedule is untouched.
+    assert len(store.list_scheduled_runs(b["id"])) == 1

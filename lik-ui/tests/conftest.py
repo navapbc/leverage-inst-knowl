@@ -13,7 +13,7 @@ from lik_ui.settings import Settings
 
 INIT_SQL = pathlib.Path(__file__).resolve().parents[1] / "db" / "init.sql"
 
-_TABLES = "users, user_vaults, sessions, pending_connections"
+_TABLES = "users, user_vaults, sessions, pending_connections, scheduled_runs"
 
 
 def pytest_configure(config):
