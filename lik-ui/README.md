@@ -237,8 +237,9 @@ A daily GitHub Action (`.github/workflows/prune-sessions.yml`) runs
 first, then the DB row** — the same ordering as the interactive delete — isolating per-session
 failures so one bad delete never aborts the sweep or orphans a transcript. The job needs no
 internet-facing endpoint and no long-lived shared secret: it authenticates via GitHub OIDC,
-reads the shared Anthropic key + DB master password from SSM, and connects to the public
-Lightsail Postgres directly.
+reads the shared Anthropic key + DB master password from SSM, resolves its DB target
+(`DB_INSTANCE`, `LIK_UI_DB_NAME`) from the Terraform-authored `$SSM_PREFIX/config/` params, and
+connects to the public Lightsail Postgres directly.
 
 We chose **delete**, not archive: the goal is data-minimization (old transcripts and their
 credentials shouldn't linger on the platform), and the interactive delete path already destroys
