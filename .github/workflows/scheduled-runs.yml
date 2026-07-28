@@ -35,9 +35,12 @@ jobs:
   run-scheduled:
     runs-on: ubuntu-latest
     # Fail fast instead of hanging: a stalled scan otherwise holds the concurrency group and
-    # starves the next tick. Must exceed one run's per-agent max_runtime; if many schedules are
-    # due at once they run sequentially within the job, so raise this or cap the scan if that grows.
-    timeout-minutes: 45
+    # starves the next tick. Must exceed one run's per-agent hard backstop (max_runtime_s + the
+    # scanner's 120s margin) so the scanner records the outcome itself rather than being killed
+    # mid-run by GitHub (a kill leaves the row unrecorded). Today's largest budget is 3000s, so
+    # 55 min clears 3000+120s with room for setup. If many schedules are due at once they run
+    # sequentially within the job, so raise this or cap the scan if that grows.
+    timeout-minutes: 55
     # The prod environment scopes the vars/role below and its `main` branch policy; scheduled runs
     # execute on the default branch, which satisfies it.
     environment: prod

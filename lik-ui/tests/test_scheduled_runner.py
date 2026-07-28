@@ -1,7 +1,7 @@
 """Unit tests for the shared unattended run-core. A scripted fake SessionsClient feeds the
 normalized event vocabulary (text / tool_use / awaiting_confirmation / error / done) so the
-allow/deny loop, watchdog, error classification, and empty-session cleanup are exercised without
-the platform. Uses the real Store (test DB) so session registration/cleanup are real."""
+allow/deny loop, watchdog, error classification, and session handling are exercised without
+the platform. Uses the real Store (test DB) so session registration is real."""
 
 from lik_ui.scheduled_runner import (
     AUTH_LAPSED,
@@ -9,6 +9,7 @@ from lik_ui.scheduled_runner import (
     MAX_DENIES_PER_TOOL,
     SUCCESS,
     TIMED_OUT,
+    UNATTENDED_PREAMBLE,
     run_scheduled,
 )
 from lik_ui.settings import AgentOption, AutoApproveTool
@@ -29,6 +30,7 @@ class FakeSessions:
         self.streams = list(streams)
         self.confirms = []
         self.deleted = []
+        self.sent = []  # messages passed to send_and_stream, to assert the unattended preamble
 
     def create_session(self, agent_id, environment_id, vault_ids, title):
         return "sess_1"
@@ -37,6 +39,7 @@ class FakeSessions:
         return iter(self.streams.pop(0))
 
     def send_and_stream(self, session_id, message):
+        self.sent.append(message)
         return self._next()
 
     def confirm_and_stream(self, session_id, tool_use_id, result, session_thread_id=None):
@@ -129,16 +132,25 @@ def test_deny_loop_is_capped(store):
     assert len(fake.confirms) == MAX_DENIES_PER_TOOL  # capped, did not loop unbounded
 
 
-def test_auth_lapse_is_classified_and_empty_session_deleted(store):
+def test_auth_lapse_is_classified_and_session_kept(store):
     a = store.upsert_user("a@navapbc.com")
     fake = FakeSessions([
         [{"type": "error", "error_type": "mcp_authentication_failed_error", "message": "Confluence auth lapsed"}],
     ])
     out = run_scheduled(store, fake, FakeVault(), _agents(), _row(a["id"]))
     assert out.status == AUTH_LAPSED
-    # No transcript -> the just-created empty session is cleaned up (row + platform).
-    assert store.list_sessions(a["id"]) == []
-    assert fake.deleted == ["sess_1"]
+    # Scheduled sessions are never deleted here — kept for owner follow-up; auto-delete reclaims
+    # them on their retention clock.
+    assert [s["session_id"] for s in store.list_sessions(a["id"])] == ["sess_1"]
+    assert fake.deleted == []
+
+
+def test_scheduled_prompt_is_prefixed_with_unattended_preamble(store):
+    a = store.upsert_user("a@navapbc.com")
+    fake = FakeSessions([[{"type": "done"}]])
+    run_scheduled(store, fake, FakeVault(), _agents(), _row(a["id"], prompt="sync the indexes"))
+    # The agent must be told no human is present, or it falls back to asking and strands the run.
+    assert fake.sent == [UNATTENDED_PREAMBLE + "sync the indexes"]
 
 
 def test_benign_error_does_not_abort_the_run(store):
@@ -166,7 +178,9 @@ def test_silent_stream_times_out(store):
     fake = FakeSessions([_silent()])
     out = run_scheduled(store, fake, FakeVault(), _agents(), _row(a["id"], max_runtime_s=1))
     assert out.status == TIMED_OUT
-    assert store.list_sessions(a["id"]) == []  # empty session cleaned up
+    # Even a timed-out run keeps its session (partial transcript is useful; auto-delete reclaims it).
+    assert [s["session_id"] for s in store.list_sessions(a["id"])] == ["sess_1"]
+    assert fake.deleted == []
 
 
 def test_unknown_agent_is_a_recorded_failure(store):

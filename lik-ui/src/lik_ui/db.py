@@ -214,7 +214,7 @@ class Store:
     # live below in the "scheduled runs (scanner)" section.
     _SCHEDULED_RUN_COLS = (
         "id, user_id, agent_name, prompt, run_interval, max_runtime_s, next_run_at, started_at, "
-        "completed_at, last_status, last_error, last_skipped, paused, pause_reason, created_at"
+        "completed_at, last_status, last_error, last_skipped, last_duration_s, paused, pause_reason, created_at"
     )
 
     def create_scheduled_run(
@@ -335,24 +335,29 @@ class Store:
         status: str,
         error: str | None,
         skipped: list | None,
+        duration_s: int | None = None,
     ) -> None:
         """Record a finished run and advance the schedule: clear the in-flight marker, stamp the
         outcome (R4), and set the next due time to ``now() + run_interval`` (computed in SQL from
-        the row's own cadence, so it is skew-free and uses the stored interval). Used for every
-        terminal outcome except a lapsed credential, which pauses instead (see ``pause_and_flag``)."""
+        the row's own cadence, so it is skew-free and uses the stored interval). ``duration_s`` is
+        the run's measured wall-clock, persisted so ``max_runtime`` can be tuned per agent from
+        real run times. Used for every terminal outcome except a lapsed credential, which pauses
+        instead (see ``pause_and_flag``)."""
         with self.db.connection() as conn:
             conn.execute(
                 """
                 UPDATE scheduled_runs
                 SET started_at = NULL, completed_at = now(), last_status = %s, last_error = %s,
-                    last_skipped = %s, next_run_at = now() + run_interval
+                    last_skipped = %s, last_duration_s = %s, next_run_at = now() + run_interval
                 WHERE id = %s
                 """,
-                (status, error, Json(skipped) if skipped is not None else None, run_id),
+                (status, error, Json(skipped) if skipped is not None else None, duration_s, run_id),
             )
             conn.commit()
 
-    def pause_and_flag(self, run_id: int, reason: str, error: str | None = None) -> None:
+    def pause_and_flag(
+        self, run_id: int, reason: str, error: str | None = None, duration_s: int | None = None
+    ) -> None:
         """Pause a schedule and flag why, instead of advancing it — used when a run fails on a
         lapsed credential (only interactive re-auth fixes it, so re-running every cadence would
         just re-fail). Clears the in-flight marker and records the outcome; ``next_run_at`` is left
@@ -362,9 +367,9 @@ class Store:
                 """
                 UPDATE scheduled_runs
                 SET started_at = NULL, completed_at = now(), paused = true, pause_reason = %s,
-                    last_status = 'auth_lapsed', last_error = %s
+                    last_status = 'auth_lapsed', last_error = %s, last_duration_s = %s
                 WHERE id = %s
                 """,
-                (reason, error, run_id),
+                (reason, error, duration_s, run_id),
             )
             conn.commit()

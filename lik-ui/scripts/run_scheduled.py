@@ -16,7 +16,9 @@ Usage:
   uv run python scripts/run_scheduled.py     # connects via Settings() (LIK_UI_* env vars)
 """
 
+import signal
 import sys
+import time
 
 from lik_ui.agents import build_agents_client, resolve_agent_options
 from lik_ui.chat import build_sessions_client
@@ -28,6 +30,36 @@ from lik_ui.vault import build_vault_client
 # Outcomes that count as a job-level failure (exit non-zero). A SUCCESS run that merely skipped
 # ambiguous items is not here — skips are surfaced to the owner via the Settings health badge.
 _FAILURE_STATUSES = frozenset({"failed", "timed_out", "auth_lapsed", "deny_loop"})
+
+# How far past a row's own runtime budget the process-level backstop waits before force-tripping.
+# The in-run watchdog should fire at max_runtime_s; this only catches a run blocked somewhere the
+# watchdog doesn't cover (e.g. a platform call with no timeout), so a run can never silently eat
+# the whole CI job. The job's timeout-minutes must exceed max_runtime_s + this margin.
+_HARD_TIMEOUT_MARGIN_S = 120
+
+
+class _HardRuntimeBackstop:
+    """Process-level runtime guard: guarantees a claimed row terminates and is recorded even if the
+    in-run watchdog fails to fire (a blocked platform call the queue timeout doesn't cover). Uses
+    SIGALRM, so it works only on the main thread of a Unix process — exactly this CI script. It is
+    deliberately NOT in the shared run-core: a future HTTP endpoint runs many concurrent requests
+    and must not install a process-wide alarm."""
+
+    def __init__(self, seconds: int):
+        self._seconds = max(1, seconds)
+
+    def __enter__(self):
+        signal.signal(signal.SIGALRM, self._fire)
+        signal.alarm(self._seconds)
+        return self
+
+    def __exit__(self, *_exc):
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, signal.SIG_DFL)
+
+    @staticmethod
+    def _fire(_signum, _frame):
+        raise TimeoutError("hard runtime backstop tripped — run blocked past its budget")
 
 
 def _chat_url(base_url: str, session_id: str) -> str:
@@ -50,27 +82,39 @@ def run_due_schedules(store, sessions_client, vault_client, agents, base_url="")
         def _log_session(session_id, run_id=run_id, agent=row["agent_name"]):
             print(f"[scheduled] run {run_id} agent={agent!r} started -> {_chat_url(base_url, session_id)}", flush=True)
 
+        hard_budget = int(row["max_runtime_s"]) + _HARD_TIMEOUT_MARGIN_S
+        started = time.monotonic()
         try:
-            outcome = run_scheduled(store, sessions_client, vault_client, agents, row, on_session_created=_log_session)
-        except Exception as exc:  # noqa: BLE001 - run_scheduled shouldn't raise, but never let one row abort the scan
-            store.complete_run(run_id, "failed", str(exc), None)
+            with _HardRuntimeBackstop(hard_budget):
+                outcome = run_scheduled(
+                    store, sessions_client, vault_client, agents, row, on_session_created=_log_session
+                )
+        except Exception as exc:  # noqa: BLE001 - never let one row (incl. a backstop trip) abort the scan
+            duration_s = round(time.monotonic() - started)
+            store.complete_run(run_id, "failed", str(exc), None, duration_s=duration_s)
             failed += 1
-            print(f"[scheduled] run {run_id} raised, recorded failed: {exc}", file=sys.stderr)
+            print(f"[scheduled] run {run_id} raised after {duration_s}s, recorded failed: {exc}", file=sys.stderr)
             continue
+        duration_s = round(time.monotonic() - started)
 
         if outcome.status == AUTH_LAPSED:
             # Pause instead of advancing — re-running every cadence would just re-fail until the
             # owner re-authenticates interactively. The Settings badge shows "needs re-auth".
-            store.pause_and_flag(run_id, "needs_reauth", error=outcome.error)
+            store.pause_and_flag(run_id, "needs_reauth", error=outcome.error, duration_s=duration_s)
         else:
-            store.complete_run(run_id, outcome.status, outcome.error, outcome.skipped or None)
+            store.complete_run(run_id, outcome.status, outcome.error, outcome.skipped or None, duration_s=duration_s)
 
         ran += 1
         if outcome.status in _FAILURE_STATUSES:
             failed += 1
         note = f" skipped={len(outcome.skipped)}" if outcome.skipped else ""
         where = f" {_chat_url(base_url, outcome.session_id)}" if outcome.session_id else ""
-        print(f"[scheduled] run {run_id} agent={row['agent_name']!r} -> {outcome.status}{note}{where}", flush=True)
+        # Duration is logged and persisted (last_duration_s) so max_runtime can be tuned per agent
+        # from real run times instead of guessed.
+        print(
+            f"[scheduled] run {run_id} agent={row['agent_name']!r} -> {outcome.status} in {duration_s}s{note}{where}",
+            flush=True,
+        )
     return ran, failed
 
 

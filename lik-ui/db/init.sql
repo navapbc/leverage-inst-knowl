@@ -93,6 +93,9 @@ CREATE TABLE IF NOT EXISTS scheduled_runs (
     last_status   text,
     last_error    text,
     last_skipped  jsonb,
+    -- Measured wall-clock of the last run, in seconds. Recorded so max_runtime can be tuned per
+    -- agent from real run times rather than guessed. Null until a run has completed at least once.
+    last_duration_s integer,
     -- Paused schedules are never claimed. pause_reason distinguishes a user pause from an
     -- auto-pause (e.g. 'needs_reauth' after a lapsed-credential run).
     paused        boolean     NOT NULL DEFAULT false,
@@ -101,3 +104,6 @@ CREATE TABLE IF NOT EXISTS scheduled_runs (
 );
 CREATE INDEX IF NOT EXISTS scheduled_runs_user_idx ON scheduled_runs (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS scheduled_runs_due_idx ON scheduled_runs (next_run_at);
+-- Idempotent add for an existing prod table (CREATE TABLE IF NOT EXISTS won't alter it). Matches
+-- the non-destructive migration pattern used for sessions.auto_delete_at above.
+ALTER TABLE scheduled_runs ADD COLUMN IF NOT EXISTS last_duration_s integer;
