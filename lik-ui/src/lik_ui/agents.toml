@@ -42,17 +42,27 @@ management = true
 # Defined by claude_platform/agents/cross-source-reference.yaml
 agent = "Cross-Source Referencing Agent"
 section = "Generic"
-user_prompt = "Ask a question and I'll answer it by pulling from several sources at once — Nava's project Catalog, Confluence/Jira, Google Drive, Slack, and GitHub — and give you one cited answer. Try asking about a project's status across our docs and Slack, or to trace a decision to the code that implemented it."
+user_prompt = """\
+    Ask a question and I'll answer it by pulling from several sources at once — Nava's project \
+    Catalog, Confluence/Jira, Google Drive, Slack, and GitHub — and give you one cited answer. \
+    Try asking about a project's status across our docs and Slack, or to trace a decision to the \
+    code that implemented it."""
 
 [[agents]]
 # Defined by claude_platform/agents/catalog-registration.yaml — writes to the shared Catalog.
 agent = "Catalog Registration Agent"
 section = "Sync to Catalog"
-user_prompt = "Tell me what to register into the Discovery Layer Catalog. Today I can catalog Project Indexes — ask me to sync the project indexes and I'll crawl the project-index pages in Confluence and update one Catalog row per page."
+user_prompt = """\
+    Tell me what to register into the Discovery Layer Catalog. Today I can catalog Project \
+    Indexes — ask me to sync the project indexes and I'll crawl the project-index pages in \
+    Confluence and update one Catalog row per page."""
 
 [[agents]]
 # Defined by claude_platform/agents/knowledge-search.yaml — routes to the query skills.
 agent = "Knowledge Search Agent"
 section = "Knowledge"
-user_prompt = "Ask a Nava delivery-knowledge question and I'll route it to the right specialist — project history (has anyone done X, which projects involve Y), organizational guidance (Nava's policy on something, where a template lives), or practice how-to (the best way to approach a task)."
+user_prompt = """\
+    Ask a Nava delivery-knowledge question and I'll route it to the right specialist — project \
+    history (has anyone done X, which projects involve Y), organizational guidance (Nava's policy \
+    on something, where a template lives), or practice how-to (the best way to approach a task)."""
 
