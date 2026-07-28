@@ -220,6 +220,16 @@ Two least-privilege follow-ups (surfaced by code review of PR #45, both infrastr
 Not blocking — the current setup works and the role is trust-scoped to the repo's `prod`
 environment — but it widens the blast radius of a compromised workflow more than necessary.
 
+### TODO: true push notifications for unattended agent-run outcomes
+
+Scheduled (unattended) agent runs finish while nobody is watching, so the user needs to be told
+an outcome is waiting. v1 delivers this **in-app only** — a badge on Settings plus the recorded
+run outcome — which only *partially* satisfies R17 in the scheduled-runs plan: it requires the
+user to come back to the app to notice. **True push** (a notification that reaches the user
+outside the app) is the follow-up: email via SES, or a Slack webhook. It's deferred because it
+needs a notification channel to be chosen and, for the email path, SES to be provisioned. See
+`docs/plans/2026-07-28-002-feat-scheduled-unattended-agent-runs-plan.md` (R17).
+
 ### DONE: auto-delete stale chat sessions
 
 Sessions no longer live forever. Each `sessions` row carries an `auto_delete_at` timestamp

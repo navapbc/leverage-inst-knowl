@@ -2,7 +2,7 @@
 {% block title %}Choose a prior session · LIK{% endblock %}
 {% block body_class %}sessions-page{% endblock %}
 {% block content %}
-  <h1>Choose a prior session</h1>
+  <h1>Choose a prior session to continue the conversation</h1>
   {% if sessions %}
     <p class="muted-note">To remove all sessions at once, go to the <a href="/settings">Settings</a> page.</p>
   {% endif %}
@@ -30,7 +30,7 @@
   <form class="session-row" style="margin-top: 1rem"
         onsubmit="var id = this.session_id.value.trim(); if (!id) return false; window.location = '/chat/' + encodeURIComponent(id); return false;">
     <label for="open-session-id"
-           title="You can only open a session someone else started if they shared it.">Open a session by id</label>
+           title="You can only open a session someone else started if they shared it.">Open a shared session by id</label>
     <input id="open-session-id" name="session_id" type="text" placeholder="Session id" required>
     <button class="btn" type="submit">Open</button>
   </form>
