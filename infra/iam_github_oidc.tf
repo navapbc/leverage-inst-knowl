@@ -164,13 +164,14 @@ resource "aws_iam_role_policy" "apply" {
   policy = data.aws_iam_policy_document.apply.json
 }
 
-# --- SSM-read role: deploy/cleanup workflows fetch the shared Anthropic key --------------
-# deploy-agents.yml / deploy-skills.yml (and the future session-cleanup workflow) need the
-# one shared Anthropic API key, now sourced from SSM instead of a GitHub secret. This role
-# grants ONLY GetParameter on that single shared parameter — deliberately narrower than the
-# apply role, so a skill/agent-deploy job cannot run terraform or touch Lightsail.
-# SecureString decryption uses the AWS-managed alias/aws/ssm key (see SsmRead note above),
-# so no explicit kms statement is needed.
+# --- SSM-read role: deploy/cleanup workflows fetch shared secrets ------------------------
+# deploy-agents.yml / deploy-skills.yml need the shared Anthropic API key; the daily
+# prune-sessions.yml cleanup additionally needs the shared DB master password to connect to
+# Postgres directly. Both are sourced from SSM instead of GitHub secrets. This role grants
+# ONLY GetParameter on those two named shared parameters — deliberately narrower than the
+# apply role, so a deploy/cleanup job cannot run terraform or touch Lightsail. SecureString
+# decryption uses the AWS-managed alias/aws/ssm key (see SsmRead note above), so no explicit
+# kms statement is needed.
 resource "aws_iam_role" "github_ssm_read" {
   name               = "github-actions-lik-ssm-read"
   assume_role_policy = data.aws_iam_policy_document.github_trust.json
@@ -178,10 +179,13 @@ resource "aws_iam_role" "github_ssm_read" {
 
 data "aws_iam_policy_document" "ssm_read" {
   statement {
-    sid       = "SharedAnthropicKeyRead"
-    effect    = "Allow"
-    actions   = ["ssm:GetParameter"]
-    resources = ["arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/ANTHROPIC_API_KEY"]
+    sid     = "SharedSecretsRead"
+    effect  = "Allow"
+    actions = ["ssm:GetParameter"]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/ANTHROPIC_API_KEY",
+      "arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/DB_MASTER_PASSWORD",
+    ]
   }
 }
 
