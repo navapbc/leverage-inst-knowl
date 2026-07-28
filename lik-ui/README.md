@@ -185,48 +185,31 @@ per-user rate-limiting or spend enforcement.
 Keep the single shared workspace
 key and do per-user attribution in lik-ui's own DB, which we control and can fully automate.
 
-### ONLY IF NEEDED: auto-archive or delete stale chat sessions
+### DONE: auto-delete stale chat sessions
 
-Today a session lives forever: `SessionsClient.create_session` mints a Managed Agents
-session and `db.py` keeps a local row (`session_id`, `user_id`, `agent_id`, `title`,
-`shared`, `created_at`), and nothing prunes either side until a user deletes a chat by hand.
-The sessions list grows without bound. Consider a policy that automatically **archives** or
-**deletes** a session after some period of inactivity (or age).
+Sessions no longer live forever. Each `sessions` row carries an `auto_delete_at` timestamp
+(`timestamptz`, default `now() + 7 days`); existing rows were backfilled to `created_at + 7
+days` by the non-destructive migration in `db/init.sql`. The owner can push the date out — or
+pull it in — from a date picker in the chat's **Session settings** (`POST
+/chat/{session_id}/auto-delete`, owner-scoped), but there is no way to disable it: a session
+always has a date. The sessions list flags rows within 3 days of deletion ("Deletes in N days"
+/ "Deletes today") and shows the plain date otherwise.
 
-Archive vs. delete on the platform — both are real, distinct operations on `beta.sessions`
-(we currently only call `delete_session`):
+A daily GitHub Action (`.github/workflows/prune-sessions.yml`) runs
+`scripts/prune_sessions.py`, which finds due sessions and deletes each **platform transcript
+first, then the DB row** — the same ordering as the interactive delete — isolating per-session
+failures so one bad delete never aborts the sweep or orphans a transcript. The job needs no
+internet-facing endpoint and no long-lived shared secret: it authenticates via GitHub OIDC,
+reads the shared Anthropic key + DB master password from SSM, and connects to the public
+Lightsail Postgres directly.
 
-- **Archive** (`beta.sessions.archive`) — blocks new events but **keeps the full transcript**;
-  the session can be excluded from the list view (the list endpoint takes an
-  `include_archived` filter). Reversibility (unarchive/reopen) is **not documented** — verify
-  before relying on it. Requires the session to be `idle`.
-- **Delete** (`beta.sessions.delete`) — permanently removes the record, its events, and the
-  associated sandbox. Not recoverable. Also requires `idle`.
-
-Reasons to prefer archiving over deleting:
-
-- **Retention / auditability.** Keeps the conversation history for later replay or review
-  instead of destroying it.
-- **List hygiene.** Hides old chats from the picker without losing them, so the list stays
-  usable as sessions accumulate.
-- **Reversible-ish.** Delete is final; archive at least preserves the data even if reopening
-  isn't guaranteed.
-
-What is *not* a strong reason here: **runtime cost.** Managed Agents bill session *runtime*
-(per session-hour while `running`); idle sessions are free and there's no documented per-session
-storage charge. A chat session sits idle between turns, so archiving it saves ~nothing on
-runtime — this is about tidiness and retention, not spend. There's also no documented platform
-TTL/auto-expiry, so any expiry is ours to implement.
-
-Design notes if we build this:
-
-- A time-based policy needs a notion of "last activity." The `sessions` row only has
-  `created_at` (age), not a last-activity timestamp — key off `created_at`, or add an
-  `updated_at`/`last_active_at` column (non-destructive `ALTER`, per the DB-schema rules in
-  `CLAUDE.md`) touched on each turn.
-- Decide archive-then-delete (grace period) vs. straight delete, and whether it's a background
-  sweep or lazy-on-list. Keep the local row and the platform session in sync — the code already
-  handles `SessionNotFound` for platform sessions that vanish out-of-band.
+We chose **delete**, not archive: the goal is data-minimization (old transcripts and their
+credentials shouldn't linger on the platform), and the interactive delete path already destroys
+both sides. The policy is age-based off `auto_delete_at` (seeded from creation), not a
+last-activity timestamp, so no per-turn `updated_at` write was needed. See
+`docs/plans/2026-07-28-001-feat-session-auto-delete-plan.md` for the full design and the manual
+prod steps (schema ALTER + backfill, `tf.sh apply` for the widened SSM-read role, and the
+`LIK_UI_DB_*` prod environment variables).
 
 ### DONE: cache agent `describe` results
 
