@@ -38,3 +38,8 @@ output "github_apply_role_arn" {
   description = "IAM role ARN for the GitHub Actions gated terraform-apply job. Set as the AWS_APPLY_ROLE_ARN repo/prod variable."
   value       = aws_iam_role.github_apply.arn
 }
+
+output "github_ssm_read_role_arn" {
+  description = "IAM role ARN for GitHub Actions to read the shared Anthropic key from SSM. Set as the AWS_SSM_READ_ROLE_ARN repo/prod variable (used by deploy-agents / deploy-skills)."
+  value       = aws_iam_role.github_ssm_read.arn
+}

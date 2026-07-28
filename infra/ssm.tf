@@ -10,6 +10,14 @@
 # equality constraints.
 
 locals {
+  # Secrets shared across components (and CI). The Anthropic API key is one value used by
+  # the lik-ui container AND the GitHub deploy/cleanup workflows, so it lives once under
+  # /shared/ rather than being duplicated per component. (DB_MASTER_PASSWORD also lives
+  # under /shared/, but Terraform authors it in database.tf, so it is not read here.)
+  shared_ssm_params = [
+    "ANTHROPIC_API_KEY",
+  ]
+
   # lik-mcp secrets/config read from SSM.
   mcp_ssm_params = [
     "LIK_OAUTH_CLIENT_ID",
@@ -31,10 +39,16 @@ locals {
     "LIK_UI_SLACK_CLIENT_ID",
     "LIK_UI_SLACK_CLIENT_SECRET",
     "LIK_UI_SLACK_RESOURCE_URL",
-    "LIK_UI_ANTHROPIC_API_KEY",
+    # Note: the Anthropic API key is NOT here — it is shared with the deploy/cleanup
+    # workflows, so it lives under /shared/ANTHROPIC_API_KEY (see shared_ssm_params).
     # Note: the agent roster is NOT here — it lives in the checked-in src/lik_ui/agents.toml,
     # shipped inside the container image (not an SSM value).
   ]
+}
+
+data "aws_ssm_parameter" "shared" {
+  for_each = toset(local.shared_ssm_params)
+  name     = "${var.ssm_prefix}/shared/${each.key}"
 }
 
 data "aws_ssm_parameter" "mcp" {

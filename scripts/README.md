@@ -27,8 +27,9 @@ ANTHROPIC_API_KEY=sk-ant-api03-... uv run python deploy_skills.py --skill query-
 ```
 
 `ANTHROPIC_API_KEY` must be a **standard org API key** scoped to the workspace that holds the
-agents/skills (not an admin key). In CI it comes from the `ANTHROPIC_API_KEY` secret on the `prod`
-environment.
+agents/skills (not an admin key). In CI it is fetched from SSM (`/ik-arch/prod/shared/ANTHROPIC_API_KEY`)
+via GitHub OIDC — one shared key, no GitHub secret — using a role scoped to reading only that parameter
+(see `infra/iam_github_oidc.tf`). This is the same key the lik-ui container reads.
 
 ## `deploy_agents.py` — publish agents + environments (recurring)
 
