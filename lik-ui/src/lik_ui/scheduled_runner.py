@@ -39,6 +39,19 @@ FAILED = "failed"
 # would otherwise loop until max-runtime; this ends it deterministically without a human.
 MAX_DENIES_PER_TOOL = 5
 
+# Prepended to every scheduled prompt so the agent knows no human is present. Without this the
+# agent receives a prompt identical to an interactive one and falls back to interactive behavior
+# — asking a clarifying question and yielding its turn, which strands the run waiting on an answer
+# that never comes. Skills are authored with an "unattended runs" mode (skip-and-record rather than
+# ask); this is the signal that activates it. Kept general — no skill- or source-specific wording.
+UNATTENDED_PREAMBLE = (
+    "You are running as an unattended, scheduled task. No human is present to answer questions or "
+    "approve actions, now or later in this turn. Never ask a question or wait for input: when you "
+    "would normally ask, instead follow your skills' unattended-run guidance — skip that item, "
+    "record why, and continue. Finish the turn with a summary of what you did, skipped, or held "
+    "back for later human review.\n\n"
+)
+
 
 @dataclass
 class RunOutcome:
@@ -125,7 +138,7 @@ def run_scheduled(store, sessions_client, vault_client, agents, row, on_session_
     deny_counts: dict[tuple, int] = {}  # (server, name) -> deny count, for the deny-loop guard
     tool_uses: dict[str, dict] = {}     # id -> tool_use event, buffered so a pause can be correlated
 
-    stream = sessions_client.send_and_stream(session_id, row["prompt"])
+    stream = sessions_client.send_and_stream(session_id, UNATTENDED_PREAMBLE + row["prompt"])
     try:
         while True:
             pending = None  # (tool_use_id, session_thread_id, allow)
@@ -189,13 +202,9 @@ def run_scheduled(store, sessions_client, vault_client, agents, row, on_session_
 
 
 def _finalize(outcome: RunOutcome, store, sessions_client, user_id: int) -> RunOutcome:
-    """Clean up an empty session on a failed run so recurring failures don't accumulate empty
-    sessions in the owner's list. A successful (or skip-and-record) run keeps its transcript."""
-    failed = outcome.status in (AUTH_LAPSED, TIMED_OUT, DENY_LOOP, FAILED)
-    if failed and not outcome.has_transcript and outcome.session_id:
-        store.delete_session(outcome.session_id, user_id)
-        try:
-            sessions_client.delete_session(outcome.session_id)
-        except Exception:  # noqa: BLE001 - best-effort platform cleanup; the row is already gone
-            pass
+    """Terminal hook for a run. Scheduled sessions are never deleted here — even a failed or
+    timed-out run's partial transcript is kept so the owner can review it or follow up (a run
+    that timed out mid-work, or ended by holding an item back, still has value). Sessions
+    auto-delete on their own retention clock (``sessions.auto_delete_at``, 7 days by default),
+    so nothing accumulates unbounded."""
     return outcome
