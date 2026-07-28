@@ -15,7 +15,7 @@ import json
 import queue
 import threading
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Protocol
 
 # How often the SSE response emits a keepalive comment while the event generator is stalled.
@@ -436,6 +436,24 @@ def register_chat_routes(app) -> None:
         form = await request.form()
         shared = form.get("shared") is not None
         request.app.state.store.set_session_shared(session_id, user["id"], shared)
+        return RedirectResponse(f"/chat/{session_id}", status_code=303)
+
+    @app.post("/chat/{session_id}/auto-delete")
+    async def reschedule_auto_delete(request: Request, session_id: str):
+        """Owner reschedules when the session auto-deletes. Accepts a date (YYYY-MM-DD) and
+        stores it as that day at 00:00 UTC. The date must be in the future — scheduling
+        immediate deletion is the Delete button's job, and a session can never be kept forever
+        (there is no way to clear the date). ``set_session_auto_delete_at`` is owner-scoped, so
+        a non-owner's post changes nothing."""
+        user = require_user(request)
+        form = await request.form()
+        try:
+            chosen = datetime.strptime(form.get("auto_delete_date", ""), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return HTMLResponse("Enter a valid date.", status_code=400)
+        if chosen.date() <= datetime.now(timezone.utc).date():
+            return HTMLResponse("Pick a future date. To delete now, use Delete session.", status_code=400)
+        request.app.state.store.set_session_auto_delete_at(session_id, user["id"], chosen)
         return RedirectResponse(f"/chat/{session_id}", status_code=303)
 
     @app.get("/chat/{session_id}", response_class=HTMLResponse)

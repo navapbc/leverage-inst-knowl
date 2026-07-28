@@ -831,6 +831,56 @@ def test_share_checkbox_shows_only_for_owner(db):
     assert "/share" not in viewer.get(f"/chat/{session_id}").text     # viewer does not
 
 
+def test_owner_reschedules_auto_delete_to_a_future_date(db):
+    from datetime import datetime, timedelta, timezone
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    future = (datetime.now(timezone.utc) + timedelta(days=30)).date()
+    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": future.isoformat()})
+    assert r.status_code == 303 and r.headers["location"] == f"/chat/{session_id}"
+    stored = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
+    assert stored == datetime(future.year, future.month, future.day, tzinfo=timezone.utc)
+
+
+def test_reschedule_rejects_past_date_and_leaves_row_unchanged(db):
+    from datetime import datetime, timezone
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    before = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
+    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": "2000-01-01"})
+    assert r.status_code == 400
+    assert Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"] == before
+
+
+def test_reschedule_rejects_malformed_date(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": "not-a-date"})
+    assert r.status_code == 400
+
+
+def test_non_owner_cannot_reschedule_anothers_session(db):
+    from datetime import datetime, timedelta, timezone
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    before = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
+    future = (datetime.now(timezone.utc) + timedelta(days=30)).date()
+    viewer.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": future.isoformat()})
+    # Owner-scoped: the viewer's post changes nothing.
+    assert Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"] == before
+
+
+def test_auto_delete_form_shows_only_for_owner(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert "/auto-delete" in owner.get(f"/chat/{session_id}").text        # owner sees the reschedule form
+    assert "/auto-delete" not in viewer.get(f"/chat/{session_id}").text   # shared viewer does not
+
+
 def test_chat_history_deletes_stale_session_when_platform_gone(db):
     """After the workspace switch, an old session's platform record is gone. Loading its
     history self-heals: the stale local row is deleted and the client is told it's gone."""
