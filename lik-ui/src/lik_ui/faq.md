@@ -1,12 +1,12 @@
-# lik-ui — FAQ
+# LIK — FAQ
 
 Short answers about what this is, what it can do, and where it's headed. Each answer links to
 the canonical document for the full story — this page is a starting point, not the source of truth.
 
 ## What is this?
 
-`lik-ui` is a web app that lets a Nava user sign in, connect the data sources an AI agent needs, and
-chat with that agent. `lik-ui` makes it easy to connect the relevant data sources
+The **LIK app** is a web app that lets a Nava user sign in, connect the data sources an AI agent needs, and
+chat with that agent. LIK makes it easy to connect the relevant data sources
 and pairs that with centrally-managed agents and skills aimed at common use cases, so the whole
 team can get going without any setup of their own.
 The bigger idea it serves is a **Discovery Layer**: material derived from
@@ -19,7 +19,7 @@ becoming a competing source of truth.
 ### How is this different from other AI tools?
 
 All of these let you ask an AI questions about your work, and each is a reasonable choice for
-some situations. The short version: lik-ui is built to search **across** all of Nava's data
+some situations. The short version: LIK is built to search **across** all of Nava's data
 sources at once, while the alternatives are each strongest inside their own home turf. Pick
 whichever fits your need.
 
@@ -42,7 +42,7 @@ Jira, since that's its home ground. Limitations: it's centered on the Atlassian 
 reaches other sources (Google Drive, GitHub, Slack, Salesforce) less fully or not at all — 
 so it's a partial view when an answer spans many sources.
 
-**lik-ui** — searches across all of Nava's connected sources in one place, without copying
+**LIK** — searches across all of Nava's connected sources in one place, without copying
 everything into a new system, and makes connecting each source point-and-click rather than a
 technical chore. The agents and their skills are maintained centrally, so everyone is always
 on the latest version without doing anything. Sessions can also be shared read-only so others
@@ -54,7 +54,7 @@ edges (see below), and it only reaches sources that have a supported connector.
 
 You pick an agent, connect the sources it needs, and ask it questions in chat. The agent itself runs
 on Anthropic's **Claude Managed Agents** platform — Anthropic runs the model-and-tools loop and a
-per-session sandbox — while lik-ui handles the human side (sign-in and per-source connection) and a
+per-session sandbox — while the LIK app handles the human side (sign-in and per-source connection) and a
 separate service (lik-mcp) supplies Nava's governed knowledge.
 
 [More: why we run on Claude Managed Agents](https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md)
@@ -131,11 +131,6 @@ The design is written up in a set of short documents:
 ---
 
 ## For developers
-
-*The rest of this page is for engineers working on lik-ui — architecture and open engineering items,
-not end-user help.*
-
-### Architecture and design
 
 The full design lives in the [v0.5 documents](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/01-overview.md)
 (overview, concepts, examples, strategy, architecture, access control, storage, open questions —
