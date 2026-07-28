@@ -56,6 +56,19 @@ user_prompt = """\
     Tell me what to register into the Discovery Layer Catalog. Today I can catalog Project \
     Indexes — ask me to sync the project indexes and I'll crawl the project-index pages in \
     Confluence and update one Catalog row per page."""
+# Scheduling (docs/plans/2026-07-28-002-...). This agent's sync skill is authored unattended-safe
+# (skip-and-record, no indefinite waiting — see its SKILL.md "Unattended runs"), so it may be
+# scheduled. max_runtime is generous: a full sync is minutes-long with 60–90s silent windows.
+# auto_approve lists the routine (server, tool) calls a scheduled run may auto-approve; everything
+# else is denied and recorded. NOTE (U8 verification): confirm against the deployed agent via
+# describe() that (a) the MCP server name below matches the tool_use `mcp_server_name`, and (b)
+# every write tool is gated "ask" (not server-side always_allow) so the allowlist actually sees it.
+schedulable = true
+max_runtime = 1800
+auto_approve = [
+    { server = "lik-mcp", tool = "register_catalog_entry" },
+    { server = "lik-mcp", tool = "list_catalog_entries" },
+]
 
 [[agents]]
 # Defined by claude_platform/agents/knowledge-search.yaml — routes to the query skills.
