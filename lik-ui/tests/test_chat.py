@@ -289,13 +289,15 @@ def test_sessions_list_flags_same_day_deletion_as_today(db):
 
 
 def test_sessions_list_shows_plain_date_when_not_near(db):
+    from zoneinfo import ZoneInfo
+
     client, session_id = _start_session(db, FakeSessionsClient())
-    # Default is +7 days, well outside the 3-day window.
-    iso = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"].strftime("%Y-%m-%d")
+    # Default is +7 days, well outside the 3-day window; the list shows the ET calendar date.
+    et = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"].astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
     text = client.get("/sessions").text
     assert "delete-warning" not in text
     assert "Deletes in" not in text
-    assert f"Deletes {iso}" in text
+    assert f"Deletes {et} ET" in text
 
 
 def test_chat_page_lists_declared_servers_for_auto_approve(db):
@@ -871,6 +873,7 @@ def test_share_checkbox_shows_only_for_owner(db):
 
 def test_owner_reschedules_auto_delete_to_a_future_date(db):
     from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
 
     sc = FakeSessionsClient()
     owner, viewer, session_id = _owner_and_viewer(db, sc)
@@ -878,7 +881,9 @@ def test_owner_reschedules_auto_delete_to_a_future_date(db):
     r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": future.isoformat()})
     assert r.status_code == 303 and r.headers["location"] == f"/chat/{session_id}"
     stored = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
-    assert stored == datetime(future.year, future.month, future.day, tzinfo=timezone.utc)
+    # The picked date is the start of that day in Eastern Time, stored as the equivalent UTC instant.
+    expected = datetime(future.year, future.month, future.day, tzinfo=ZoneInfo("America/New_York")).astimezone(timezone.utc)
+    assert stored == expected
 
 
 def test_reschedule_rejects_past_date_and_leaves_row_unchanged(db):

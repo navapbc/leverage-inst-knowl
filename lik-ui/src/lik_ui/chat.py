@@ -17,6 +17,7 @@ import threading
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 # How often the SSE response emits a keepalive comment while the event generator is stalled.
 # Kept well under a typical load-balancer idle timeout (~60s) so a long silent stretch — the
@@ -26,6 +27,11 @@ _SSE_HEARTBEAT_SECONDS = 15
 
 from .settings import Settings
 from .vault import ensure_user_vault
+
+# The auto-delete date control is presented and entered in Eastern Time (a chosen date means
+# that calendar day in ET); auto_delete_at is stored in UTC. Conversions happen at this
+# boundary so the picker never depends on the DB connection's session time zone.
+EASTERN = ZoneInfo("America/New_York")
 
 
 class SessionNotFound(Exception):
@@ -411,6 +417,7 @@ def register_chat_routes(app) -> None:
         for s in sessions:
             s["delete_days"] = max((s["auto_delete_at"] - now).days, 0)
             s["delete_soon"] = s["auto_delete_at"] <= now + AUTO_DELETE_WARN_WINDOW
+            s["auto_delete_local"] = s["auto_delete_at"].astimezone(EASTERN).strftime("%Y-%m-%d")
         return templates.TemplateResponse(
             request, "sessions.html", {"user": user, "sessions": sessions}
         )
@@ -449,20 +456,20 @@ def register_chat_routes(app) -> None:
 
     @app.post("/chat/{session_id}/auto-delete")
     async def reschedule_auto_delete(request: Request, session_id: str):
-        """Owner reschedules when the session auto-deletes. Accepts a date (YYYY-MM-DD) and
-        stores it as that day at 00:00 UTC. The date must be in the future — scheduling
-        immediate deletion is the Delete button's job, and a session can never be kept forever
-        (there is no way to clear the date). ``set_session_auto_delete_at`` is owner-scoped, so
-        a non-owner's post changes nothing."""
+        """Owner reschedules when the session auto-deletes. Accepts a date (YYYY-MM-DD) read as
+        an Eastern-Time calendar day — the start of that day in ET — and stores it in UTC. The
+        date must be in the future (ET) — scheduling immediate deletion is the Delete button's
+        job, and a session can never be kept forever (there is no way to clear the date).
+        ``set_session_auto_delete_at`` is owner-scoped, so a non-owner's post changes nothing."""
         user = require_user(request)
         form = await request.form()
         try:
-            chosen = datetime.strptime(form.get("auto_delete_date", ""), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            chosen = datetime.strptime(form.get("auto_delete_date", ""), "%Y-%m-%d").replace(tzinfo=EASTERN)
         except ValueError:
             return HTMLResponse("Enter a valid date.", status_code=400)
-        if chosen.date() <= datetime.now(timezone.utc).date():
+        if chosen.date() <= datetime.now(EASTERN).date():
             return HTMLResponse("Pick a future date. To delete now, use Delete session.", status_code=400)
-        request.app.state.store.set_session_auto_delete_at(session_id, user["id"], chosen)
+        request.app.state.store.set_session_auto_delete_at(session_id, user["id"], chosen.astimezone(timezone.utc))
         return RedirectResponse(f"/chat/{session_id}", status_code=303)
 
     @app.get("/chat/{session_id}", response_class=HTMLResponse)
@@ -474,6 +481,9 @@ def register_chat_routes(app) -> None:
         if not session:
             return HTMLResponse("Session not found.", status_code=404)
         is_owner = session["user_id"] == user["id"]
+        # Prefill the reschedule picker with the auto-delete day in Eastern Time (the tz the
+        # control uses), independent of the DB connection's session time zone.
+        session["auto_delete_local"] = session["auto_delete_at"].astimezone(EASTERN).strftime("%Y-%m-%d")
         # Show the agent's display name and its declared MCP servers; both come from the
         # agent's own definition via the SDK. Each server carries its permission_policy so the
         # auto-approve checklist can lock a server that already always-allows server-side (its
