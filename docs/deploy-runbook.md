@@ -408,6 +408,45 @@ SSM value (step 3) or an OAuth redirect-URI mismatch (step 2).
 
 ---
 
+## Scheduled agent runs (one-time setup)
+
+The `scheduled-runs.yml` workflow runs users' scheduled agent runs on a cadence
+(`lik-ui/scripts/run_scheduled.py`; see docs/plans/2026-07-28-002-...). Before enabling it in
+prod, three things must be applied **by hand** — none happen automatically on merge:
+
+**1. Create the `scheduled_runs` table on the prod DB.** `db/init.sql` uses
+`CREATE TABLE IF NOT EXISTS`, so re-running it will not create the table on a DB that already
+exists — apply it as a separate, non-destructive step (no drop/recreate). Connect to the `likuidb`
+database as the master user (as in step 5) and run the `CREATE TABLE IF NOT EXISTS scheduled_runs`
++ its indexes from `lik-ui/db/init.sql`. Idempotent; safe to re-run.
+
+**2. Provision a table-scoped DB role** (least privilege — R18). The scanner must NOT use the
+master credential; a compromise of the CI credential would otherwise expose the whole DB over the
+public endpoint. Create a role granted only on `scheduled_runs` and `sessions`:
+
+```sql
+-- as the master user, connected to the likuidb database
+CREATE ROLE lik_scheduled_runs LOGIN PASSWORD '<generated>';
+GRANT CONNECT ON DATABASE likuidb TO lik_scheduled_runs;
+GRANT USAGE ON SCHEMA public TO lik_scheduled_runs;
+GRANT SELECT, INSERT, UPDATE, DELETE ON scheduled_runs, sessions TO lik_scheduled_runs;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO lik_scheduled_runs;  -- for scheduled_runs.id
+```
+
+(The runner touches `users`/`user_vaults` only via read — add `GRANT SELECT ON users, user_vaults`
+if a run needs to resolve those; grant the minimum the run actually uses and no more.)
+
+**3. Store the scoped role's credentials in SSM and grant CI read.** Put the user and password in
+`$SSM_PREFIX/shared/SCHEDULED_RUNS_DB_USER` (String) and `.../SCHEDULED_RUNS_DB_PASSWORD`
+(SecureString). The `github-actions-lik-ssm-read` role already lists these two params
+(`infra/iam_github_oidc.tf`, `SharedSecretsRead`) — run `./tf.sh apply` so the IAM change lands
+before the workflow's first run, or its `aws ssm get-parameter` will be denied.
+
+After all three, trigger `scheduled-runs.yml` via `workflow_dispatch` to verify end-to-end before
+relying on the cron.
+
+---
+
 ## Routine redeploy (new image)
 
 Run the **Build and push container images** workflow (UI or `gh workflow run …`). After the

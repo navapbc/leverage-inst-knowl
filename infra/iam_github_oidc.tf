@@ -189,6 +189,11 @@ data "aws_iam_policy_document" "ssm_read" {
     resources = [
       "arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/ANTHROPIC_API_KEY",
       "arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/DB_MASTER_PASSWORD",
+      # Table-scoped DB role for the scheduled-runs scanner (scheduled-runs.yml). Least privilege:
+      # this credential can read/write only scheduled_runs + sessions, never the whole DB, so the
+      # scanner never needs DB_MASTER_PASSWORD. Provisioned per docs/deploy-runbook.md "Scheduled runs".
+      "arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/SCHEDULED_RUNS_DB_USER",
+      "arn:aws:ssm:${var.aws_region}:293033346213:parameter/ik-arch/prod/shared/SCHEDULED_RUNS_DB_PASSWORD",
     ]
   }
 
