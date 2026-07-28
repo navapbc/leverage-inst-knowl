@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Discovery Layer MCP service fronting the Catalog + Confirmations Postgres store."
 requires-python = ">=3.11"
 dependencies = [
-    "mcp[cli]>=1.2.0",
+    # Cap below 2.0: the image installs deps fresh at build time (unpinned), and mcp 2.0.0
+    # removed `mcp.server.fastmcp` (which __main__ imports), so an unbounded build crashes the
+    # container on startup and fails the deploy health check. Lift only with a code migration to
+    # the 2.x API. (The other deps below are likewise unpinned — a lockfile is the real fix; see PR.)
+    "mcp[cli]>=1.2.0,<2",
     "psycopg[binary]>=3.2",
     "psycopg-pool>=3.2",
     "pydantic>=2",
