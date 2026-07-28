@@ -175,6 +175,7 @@ def resolve_agent_options(settings: Settings, agents_client: AgentsClient | None
             environment_id=environment_id,
             section=entry.section,
             is_management=entry.is_management,
+            user_prompt=entry.user_prompt,
         ))
     return options
 

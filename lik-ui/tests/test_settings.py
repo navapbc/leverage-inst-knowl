@@ -157,6 +157,48 @@ def test_agent_roster_resolves_section_and_management_flag(tmp_path):
     assert by_name["Registrar"].is_management is True
 
 
+def test_agent_roster_parses_user_prompt(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Searcher"
+        user_prompt = "Ask me anything about projects."
+        """,
+    )
+    entry = Settings(env="test", agents_config_path=path).agent_roster[0]
+    assert entry.user_prompt == "Ask me anything about projects."
+
+
+def test_agent_roster_user_prompt_defaults_empty_when_omitted(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Searcher"
+        """,
+    )
+    assert Settings(env="test", agents_config_path=path).agent_roster[0].user_prompt == ""
+
+
+def test_agent_roster_user_prompt_strips_whitespace(tmp_path):
+    path = _roster(
+        tmp_path,
+        """
+        [[agents]]
+        agent = "Searcher"
+        user_prompt = "   "
+        """,
+    )
+    assert Settings(env="test", agents_config_path=path).agent_roster[0].user_prompt == ""
+
+
+def test_shipped_roster_agents_all_carry_a_user_prompt():
+    # Each shipped agent should invite the user with a concise prompt above the transcript.
+    for entry in Settings(env="test").agent_roster:
+        assert entry.user_prompt, f"{entry.agent_name!r} is missing a user_prompt"
+
+
 def test_agent_sections_preserve_declaration_order(tmp_path):
     path = _roster(
         tmp_path,

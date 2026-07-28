@@ -299,6 +299,39 @@ def test_chat_page_shows_activity_indicator_to_read_only_viewer(db):
     assert 'id="agent-status"' in viewer.get(f"/chat/{session_id}").text
 
 
+def test_chat_page_shows_user_prompt_before_transcript(db):
+    # The agent's authored user_prompt renders as a block immediately before the transcript.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    loc = client.get("/chat?agent_id=agent_1").headers["location"]
+    page = client.get(loc).text
+    assert "Ask the Test Agent about test things." in page
+    assert 'class="user-prompt"' in page
+    # It sits above the transcript, not inside or after it.
+    assert page.index('class="user-prompt"') < page.index('id="transcript"')
+
+
+def test_chat_page_omits_user_prompt_block_when_agent_has_none(db):
+    # A session whose agent isn't in the resolved roster (no user_prompt) renders no block, no error.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = "sess-ghost"
+    Store(db).create_session(_owner_id(db), "ghost-agent", session_id, "Ghost")
+    page = client.get(f"/chat/{session_id}")
+    assert page.status_code == 200
+    assert 'class="user-prompt"' not in page.text
+
+
+def test_chat_page_shows_user_prompt_to_read_only_viewer(db):
+    # The invitation describes the agent, so a shared-session viewer sees it too (not owner-gated).
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert "Ask the Test Agent about test things." in viewer.get(f"/chat/{session_id}").text
+
+
 def test_delete_session_removes_row_and_deletes_platform_session(db):
     sc = FakeSessionsClient()
     client = TestClient(_app(db, sc), follow_redirects=False)

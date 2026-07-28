@@ -87,6 +87,10 @@ a { color: var(--accent); }
 .chat-header form { margin: 0; flex: none; }
 /* Quiet secondary hint line (e.g. the "delete all in Settings" pointer). */
 .muted-note { color: var(--muted); font-size: .9rem; }
+/* Agent's "here's what to ask me" invitation, shown above the transcript. A calm hint panel —
+   deliberately quieter than an agent reply bubble so it reads as guidance, not conversation. */
+.user-prompt { margin: 0 0 1rem; padding: .75rem 1rem; color: var(--muted); font-size: .95rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
 /* Sessions list row: title on the left, Delete button pinned right. */
 .card.session-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .card.session-row form { margin: 0; }

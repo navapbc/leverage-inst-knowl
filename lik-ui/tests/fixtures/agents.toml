@@ -8,3 +8,4 @@ name = "Knowledge"
 [[agents]]
 agent = "Test Agent"
 section = "Knowledge"
+user_prompt = "Ask the Test Agent about test things."

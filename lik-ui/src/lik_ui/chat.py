@@ -463,10 +463,16 @@ def register_chat_routes(app) -> None:
                 servers = described["servers"]
             except Exception:  # noqa: BLE001 - a label lookup failure shouldn't block viewing the chat
                 pass
+        # The agent's user_prompt (a short "here's what to ask me" invitation shown above the
+        # transcript) is authored config, not part of the SDK definition — read it from the
+        # resolved roster (app.state.agents) by agent_id. Empty when there's no match (e.g. the
+        # local/test stub resolves an empty roster), which simply renders no block.
+        agent = next((a for a in request.app.state.agents if a.agent_id == session["agent_id"]), None)
+        user_prompt = agent.user_prompt if agent else ""
         return templates.TemplateResponse(
             request, "chat.html",
             {"user": user, "session": session, "agent_label": agent_label,
-             "servers": servers, "is_owner": is_owner},
+             "servers": servers, "is_owner": is_owner, "user_prompt": user_prompt},
         )
 
     @app.get("/chat/{session_id}/history")
