@@ -62,6 +62,18 @@ def test_run_due_schedules_runs_and_completes(store):
     assert run_due_schedules(store, FakeSessions([]), FakeVault(), _agents()) == (0, 0)
 
 
+def test_run_due_schedules_logs_chat_url(store, capsys):
+    """The job output names each run's session as a clickable chat URL — at start (so a hanging
+    run is still attributable) and on completion."""
+    a = store.upsert_user("a@navapbc.com")
+    store.create_scheduled_run(a["id"], AGENT, "sync the indexes", timedelta(hours=1))
+    fake = FakeSessions([[{"type": "done"}]])
+    run_due_schedules(store, fake, FakeVault(), _agents(), "https://ui.lik.navapbc.com/")
+    out = capsys.readouterr().out
+    assert "started -> https://ui.lik.navapbc.com/chat/sess_1" in out
+    assert "-> success https://ui.lik.navapbc.com/chat/sess_1" in out
+
+
 def test_run_due_schedules_auth_lapse_pauses_and_counts_failure(store):
     a = store.upsert_user("a@navapbc.com")
     store.create_scheduled_run(a["id"], AGENT, "sync", timedelta(hours=1))

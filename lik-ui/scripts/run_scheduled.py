@@ -30,15 +30,28 @@ from lik_ui.vault import build_vault_client
 _FAILURE_STATUSES = frozenset({"failed", "timed_out", "auth_lapsed", "deny_loop"})
 
 
-def run_due_schedules(store, sessions_client, vault_client, agents) -> tuple[int, int]:
+def _chat_url(base_url: str, session_id: str) -> str:
+    """The owner-facing chat page for a session (same path the browser uses). ``base_url`` is
+    lik-ui's public base; falls back to the bare session id if it is unset."""
+    base = base_url.rstrip("/")
+    return f"{base}/chat/{session_id}" if base else session_id
+
+
+def run_due_schedules(store, sessions_client, vault_client, agents, base_url="") -> tuple[int, int]:
     """Claim and run every due schedule. Returns ``(ran, failed)``. One row's failure never
-    aborts the scan — each is isolated and its outcome recorded on its own row."""
+    aborts the scan — each is isolated and its outcome recorded on its own row. ``base_url`` is
+    lik-ui's public base URL, used to log each run's chat page for this otherwise-invisible job."""
     ran = 0
     failed = 0
     for row in store.claim_due_runs():
         run_id = row["id"]
+        # Log the session the moment it is created — flushed so a slow or hanging run is still
+        # attributable to a session in the job log, instead of only surfacing once the run ends.
+        def _log_session(session_id, run_id=run_id, agent=row["agent_name"]):
+            print(f"[scheduled] run {run_id} agent={agent!r} started -> {_chat_url(base_url, session_id)}", flush=True)
+
         try:
-            outcome = run_scheduled(store, sessions_client, vault_client, agents, row)
+            outcome = run_scheduled(store, sessions_client, vault_client, agents, row, on_session_created=_log_session)
         except Exception as exc:  # noqa: BLE001 - run_scheduled shouldn't raise, but never let one row abort the scan
             store.complete_run(run_id, "failed", str(exc), None)
             failed += 1
@@ -56,7 +69,8 @@ def run_due_schedules(store, sessions_client, vault_client, agents) -> tuple[int
         if outcome.status in _FAILURE_STATUSES:
             failed += 1
         note = f" skipped={len(outcome.skipped)}" if outcome.skipped else ""
-        print(f"[scheduled] run {run_id} agent={row['agent_name']!r} -> {outcome.status}{note}")
+        where = f" {_chat_url(base_url, outcome.session_id)}" if outcome.session_id else ""
+        print(f"[scheduled] run {run_id} agent={row['agent_name']!r} -> {outcome.status}{note}{where}", flush=True)
     return ran, failed
 
 
@@ -76,7 +90,7 @@ def main() -> int:
     sessions_client = build_sessions_client(settings)
     vault_client = build_vault_client(settings)
     try:
-        ran, failed = run_due_schedules(store, sessions_client, vault_client, agents)
+        ran, failed = run_due_schedules(store, sessions_client, vault_client, agents, settings.app_base_url)
     finally:
         store.db.close()
     print(f"[scheduled] ran={ran} failed={failed}")

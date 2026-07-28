@@ -89,10 +89,14 @@ def _allowed(tool_use: dict, allowlist) -> bool:
     return any(t.server == server and t.tool == name for t in allowlist)
 
 
-def run_scheduled(store, sessions_client, vault_client, agents, row) -> RunOutcome:
+def run_scheduled(store, sessions_client, vault_client, agents, row, on_session_created=None) -> RunOutcome:
     """Execute one claimed ``scheduled_runs`` row to completion. ``agents`` is the resolved
     roster (list of ``AgentOption``); ``row`` is a claimed schedule. Never raises for expected
-    failures — every path returns a :class:`RunOutcome` for the caller to persist."""
+    failures — every path returns a :class:`RunOutcome` for the caller to persist.
+
+    ``on_session_created`` (optional) is called with the new session id the moment the session is
+    created, before the (possibly long or hanging) turn streams — so an unattended caller can log
+    which session a still-running row belongs to, rather than only learning it once the run ends."""
     outcome = RunOutcome(status=FAILED)
 
     # Resolve owner, vault, and the agent's resolved ids + allowlist. Any gap is a recorded
@@ -113,6 +117,8 @@ def run_scheduled(store, sessions_client, vault_client, agents, row) -> RunOutco
     )
     outcome.session_id = session_id
     store.create_session(user["id"], option.agent_id, session_id, f"Scheduled: {row['agent_name']}")
+    if on_session_created is not None:
+        on_session_created(session_id)
 
     deadline = time.monotonic() + max(1, int(row["max_runtime_s"]))
     answered: set[str] = set()          # tool_use ids already confirmed
