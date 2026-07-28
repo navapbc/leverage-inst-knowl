@@ -15,8 +15,9 @@ import json
 import queue
 import threading
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 # How often the SSE response emits a keepalive comment while the event generator is stalled.
 # Kept well under a typical load-balancer idle timeout (~60s) so a long silent stretch — the
@@ -26,6 +27,20 @@ _SSE_HEARTBEAT_SECONDS = 15
 
 from .settings import Settings
 from .vault import ensure_user_vault
+
+# The auto-delete date control is presented and entered in Eastern Time (a chosen date means
+# that calendar day in ET); auto_delete_at is stored in UTC. Conversions happen at this
+# boundary so the picker never depends on the DB connection's session time zone.
+EASTERN = ZoneInfo("America/New_York")
+
+# Sessions within this many days of their auto-delete time are flagged in the sessions list.
+AUTO_DELETE_WARN_WINDOW = timedelta(days=3)
+
+
+def _auto_delete_local(dt: datetime) -> str:
+    """The auto-delete instant as its Eastern-Time calendar date (YYYY-MM-DD) — the form the
+    date picker shows and the sessions list displays."""
+    return dt.astimezone(EASTERN).strftime("%Y-%m-%d")
 
 
 class SessionNotFound(Exception):
@@ -402,6 +417,13 @@ def register_chat_routes(app) -> None:
     async def sessions_page(request: Request):
         user = require_user(request)
         sessions = request.app.state.store.list_sessions(user["id"])
+        # Enrich each row with a relative "days until delete" and a within-window flag so the
+        # template stays presentation-only (no date math in Jinja).
+        now = datetime.now(timezone.utc)
+        for s in sessions:
+            s["delete_days"] = max((s["auto_delete_at"] - now).days, 0)
+            s["delete_soon"] = s["auto_delete_at"] <= now + AUTO_DELETE_WARN_WINDOW
+            s["auto_delete_local"] = _auto_delete_local(s["auto_delete_at"])
         return templates.TemplateResponse(
             request, "sessions.html", {"user": user, "sessions": sessions}
         )
@@ -438,6 +460,27 @@ def register_chat_routes(app) -> None:
         request.app.state.store.set_session_shared(session_id, user["id"], shared)
         return RedirectResponse(f"/chat/{session_id}", status_code=303)
 
+    @app.post("/chat/{session_id}/auto-delete")
+    async def reschedule_auto_delete(request: Request, session_id: str):
+        """Owner reschedules when the session auto-deletes. Accepts a date (YYYY-MM-DD) read as
+        an Eastern-Time calendar day and stored as the END of that day in ET (23:59:59), so the
+        session survives through the whole chosen day — matching a date picker's natural "keep
+        until" reading. The date must be in the future (ET) — scheduling immediate deletion is
+        the Delete button's job, and a session can never be kept forever (there is no way to
+        clear the date). ``set_session_auto_delete_at`` is owner-scoped, so a non-owner's post
+        changes nothing."""
+        user = require_user(request)
+        form = await request.form()
+        try:
+            chosen = datetime.strptime(form.get("auto_delete_date", ""), "%Y-%m-%d")
+        except ValueError:
+            return HTMLResponse("Enter a valid date.", status_code=400)
+        if chosen.date() <= datetime.now(EASTERN).date():
+            return HTMLResponse("Pick a future date. To delete now, use Delete session.", status_code=400)
+        end_of_day_et = chosen.replace(hour=23, minute=59, second=59, tzinfo=EASTERN)
+        request.app.state.store.set_session_auto_delete_at(session_id, user["id"], end_of_day_et.astimezone(timezone.utc))
+        return RedirectResponse(f"/chat/{session_id}", status_code=303)
+
     @app.get("/chat/{session_id}", response_class=HTMLResponse)
     async def chat_page(request: Request, session_id: str):
         user = require_user(request)
@@ -447,6 +490,11 @@ def register_chat_routes(app) -> None:
         if not session:
             return HTMLResponse("Session not found.", status_code=404)
         is_owner = session["user_id"] == user["id"]
+        # Prefill the reschedule picker with the auto-delete day in Eastern Time (the tz the
+        # control uses), independent of the DB connection's session time zone. delete_soon lets
+        # a shared-session viewer (who has no picker) still be warned it's about to disappear.
+        session["auto_delete_local"] = _auto_delete_local(session["auto_delete_at"])
+        session["delete_soon"] = session["auto_delete_at"] <= datetime.now(timezone.utc) + AUTO_DELETE_WARN_WINDOW
         # Show the agent's display name and its declared MCP servers; both come from the
         # agent's own definition via the SDK. Each server carries its permission_policy so the
         # auto-approve checklist can lock a server that already always-allows server-side (its

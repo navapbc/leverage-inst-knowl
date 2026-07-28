@@ -1,0 +1,92 @@
+# Daily cleanup: delete chat sessions whose auto_delete_at has passed — platform transcript
+# first, then the DB row (lik-ui/scripts/prune_sessions.py). Runs unattended on a schedule
+# with no internet-facing endpoint and no long-lived shared secret: GitHub OIDC assumes the
+# SSM-read role, fetches the shared Anthropic key + DB master password from SSM, and connects
+# to the public Lightsail Postgres directly. See
+# docs/plans/2026-07-28-001-feat-session-auto-delete-plan.md.
+#
+# Prerequisites (set once in repo Settings, on the `prod` environment):
+#   - Variable AWS_SSM_READ_ROLE_ARN = the github_ssm_read_role_arn Terraform output.
+#   - Variable AWS_REGION            = us-east-1.
+#   - Variables LIK_UI_DB_HOST (= db_endpoint output), LIK_UI_DB_PORT (5432),
+#     LIK_UI_DB_NAME (lik-ui database name), LIK_UI_DB_USER (master username).
+#   - Variable SSM_PREFIX (optional) = the Terraform var.ssm_prefix (defaults to /ik-arch/prod).
+# The DB password and Anthropic key are read from SSM at run time (never GitHub secrets).
+
+name: Prune expired sessions
+
+on:
+  schedule:
+    - cron: "17 8 * * *"   # daily at 08:17 UTC
+  workflow_dispatch: {}     # manual run for verification / catch-up
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+  issues: write     # so a failed run can open a tracking issue (this is the only alerting)
+
+# Never let two cleanups overlap (a slow run + the next tick).
+concurrency:
+  group: prune-sessions
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    # Fail fast instead of hanging: an unattended run that stalls on a slow DB/API otherwise
+    # holds the concurrency group and starves the next scheduled tick.
+    timeout-minutes: 15
+    # The prod environment scopes the vars/role below and its `main` branch policy; scheduled
+    # runs execute on the default branch, which satisfies it. Env-scoped vars only resolve
+    # when the job declares this.
+    environment: prod
+    env:
+      SSM_PREFIX: ${{ vars.SSM_PREFIX || '/ik-arch/prod' }}
+      LIK_UI_ENV: prod
+      LIK_UI_DB_HOST: ${{ vars.LIK_UI_DB_HOST }}
+      LIK_UI_DB_PORT: ${{ vars.LIK_UI_DB_PORT }}
+      LIK_UI_DB_NAME: ${{ vars.LIK_UI_DB_NAME }}
+      LIK_UI_DB_USER: ${{ vars.LIK_UI_DB_USER }}
+      LIK_UI_DB_SSLMODE: require
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_SSM_READ_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Fetch secrets from SSM
+        run: |
+          key=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/ANTHROPIC_API_KEY" \
+            --with-decryption --query Parameter.Value --output text)
+          echo "::add-mask::$key"
+          echo "LIK_UI_ANTHROPIC_API_KEY=$key" >> "$GITHUB_ENV"
+          pw=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/DB_MASTER_PASSWORD" \
+            --with-decryption --query Parameter.Value --output text)
+          echo "::add-mask::$pw"
+          echo "LIK_UI_DB_PASSWORD=$pw" >> "$GITHUB_ENV"
+
+      - name: Prune expired sessions
+        working-directory: lik-ui
+        run: uv run python scripts/prune_sessions.py
+
+      # This is the only alerting for an otherwise-invisible unattended job: a failed run (bad
+      # credentials, DB unreachable, a partial-failure non-zero exit) opens a tracking issue so
+      # a silent stop-pruning doesn't go unnoticed for weeks.
+      - name: Open a tracking issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue create \
+            --title "prune-sessions cron failed" \
+            --body "The daily session-cleanup workflow failed: $run_url
+
+          Expired sessions were not pruned this run. Investigate before the next scheduled tick." \
+            || echo "::warning::prune-sessions failed and the tracking issue could not be created"

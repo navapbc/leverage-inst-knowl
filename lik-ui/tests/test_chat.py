@@ -260,6 +260,56 @@ def test_new_chat_defaults_title_when_blank(db):
     assert "Discovery Layer Agent" in client.get("/sessions").text
 
 
+def _start_session(db, sc, title="agent_1"):
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    return client, session_id
+
+
+def test_sessions_list_flags_session_near_deletion(db):
+    from datetime import datetime, timedelta, timezone
+
+    client, session_id = _start_session(db, FakeSessionsClient())
+    soon = datetime.now(timezone.utc) + timedelta(days=1, hours=1)  # inside the 3-day window
+    Store(db).set_session_auto_delete_at(session_id, _owner_id(db), soon)
+    text = client.get("/sessions").text
+    assert "delete-warning" in text
+    assert "Deletes in 1 day" in text
+
+
+def test_sessions_list_flags_same_day_deletion_as_today(db):
+    from datetime import datetime, timedelta, timezone
+
+    client, session_id = _start_session(db, FakeSessionsClient())
+    Store(db).set_session_auto_delete_at(session_id, _owner_id(db), datetime.now(timezone.utc) + timedelta(hours=2))
+    text = client.get("/sessions").text
+    assert "delete-warning" in text
+    assert "Deletes today" in text
+
+
+def test_sessions_list_flags_session_at_window_boundary(db):
+    from datetime import datetime, timedelta, timezone
+
+    client, session_id = _start_session(db, FakeSessionsClient())
+    # ~3 days out — the inclusive edge of the 3-day warning window. (A `<` off-by-one that
+    # excluded the boundary would drop the flag here.)
+    Store(db).set_session_auto_delete_at(session_id, _owner_id(db), datetime.now(timezone.utc) + timedelta(days=3))
+    assert "delete-warning" in client.get("/sessions").text
+
+
+def test_sessions_list_shows_plain_date_when_not_near(db):
+    from zoneinfo import ZoneInfo
+
+    client, session_id = _start_session(db, FakeSessionsClient())
+    # Default is +7 days, well outside the 3-day window; the list shows the ET calendar date.
+    et = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"].astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+    text = client.get("/sessions").text
+    assert "delete-warning" not in text
+    assert "Deletes in" not in text
+    assert f"Deletes {et} ET" in text
+
+
 def test_chat_page_lists_declared_servers_for_auto_approve(db):
     # The chat page renders a per-server auto-approve checkbox for each MCP server the agent
     # declares, so the user can trust specific sources for the session.
@@ -829,6 +879,85 @@ def test_share_checkbox_shows_only_for_owner(db):
     assert 'action="/chat/' in owner.get(f"/chat/{session_id}").text  # owner sees the share form
     assert "/share" in owner.get(f"/chat/{session_id}").text
     assert "/share" not in viewer.get(f"/chat/{session_id}").text     # viewer does not
+
+
+def test_owner_reschedules_auto_delete_to_a_future_date(db):
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    future = (datetime.now(timezone.utc) + timedelta(days=30)).date()
+    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": future.isoformat()})
+    assert r.status_code == 303 and r.headers["location"] == f"/chat/{session_id}"
+    stored = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
+    # The picked date is stored as the END of that day in Eastern Time (survives through the
+    # whole chosen day), as the equivalent UTC instant.
+    expected = datetime(future.year, future.month, future.day, 23, 59, 59,
+                        tzinfo=ZoneInfo("America/New_York")).astimezone(timezone.utc)
+    assert stored == expected
+
+
+def test_reschedule_rejects_past_date_and_leaves_row_unchanged(db):
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    before = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
+    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": "2000-01-01"})
+    assert r.status_code == 400
+    assert Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"] == before
+
+
+def test_reschedule_rejects_malformed_date(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": "not-a-date"})
+    assert r.status_code == 400
+
+
+def test_reschedule_rejects_todays_et_date(db):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    today_et = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+    # Today is not a future date — immediate deletion is the Delete button's job.
+    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": today_et})
+    assert r.status_code == 400
+
+
+def test_non_owner_cannot_reschedule_anothers_session(db):
+    from datetime import datetime, timedelta, timezone
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    before = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
+    future = (datetime.now(timezone.utc) + timedelta(days=30)).date()
+    viewer.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": future.isoformat()})
+    # Owner-scoped: the viewer's post changes nothing.
+    assert Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"] == before
+
+
+def test_auto_delete_form_shows_only_for_owner(db):
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert "/auto-delete" in owner.get(f"/chat/{session_id}").text        # owner sees the reschedule form
+    assert "/auto-delete" not in viewer.get(f"/chat/{session_id}").text   # shared viewer does not
+
+
+def test_shared_viewer_sees_deletion_notice_and_warning(db):
+    from datetime import datetime, timedelta, timezone
+
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    # Near deletion -> the viewer (who has no picker) is still warned it's about to disappear.
+    Store(db).set_session_auto_delete_at(session_id, _owner_id(db), datetime.now(timezone.utc) + timedelta(days=1))
+    text = viewer.get(f"/chat/{session_id}").text
+    assert "auto-deletes on" in text
+    assert "delete-warning" in text
 
 
 def test_chat_history_deletes_stale_session_when_platform_gone(db):

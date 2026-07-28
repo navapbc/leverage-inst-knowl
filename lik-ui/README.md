@@ -38,17 +38,32 @@ docker compose up
 
 The app never creates its own schema, and there's no migration step on startup. When you
 deploy against an external/managed Postgres (not the compose one), the Docker entrypoint's
-`db/init.sql` hook does not run — apply the schema by hand once before first boot:
+`db/init.sql` hook does not run — apply the schema (and any later non-destructive migrations,
+e.g. the `auto_delete_at` column) with `scripts/init_db.py`. It's idempotent — `db/init.sql`
+is `CREATE TABLE IF NOT EXISTS` plus `ADD COLUMN IF NOT EXISTS` migrations, so re-running only
+creates schema and applies non-destructive `ALTER`s, never dropping or truncating.
+
+**For the prod Lightsail DB**, resolve the connection from AWS with `--ssm-prefix`: the DB
+password comes from SSM and host/port/user are discovered from the Lightsail database, so you
+set no `LIK_UI_DB_*` vars (needs AWS creds + the aws CLI on PATH):
 
 ```
-psql "host=$LIK_UI_DB_HOST port=$LIK_UI_DB_PORT dbname=$LIK_UI_DB_NAME \
-  user=$LIK_UI_DB_USER password=$LIK_UI_DB_PASSWORD sslmode=$LIK_UI_DB_SSLMODE" \
-  -f db/init.sql
+AWS_PROFILE=lik mise exec -- uv run python scripts/init_db.py --ssm-prefix /ik-arch/prod
 ```
 
-Use the same `LIK_UI_DB_*` values the app runs with (see `.env.example`); this is the exact
-connection string `settings.conninfo` builds. `db/init.sql` is idempotent
-(`CREATE TABLE IF NOT EXISTS`), so re-running it is safe.
+Defaults target the `lik-prod-db` instance and the `likuidb` database; override with
+`--db-instance` / `--db-name` / `--region` if needed.
+
+Against any other managed Postgres, use the `LIK_UI_DB_*` config the app runs with (see
+`.env.example`) — the script reads `settings.conninfo`:
+
+```
+LIK_UI_DB_HOST=... LIK_UI_DB_PORT=... LIK_UI_DB_NAME=... LIK_UI_DB_USER=... \
+  LIK_UI_DB_PASSWORD=... LIK_UI_DB_SSLMODE=require uv run python scripts/init_db.py
+```
+
+(Or apply `db/init.sql` with `psql` directly if you prefer.) `scripts/init_db.py` mirrors
+lik-mcp's `scripts/init_db.py`, extended with the `--ssm-prefix` prod path.
 
 ## Test
 
@@ -185,48 +200,53 @@ per-user rate-limiting or spend enforcement.
 Keep the single shared workspace
 key and do per-user attribution in lik-ui's own DB, which we control and can fully automate.
 
-### ONLY IF NEEDED: auto-archive or delete stale chat sessions
+### TODO: least-privilege credentials for the session-cleanup cron
 
-Today a session lives forever: `SessionsClient.create_session` mints a Managed Agents
-session and `db.py` keeps a local row (`session_id`, `user_id`, `agent_id`, `title`,
-`shared`, `created_at`), and nothing prunes either side until a user deletes a chat by hand.
-The sessions list grows without bound. Consider a policy that automatically **archives** or
-**deletes** a session after some period of inactivity (or age).
+The daily `prune-sessions` workflow currently connects to Postgres with the **DB master
+(superuser) credential** (`DB_MASTER_PASSWORD`), and the single `github-actions-lik-ssm-read`
+role that grants it is shared with `deploy-agents` / `deploy-skills` — so those deploy
+workflows can now also read the DB master password even though they never touch the database.
+Two least-privilege follow-ups (surfaced by code review of PR #45, both infrastructure-only):
 
-Archive vs. delete on the platform — both are real, distinct operations on `beta.sessions`
-(we currently only call `delete_session`):
+- **Dedicated Postgres role for the cron.** Provision a role with only `SELECT, DELETE ON
+  sessions` (plus `USAGE` on the schema), store its password at
+  `$SSM_PREFIX/shared/PRUNE_DB_PASSWORD`, and point `prune-sessions.yml` at it instead of the
+  master credential. Keeps the master password confined to AWS even if a runner or a CI
+  dependency is compromised.
+- **Split the SSM-read role.** Give the cron its own role that reads the Anthropic key **and**
+  the prune DB password; narrow `github-actions-lik-ssm-read` back to the Anthropic key only so
+  the deploy workflows can never read a DB credential.
 
-- **Archive** (`beta.sessions.archive`) — blocks new events but **keeps the full transcript**;
-  the session can be excluded from the list view (the list endpoint takes an
-  `include_archived` filter). Reversibility (unarchive/reopen) is **not documented** — verify
-  before relying on it. Requires the session to be `idle`.
-- **Delete** (`beta.sessions.delete`) — permanently removes the record, its events, and the
-  associated sandbox. Not recoverable. Also requires `idle`.
+Not blocking — the current setup works and the role is trust-scoped to the repo's `prod`
+environment — but it widens the blast radius of a compromised workflow more than necessary.
 
-Reasons to prefer archiving over deleting:
+### DONE: auto-delete stale chat sessions
 
-- **Retention / auditability.** Keeps the conversation history for later replay or review
-  instead of destroying it.
-- **List hygiene.** Hides old chats from the picker without losing them, so the list stays
-  usable as sessions accumulate.
-- **Reversible-ish.** Delete is final; archive at least preserves the data even if reopening
-  isn't guaranteed.
+Sessions no longer live forever. Each `sessions` row carries an `auto_delete_at` timestamp
+(`timestamptz`, default `now() + 7 days`); existing rows get `now() + 7 days` (a fresh window
+from migration time) via the non-destructive migration in `db/init.sql` — deliberately not
+`created_at + 7 days`, which would put every session older than 7 days in the past and delete
+them all on the first cleanup run with no warning. The owner can push the date out — or
+pull it in — from a date picker in the chat's **Session settings** (`POST
+/chat/{session_id}/auto-delete`, owner-scoped), but there is no way to disable it: a session
+always has a date. The sessions list flags rows within 3 days of deletion ("Deletes in N days"
+/ "Deletes today") and shows the plain date otherwise.
 
-What is *not* a strong reason here: **runtime cost.** Managed Agents bill session *runtime*
-(per session-hour while `running`); idle sessions are free and there's no documented per-session
-storage charge. A chat session sits idle between turns, so archiving it saves ~nothing on
-runtime — this is about tidiness and retention, not spend. There's also no documented platform
-TTL/auto-expiry, so any expiry is ours to implement.
+A daily GitHub Action (`.github/workflows/prune-sessions.yml`) runs
+`scripts/prune_sessions.py`, which finds due sessions and deletes each **platform transcript
+first, then the DB row** — the same ordering as the interactive delete — isolating per-session
+failures so one bad delete never aborts the sweep or orphans a transcript. The job needs no
+internet-facing endpoint and no long-lived shared secret: it authenticates via GitHub OIDC,
+reads the shared Anthropic key + DB master password from SSM, and connects to the public
+Lightsail Postgres directly.
 
-Design notes if we build this:
-
-- A time-based policy needs a notion of "last activity." The `sessions` row only has
-  `created_at` (age), not a last-activity timestamp — key off `created_at`, or add an
-  `updated_at`/`last_active_at` column (non-destructive `ALTER`, per the DB-schema rules in
-  `CLAUDE.md`) touched on each turn.
-- Decide archive-then-delete (grace period) vs. straight delete, and whether it's a background
-  sweep or lazy-on-list. Keep the local row and the platform session in sync — the code already
-  handles `SessionNotFound` for platform sessions that vanish out-of-band.
+We chose **delete**, not archive: the goal is data-minimization (old transcripts and their
+credentials shouldn't linger on the platform), and the interactive delete path already destroys
+both sides. The policy is age-based off `auto_delete_at` (seeded from creation), not a
+last-activity timestamp, so no per-turn `updated_at` write was needed. See
+`docs/plans/2026-07-28-001-feat-session-auto-delete-plan.md` for the full design and the manual
+prod steps (schema ALTER + backfill, `tf.sh apply` for the widened SSM-read role, and the
+`LIK_UI_DB_*` prod environment variables).
 
 ### DONE: cache agent `describe` results
 
