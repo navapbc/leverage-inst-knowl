@@ -50,9 +50,40 @@ can see how you worked with the agent and build on it (see [Can I share a chat s
 others?](#can-i-share-a-chat-session-with-others)). Limitations: it's an early system with rough
 edges (see below), and it only reaches sources that have a supported connector.
 
-## Can I share a chat session with others?
+## What can the agent do, and how does it work?
 
-Yes — a session can be shared as a read-only link so any logged-in user can see how you asked and guided the
+You pick an agent, connect the sources it needs, and ask it questions in chat. The agent itself runs
+on Anthropic's **Claude Managed Agents** platform — Anthropic runs the model-and-tools loop and a
+per-session sandbox — while lik-ui handles the human side (sign-in and per-source connection) and a
+separate service (lik-mcp) supplies Nava's governed knowledge.
+
+[More: why we run on Claude Managed Agents](https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md)
+
+### Pick the right agent for your question
+
+The picker groups purpose-built agents into labeled sections, and a Knowledge Search Agent routes a
+question to the matching source of knowledge (projects, org guidance, or practice knowledge) for you.
+Useful because you don't have to know which specialist to ask — you get a clear menu and sensible routing.
+
+### Connect many data sources, including Slack
+
+You can point-and-click to connect the sources the agent needs — Confluence/Jira, GitHub, Google Drive,
+Salesforce, and Slack. Useful because an answer can draw on the places your team actually works, not just one.
+
+### See what the agent is doing while it works
+
+The activity indicator shows the specific tool the agent is running (and how many times), and each reply
+notes how long the turn took. Useful because long agent turns no longer look frozen — you can tell it's
+making progress and roughly how much work a question took.
+
+### Guardrails on agents that change shared data
+
+Agents that can write to or change shared data are hidden behind a Settings toggle and kept separate from
+read-only ones. Useful because you won't stumble into a data-changing agent by accident.
+
+### Share a chat session with others
+
+A session can be shared as a read-only link so any logged-in user can see how you asked and guided the
 agent. A shared session shows the whole conversation, including any content the agent pulled in
 while answering, so only share the session ID with people you'd show that material to, and treat the link as
 exposing everything in the session.
@@ -63,14 +94,10 @@ restricted Google Docs). They can ask the agent to summarize or aggregate as the
 convenience, not a privacy guarantee: the agent can't reliably strip sensitive details, so whoever
 adds or re-shares information is responsible for making sure it's appropriate to share onward.
 
-## What can the agent do, and how does it work?
+### Control over your chat data
 
-You pick an agent, connect the sources it needs, and ask it questions in chat. The agent itself runs
-on Anthropic's **Claude Managed Agents** platform — Anthropic runs the model-and-tools loop and a
-per-session sandbox — while lik-ui handles the human side (sign-in and per-source connection) and a
-separate service (lik-mcp) supplies Nava's governed knowledge.
-
-[More: why we run on Claude Managed Agents](https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md)
+You can delete a session yourself, and sessions are also cleaned up automatically after a set time. Useful
+because sensitive material a session pulled in doesn't linger indefinitely.
 
 ## What are its limitations?
 

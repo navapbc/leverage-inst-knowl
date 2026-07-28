@@ -14,6 +14,7 @@
 * The software is being implemented based on the docs in the `v0.5` folder.
     - As code is being written ensure it aligns with the goals and intent of those docs.
 * Keep designs store-agnostic. A design pinned to a particular Data Source's (e.g. Confluence's) quirks would break on the next source. Code modifications must be general to different DSs.
+* When a PR is created that implements a new user-facing feature, ask the user whether the FAQ (`lik-ui/src/lik_ui/faq.md`) should be updated to mention it.
 * Run `eval mise list` to initialize the uv and python 3.14 environment.
 * The code is under the `lik-mcp` folder, so `cd lik-mcp` before running coding tools.
 * **Two local DBs, distinct ports:** `lik-mcp` and `lik-ui` each run their own local Postgres instance and must stay on different ports — `lik-mcp` on 5432 and `lik-ui` on 5433 (the `lik-ui` compose maps container 5432 → host 5433). Running one project's tools/tests against the other's DB is a config error. The `lik-ui` test suite ignores `.env`, so point it at the right port explicitly (e.g. `LIK_UI_DB_PORT=5433`).
