@@ -34,9 +34,19 @@ pushing images, and initializing the database schema.
 > if a `terraform` command later fails on expired credentials.
 >
 > **Shortcut:** `infra/tf.sh` does this export for you and runs terraform — e.g.
-> `./tf.sh plan`, `./tf.sh apply`, `./tf.sh output`. It mints fresh
-> credentials each run, so expiry never bites. Use it in place of the manual export + bare
-> `terraform` in the steps below.
+> `./tf.sh plan`, `./tf.sh apply`, `./tf.sh output`. It mints fresh credentials at the start of
+> each run. Use it in place of the manual export + bare `terraform` in the steps below.
+>
+> ⚠️ **Long applies can still outlive the minted credentials.** The credentials are minted once
+> at invocation and are short-lived; an apply that **creates or replaces a Lightsail deployment**
+> waits ~3 min per deployment, which can exceed the session's remaining lifetime and expire the
+> token mid-apply. When that happens Terraform fails to save state to S3 and to release the lock
+> (the AWS changes may have already landed). So: run `AWS_PROFILE=lik mise exec -- aws login`
+> **immediately before** any deployment-replacing apply, to maximize the remaining lifetime.
+> Recovery if it does expire: `aws login`, then `./tf.sh force-unlock <id>`, then
+> `terraform state push errored.tfstate` (Terraform writes the local `errored.tfstate` and
+> prints this exact command), then re-run the apply — the tainted deployment recreates cleanly
+> (rolling, no downtime) and state re-converges.
 
 > ⚠️ **The DB master password contains shell-special characters** (`()[]{}<>` …). Never put
 > it on an interactive command line (the mise zsh hook parse-errors on `)`). Always read it
