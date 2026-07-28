@@ -1,7 +1,7 @@
 ---
 title: "feat: Terraform as single source of environment config"
 type: feat
-status: active
+status: completed
 date: 2026-07-28
 origin: docs/brainstorms/2026-07-28-terraform-as-single-source-of-config-requirements.md
 ---
