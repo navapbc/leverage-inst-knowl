@@ -139,7 +139,7 @@ claude mcp add lik-mcp -- \
 
 The skills also call the Atlassian (Confluence) MCP tools, so connect that server too. The
 lik-mcp tools (`register_catalog_entry`, `lookup_catalog_entry`, `list_catalog_entries`,
-`confirm_source`, `read_confirmations`) should now show up in the agent.
+`search_catalog_entries`, `confirm_source`, `read_confirmations`) should now show up in the agent.
 
 ### Populate the Catalog
 
@@ -262,14 +262,7 @@ treat pointers as best-effort (the `wrong-content` correction and citation-based
 items in the TODO below likewise operate best-effort). The `CitationResolver` seam stays, so
 a connector could add a real check later, but that is not planned work.
 
-## TODO
-
-lik-mcp runs in production on Lightsail with real data. Every request is authorized by a
-verified Google OIDC token (`LIK_ENV=prod`), so `confirmed_by` / `updated_by` reflect a
-real caller — the `local`/`test` stub identity is confined to those environments. The items
-below are remaining hardening and scaling work, not blockers to loading real data.
-
-**Known limits (still open):**
+## Known limits
 
 - **Governed-writer hardening.** lik-mcp writes the Catalog and confirmations under one
   Postgres identity — a single point of failure, since one compromised credential could
@@ -280,35 +273,38 @@ below are remaining hardening and scaling work, not blockers to loading real dat
   restore on (`backup_retention_enabled`) — but the retention window is short, a restore
   is whole-instance (it rolls back lik-ui's database too), not per-row, and catching a bad
   write in time to use PITR depends on the missing audit trail.
+- **Streaming ingress timeout — effectively a non-issue.** The Lightsail ingress drops a
+  stream after ~60s of silence, but no lik-mcp tool streams: each runs a fast Postgres query
+  and returns well under any timeout. It would only matter if a future tool did long-running
+  work — and the fix is already proven on lik-ui (a 15s keepalive; see
+  [`../lik-ui/README.md`](../lik-ui/README.md#L283)). One standing constraint: don't front
+  the service with a Lightsail distribution/CDN (its 30s limit breaks SSE). See
+  `../domain-name.md` (Caveat: real-time streaming and timeouts).
 
-**Planned work:**
+## TODO
 
-- Governed-writer controls: rotated credentials, least-privilege role, write-audit logging.
-- Confirmation retention policy, plus rate-limiting / minimum-distinct-confirmer thresholds.
-- The producer (DL-creation) and Query skills that call this service.
+lik-mcp runs in production on Lightsail with real data. Every request is authorized by a
+verified Google OIDC token (`LIK_ENV=prod`), so `confirmed_by` / `updated_by` reflect a
+real caller — the `local`/`test` stub identity is confined to those environments. The items
+below are follow-on scaling and maintenance work, not blockers to loading real data (see
+**Known limits** above for the remaining hardening).
 
 **Confirmation table maintenance/management**
 
-- Age out old confirmations for scalability.
-- Migrate/Capture trustworthiness in original DS records and archive confirmation signals for scalability.
-- Correct DS record for negative confirmations where `reason`=`wrong-content`.
+- **Rate-limiting** — cap how many confirmations one user can submit in a window, to blunt
+  spam / ballot-stuffing of the trust signal.
+- **Minimum-distinct-confirmer threshold** — require confirmations from *N* distinct users
+  before a source counts as confirmed, so a single voice can't establish trust on its own.
+- **Backpropagate trust, then age out / archive** — capture each source's accumulated
+  confirmation outcome back onto the origin Data Source record (documented on the page, likely
+  with a timestamp), so trust travels with the source rather than living only here; once
+  propagated, age out and archive the raw signals to keep the live table small as volume grows
+  (the retention policy decides how long to keep, and delete vs. archive).
+- **Correct the DS record on negative confirmations** — when `reason = wrong-content`,
+  surface or correct the flagged source record.
 
 **Catalog table maintenance/management**
 
-- Age out old rows.
-
-**Streaming timeouts on the deployed ingress (scaling)**
-
-- The service uses the MCP `streamable-http` transport, which streams over SSE
-  (`text/event-stream`). On the current Lightsail container-service deployment, the managed
-  ingress has a **fixed, undocumented, non-configurable timeout** that would cut a stream
-  exceeding it with a 504-class error. **For lik-mcp this risk is very low**: no AI/LLM is
-  involved — every tool just runs a fast Postgres query and returns, so responses complete
-  in well under any plausible ingress timeout. The concern only becomes real if a future
-  tool does long-running work. (It matters much more for lik-ui, which streams LLM output.)
-  Two things to keep true regardless: do **not** front the service with a Lightsail
-  distribution/CDN (its 30s origin timeout and chunked-only handling break SSE), and if
-  streams ever start dying mid-response, suspect the ingress timeout before the app. The
-  fix if it becomes a hard limit is to move off the managed Lightsail ingress to ECS/EC2
-  behind an ALB, where the idle timeout is configurable. See `../domain-name.md` (Caveat:
-  real-time streaming and timeouts).
+- Age out old rows that haven't been updated compared to other rows of the same type.
+  Include as instructions for each sync-catalog skill since they know which types and rows
+  they are responsible for.
