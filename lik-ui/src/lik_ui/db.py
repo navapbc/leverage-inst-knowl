@@ -7,6 +7,7 @@ handles.
 """
 
 from contextlib import contextmanager
+from datetime import datetime
 
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -113,7 +114,7 @@ class Store:
                 """
                 INSERT INTO sessions (session_id, user_id, agent_id, title)
                 VALUES (%s, %s, %s, %s)
-                RETURNING session_id, user_id, agent_id, title, shared, created_at
+                RETURNING session_id, user_id, agent_id, title, shared, created_at, auto_delete_at
                 """,
                 (session_id, user_id, agent_id, title),
             ).fetchone()
@@ -124,7 +125,7 @@ class Store:
         with self.db.connection() as conn:
             return conn.execute(
                 """
-                SELECT session_id, user_id, agent_id, title, shared, created_at
+                SELECT session_id, user_id, agent_id, title, shared, created_at, auto_delete_at
                 FROM sessions WHERE user_id = %s ORDER BY created_at DESC
                 """,
                 (user_id,),
@@ -136,7 +137,7 @@ class Store:
         with self.db.connection() as conn:
             return conn.execute(
                 """
-                SELECT session_id, user_id, agent_id, title, shared, created_at
+                SELECT session_id, user_id, agent_id, title, shared, created_at, auto_delete_at
                 FROM sessions WHERE session_id = %s AND user_id = %s
                 """,
                 (session_id, user_id),
@@ -148,7 +149,7 @@ class Store:
         with self.db.connection() as conn:
             return conn.execute(
                 """
-                SELECT session_id, user_id, agent_id, title, shared, created_at
+                SELECT session_id, user_id, agent_id, title, shared, created_at, auto_delete_at
                 FROM sessions WHERE session_id = %s AND (user_id = %s OR shared = true)
                 """,
                 (session_id, user_id),
@@ -164,6 +165,28 @@ class Store:
             ).fetchone()
             conn.commit()
             return row is not None
+
+    def set_session_auto_delete_at(self, session_id: str, user_id: int, when: datetime) -> bool:
+        """Reschedule a session's auto-delete time. Owner-scoped so one user can't reschedule
+        another's session. There is no way to clear it (sessions always have a date). Returns
+        whether a row was updated."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                "UPDATE sessions SET auto_delete_at = %s WHERE session_id = %s AND user_id = %s RETURNING session_id",
+                (when, session_id, user_id),
+            ).fetchone()
+            conn.commit()
+            return row is not None
+
+    def list_sessions_due(self, cutoff: datetime) -> list[dict]:
+        """Every session whose auto-delete time is at or before ``cutoff``, across all users
+        (not owner-scoped — the scheduled cleanup acts as no single user). Returns each
+        session_id with its owning user_id so the caller can reuse the owner-scoped delete."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                "SELECT session_id, user_id FROM sessions WHERE auto_delete_at <= %s ORDER BY auto_delete_at",
+                (cutoff,),
+            ).fetchall()
 
     def delete_session(self, session_id: str, user_id: int) -> bool:
         """Forget a session record. Scoped to the owning user so one user can't delete

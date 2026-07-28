@@ -29,9 +29,23 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- When true, any authenticated user who knows the session_id gets read-only access
     -- (view transcript, attach to an in-flight turn). Writes stay owner-only.
     shared      boolean     NOT NULL DEFAULT false,
-    created_at  timestamptz NOT NULL DEFAULT now()
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    -- When this session (row + platform transcript) is auto-deleted. Defaults to 7 days
+    -- after creation; the owner can push it out but cannot disable it.
+    auto_delete_at timestamptz NOT NULL DEFAULT (now() + interval '7 days')
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id, created_at DESC);
+
+-- Non-destructive migration for an existing sessions table (CREATE TABLE IF NOT EXISTS
+-- above won't add this column to a table that already exists — e.g. prod). Add it nullable,
+-- backfill existing rows to created_at + 7 days, then enforce the default + NOT NULL. Must
+-- run before the index below, which references the column. All statements are idempotent,
+-- so this is a no-op on a freshly-created table.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS auto_delete_at timestamptz;
+UPDATE sessions SET auto_delete_at = created_at + interval '7 days' WHERE auto_delete_at IS NULL;
+ALTER TABLE sessions ALTER COLUMN auto_delete_at SET DEFAULT (now() + interval '7 days');
+ALTER TABLE sessions ALTER COLUMN auto_delete_at SET NOT NULL;
+CREATE INDEX IF NOT EXISTS sessions_auto_delete_idx ON sessions (auto_delete_at);
 
 -- Short-lived OAuth client credentials for an in-flight connect, keyed by the connect's
 -- state token. A dynamically-registered client must be reused between the authorize step

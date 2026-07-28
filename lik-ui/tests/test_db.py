@@ -1,5 +1,7 @@
 """Store round-trip tests. Require a reachable `_test` Postgres (see conftest `db`)."""
 
+from datetime import datetime, timedelta, timezone
+
 
 def test_upsert_user_is_idempotent(store):
     first = store.upsert_user("alice@navapbc.com")
@@ -66,3 +68,49 @@ def test_set_session_shared_is_owner_scoped(store):
     assert store.set_session_shared("sess_1", b["id"], True) is False
     assert store.get_session("sess_1", a["id"])["shared"] is False
     assert store.get_accessible_session("sess_1", b["id"]) is None
+
+
+def test_new_session_defaults_to_seven_day_auto_delete(store):
+    a = store.upsert_user("a@navapbc.com")
+    sess = store.create_session(a["id"], "agent_1", "sess_1")
+    # now() is the transaction instant, so both defaults evaluate it identically: the
+    # auto-delete time is exactly 7 days after creation.
+    assert sess["auto_delete_at"] - sess["created_at"] == timedelta(days=7)
+    assert store.get_session("sess_1", a["id"])["auto_delete_at"] == sess["auto_delete_at"]
+
+
+def test_set_session_auto_delete_at_reschedules(store):
+    a = store.upsert_user("a@navapbc.com")
+    store.create_session(a["id"], "agent_1", "sess_1")
+    when = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    assert store.set_session_auto_delete_at("sess_1", a["id"], when) is True
+    # Compare the instant, not the rendered offset (psycopg renders in the session tz).
+    assert store.get_session("sess_1", a["id"])["auto_delete_at"] == when
+
+
+def test_set_session_auto_delete_at_is_owner_scoped(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    original = store.create_session(a["id"], "agent_1", "sess_1")["auto_delete_at"]
+    # A non-owner cannot reschedule someone else's session; nothing changes.
+    assert store.set_session_auto_delete_at("sess_1", b["id"], datetime(2030, 1, 1, tzinfo=timezone.utc)) is False
+    assert store.get_session("sess_1", a["id"])["auto_delete_at"] == original
+
+
+def test_list_sessions_due_returns_only_expired_with_owner(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    # One already-expired (owned by b), one far in the future (owned by a, default +7d).
+    store.create_session(b["id"], "agent_1", "past")
+    store.set_session_auto_delete_at("past", b["id"], datetime(2000, 1, 1, tzinfo=timezone.utc))
+    store.create_session(a["id"], "agent_1", "future")
+
+    due = store.list_sessions_due(datetime.now(timezone.utc))
+
+    assert [(s["session_id"], s["user_id"]) for s in due] == [("past", b["id"])]
+
+
+def test_list_sessions_due_empty_when_nothing_expired(store):
+    a = store.upsert_user("a@navapbc.com")
+    store.create_session(a["id"], "agent_1", "sess_1")  # default +7d, not yet due
+    assert store.list_sessions_due(datetime.now(timezone.utc)) == []
