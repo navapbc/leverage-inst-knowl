@@ -50,6 +50,12 @@
   </details>
   <hr/>
 
+  {% if user_prompt %}
+    {# Agent's authored "here's what to ask me" invitation. Trusted config, so rendered as
+       autoescaped text — not through the marked/DOMPurify pipeline used for untrusted replies. #}
+    <aside class="user-prompt" role="note">{{ user_prompt }}</aside>
+  {% endif %}
+
   <div id="transcript"
        data-session-id="{{ session.session_id }}"
        data-agent-id="{{ session.agent_id }}"
