@@ -25,6 +25,10 @@ STATIC_DIR = _PKG_DIR / "static"
 # Shared template renderer. Modules import this to render their pages so every page uses
 # one Jinja environment rooted at the package's templates/ directory.
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# Render a schedule's run_interval as a human cadence ("every week", "every 3 days").
+from .account import format_cadence  # noqa: E402 - avoids a circular import at module load
+
+templates.env.filters["cadence"] = format_cadence
 
 
 def build_app(

@@ -81,6 +81,15 @@ making progress and roughly how much work a question took.
 Agents that can write to or change shared data are hidden behind a Settings toggle and kept separate from
 read-only ones. Useful because you won't stumble into a data-changing agent by accident.
 
+### Schedule an agent to run on its own
+
+From Settings you can schedule an eligible agent to run automatically on a cadence you choose — pick how often
+(every so many days or weeks), enter the message to send, and it runs unattended using your own connected
+sources. Routine steps proceed on their own; anything that needs a decision is skipped and recorded, and each
+run shows up in your sessions like any other conversation. Useful because recurring work — a weekly index sync,
+a regular digest — happens without you having to remember to kick it off. Deleting your credential vault cancels
+your schedules, since a run can't work without connected sources.
+
 ### Share a chat session with others
 
 A session can be shared as a read-only link so any logged-in user can see how you asked and guided the

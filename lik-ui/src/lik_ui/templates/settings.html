@@ -65,7 +65,7 @@
        skipped and recorded, and each run shows up in <a href="/sessions">your sessions</a>.</p>
 
     {% if scheduled_created %}<p class="status-connected">✓ Schedule created.</p>{% endif %}
-    {% if scheduled_error %}<p class="cred-url">Couldn't create that schedule — pick an agent and cadence and enter a message.</p>{% endif %}
+    {% if scheduled_error %}<p class="cred-url">Couldn't create that schedule — pick an agent, set how often it runs, and enter a message.</p>{% endif %}
 
     {% if schedulable_agents %}
       <form method="post" action="/settings/scheduled-runs" class="schedule-form">
@@ -74,12 +74,16 @@
             {% for a in schedulable_agents %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
           </select>
         </label>
-        <label>Cadence
-          <select name="cadence" required>
-            {% for c in cadences %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
-          </select>
+        <label>Run every
+          <span class="cadence-fields">
+            <input type="number" name="interval_count" min="1" max="{{ max_cadence_count }}"
+                   value="1" required aria-label="Cadence count">
+            <select name="interval_unit" required aria-label="Cadence unit">
+              {% for u in cadence_units %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+            </select>
+          </span>
         </label>
-        <label>Message to send
+        <label>Message/Prompt to get agent started
           <textarea name="prompt" required rows="3" placeholder="e.g. sync the project indexes"></textarea>
         </label>
         <button class="btn" type="submit">Schedule</button>
@@ -94,7 +98,7 @@
         {% for r in scheduled_runs %}
           <li>
             <div>
-              <strong>{{ r.agent_name }}</strong> · every {{ r.run_interval }}
+              <strong>{{ r.agent_name }}</strong> · {{ r.run_interval | cadence }}
               <div class="cred-url">
                 {% if r.paused %}
                   Paused{% if r.pause_reason == 'needs_reauth' %} · needs re-authentication (reconnect the source, then Resume){% endif %}
