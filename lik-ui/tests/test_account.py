@@ -177,3 +177,122 @@ def test_delete_vault_requires_login(db):
     r = TestClient(app, follow_redirects=False).post("/settings/vault/delete")
     assert r.status_code == 303
     assert r.headers["location"] == "/login"
+
+
+# --- scheduled runs (U7) -------------------------------------------------------
+
+from lik_ui.settings import AgentOption  # noqa: E402
+
+
+def _with_schedulable(client, *options):
+    """Populate the resolved-agent roster (empty in stub mode) so the scheduler UI has agents."""
+    client.app.state.agents = list(options)
+    return client
+
+
+def _sched_agent(name="Sched Agent", schedulable=True, max_runtime=1800):
+    return AgentOption(agent_id="ag_" + name, environment_id="env", agent_name=name,
+                       schedulable=schedulable, max_runtime=max_runtime)
+
+
+def _uid(db):
+    return Store(db).get_user_by_email("alice@navapbc.com")["id"]
+
+
+def test_create_schedule_lists_it_for_the_owner(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    r = client.post("/settings/scheduled-runs",
+                    data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "sync the indexes"})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/settings?scheduled=1"
+    runs = Store(db).list_scheduled_runs(_uid(db))
+    assert [(x["agent_name"], x["prompt"]) for x in runs] == [("Sched Agent", "sync the indexes")]
+    assert runs[0]["max_runtime_s"] == 1800  # materialized from the agent's roster value
+    # AE1: it appears on the page with a next-run time.
+    html = client.get("/settings").text
+    assert "Sched Agent" in html and "Next run:" in html
+
+
+def test_scheduler_only_offers_schedulable_agents(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent("Sched Agent"), _sched_agent("Plain Agent", schedulable=False))
+    html = client.get("/settings").text
+    # AE6: only the schedulable agent is an option in the picker.
+    assert 'value="Sched Agent"' in html
+    assert 'value="Plain Agent"' not in html
+
+
+def test_create_rejects_non_schedulable_agent(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent("Plain Agent", schedulable=False))
+    r = client.post("/settings/scheduled-runs",
+                    data={"agent_name": "Plain Agent", "cadence": "daily", "prompt": "go"})
+    assert r.headers["location"] == "/settings?scheduled_error=1"
+    assert Store(db).list_scheduled_runs(_uid(db)) == []
+
+
+def test_create_rejects_missing_prompt(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    r = client.post("/settings/scheduled-runs",
+                    data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "  "})
+    assert r.headers["location"] == "/settings?scheduled_error=1"
+    assert Store(db).list_scheduled_runs(_uid(db)) == []
+
+
+def test_pause_and_resume_schedule(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "go"})
+    run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
+    client.post(f"/settings/scheduled-runs/{run_id}/pause", data={"paused": "true"})
+    assert Store(db).list_scheduled_runs(_uid(db))[0]["paused"] is True
+    assert "Resume" in client.get("/settings").text
+    client.post(f"/settings/scheduled-runs/{run_id}/pause", data={"paused": "false"})
+    assert Store(db).list_scheduled_runs(_uid(db))[0]["paused"] is False
+
+
+def test_delete_schedule(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "go"})
+    run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
+    r = client.post(f"/settings/scheduled-runs/{run_id}/delete")
+    assert r.status_code == 303
+    assert Store(db).list_scheduled_runs(_uid(db)) == []
+
+
+def test_needs_reauth_badge_renders(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "go"})
+    run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
+    # Simulate a lapsed-credential run outcome (what the scanner's pause_and_flag records).
+    Store(db).pause_and_flag(run_id, "needs_reauth", error="Confluence auth lapsed")
+    html = client.get("/settings").text
+    assert "needs re-authentication" in html  # AE5 health badge
+
+
+def test_delete_vault_cancels_schedules(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Sched Agent", "cadence": "daily", "prompt": "go"})
+    assert Store(db).list_scheduled_runs(_uid(db)) != []
+    client.post("/settings/vault/delete")
+    # R19: deleting the vault cancels the user's schedules so none can run without credentials.
+    assert Store(db).list_scheduled_runs(_uid(db)) == []
+
+
+def test_create_schedule_requires_login(db):
+    oidc = FakeOidc({})
+    app = build_app(Settings(env="test"), store=Store(db), app_oidc=oidc, vault_client=FakeVaultClient())
+    r = TestClient(app, follow_redirects=False).post(
+        "/settings/scheduled-runs", data={"agent_name": "x", "cadence": "daily", "prompt": "y"}
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/login"
