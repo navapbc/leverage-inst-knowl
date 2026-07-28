@@ -153,6 +153,7 @@ data "aws_iam_policy_document" "apply" {
     resources = [
       aws_iam_role.github_image_push.arn,
       aws_iam_role.github_apply.arn,
+      aws_iam_role.github_ssm_read.arn,
       aws_iam_openid_connect_provider.github.arn,
     ]
   }
