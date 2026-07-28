@@ -94,6 +94,9 @@ a { color: var(--accent); }
 /* Sessions list row: title on the left, Delete button pinned right. */
 .card.session-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .card.session-row form { margin: 0; }
+/* Per-row auto-delete note: muted normally, warn-colored when deletion is near. */
+.session-delete-note { display: block; color: var(--muted); font-size: .8rem; margin-top: .15rem; }
+.session-delete-note.delete-warning { color: var(--status-warn); font-weight: 600; }
 /* Open-by-id row: label and button hug their content, input fills the rest. */
 form.session-row { display: flex; align-items: center; gap: 1rem; }
 form.session-row input { flex: 1; }

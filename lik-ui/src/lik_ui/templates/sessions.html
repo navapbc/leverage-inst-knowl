@@ -10,6 +10,13 @@
     <div class="card session-row">
       <span>
         <a href="/chat/{{ s.session_id | urlencode }}" title="Session {{ s.session_id }}">{{ s.title or ("Session " ~ s.session_id) }}</a>
+        <span class="session-delete-note{% if s.delete_soon %} delete-warning{% endif %}">
+          {%- if s.delete_soon -%}
+            Deletes {% if s.delete_days == 0 %}today{% else %}in {{ s.delete_days }} day{{ 's' if s.delete_days != 1 else '' }}{% endif %}
+          {%- else -%}
+            Deletes {{ s.auto_delete_at.strftime('%Y-%m-%d') }}
+          {%- endif -%}
+        </span>
       </span>
       <form method="post" action="/sessions/delete"
             onsubmit="return confirm('Delete this session? This permanently removes its data and cannot be undone.');">

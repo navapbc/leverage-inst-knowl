@@ -15,7 +15,7 @@ import json
 import queue
 import threading
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 # How often the SSE response emits a keepalive comment while the event generator is stalled.
@@ -398,10 +398,19 @@ def register_chat_routes(app) -> None:
         request.app.state.store.create_session(user["id"], agent.agent_id, session_id, title)
         return RedirectResponse(f"/chat/{session_id}", status_code=303)
 
+    # Sessions within this many days of their auto-delete time are flagged in the list.
+    AUTO_DELETE_WARN_WINDOW = timedelta(days=3)
+
     @app.get("/sessions", response_class=HTMLResponse)
     async def sessions_page(request: Request):
         user = require_user(request)
         sessions = request.app.state.store.list_sessions(user["id"])
+        # Enrich each row with a relative "days until delete" and a within-window flag so the
+        # template stays presentation-only (no date math in Jinja).
+        now = datetime.now(timezone.utc)
+        for s in sessions:
+            s["delete_days"] = max((s["auto_delete_at"] - now).days, 0)
+            s["delete_soon"] = s["auto_delete_at"] <= now + AUTO_DELETE_WARN_WINDOW
         return templates.TemplateResponse(
             request, "sessions.html", {"user": user, "sessions": sessions}
         )

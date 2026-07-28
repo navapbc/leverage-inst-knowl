@@ -260,6 +260,44 @@ def test_new_chat_defaults_title_when_blank(db):
     assert "Discovery Layer Agent" in client.get("/sessions").text
 
 
+def _start_session(db, sc, title="agent_1"):
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    return client, session_id
+
+
+def test_sessions_list_flags_session_near_deletion(db):
+    from datetime import datetime, timedelta, timezone
+
+    client, session_id = _start_session(db, FakeSessionsClient())
+    soon = datetime.now(timezone.utc) + timedelta(days=1, hours=1)  # inside the 3-day window
+    Store(db).set_session_auto_delete_at(session_id, _owner_id(db), soon)
+    text = client.get("/sessions").text
+    assert "delete-warning" in text
+    assert "Deletes in 1 day" in text
+
+
+def test_sessions_list_flags_same_day_deletion_as_today(db):
+    from datetime import datetime, timedelta, timezone
+
+    client, session_id = _start_session(db, FakeSessionsClient())
+    Store(db).set_session_auto_delete_at(session_id, _owner_id(db), datetime.now(timezone.utc) + timedelta(hours=2))
+    text = client.get("/sessions").text
+    assert "delete-warning" in text
+    assert "Deletes today" in text
+
+
+def test_sessions_list_shows_plain_date_when_not_near(db):
+    client, session_id = _start_session(db, FakeSessionsClient())
+    # Default is +7 days, well outside the 3-day window.
+    iso = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"].strftime("%Y-%m-%d")
+    text = client.get("/sessions").text
+    assert "delete-warning" not in text
+    assert "Deletes in" not in text
+    assert f"Deletes {iso}" in text
+
+
 def test_chat_page_lists_declared_servers_for_auto_approve(db):
     # The chat page renders a per-server auto-approve checkbox for each MCP server the agent
     # declares, so the user can trust specific sources for the session.
