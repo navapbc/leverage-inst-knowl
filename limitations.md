@@ -28,6 +28,35 @@ Two ways to derive the `source_state` content-state marker from this connector. 
 
 **When Option B would win:** if the sync body fetch becomes a real cost (page volume, rate limits) **and** day-level change detection is acceptable. Until then, Option A's simplicity and exactness outweigh saving one fetch per page on a daily job.
 
+### Live spike (2026-07-27): `lastModified` characterized — and the two read paths disagree
+
+Ran the pre-implementation spike for using `lastModified` as a day-granular pre-filter hint (not as the
+`source_state` marker — the body hash stays that). CQL `label = "project-index" AND type = page` over 111
+pages, plus a controlled body-edit test. Findings:
+
+- **Format set is small and enumerable.** Only three shapes seen in the wild:
+  `less than a minute ago`, `about N hours ago`, and the absolute `Mon DD, YYYY` (date-only). Confluence
+  renders relative for recent edits and switches to the absolute form once older. A parser must treat any
+  unrecognized shape (`yesterday`, `last week`, localized/abbreviated variants) as **always-process**, never
+  guess.
+- **`getConfluencePage` and `searchConfluenceUsingCql` populate `lastModified` from different sources — and
+  the per-page one is stale.** After a human edited a page body and published, the **CQL** result's
+  `lastModified` advanced to `less than a minute ago` (correct), while `getConfluencePage` for the same page
+  still returned a 21-day-old date **even though its own body payload reflected the just-published edit**.
+  So: the CQL `lastModified` **does track main-body edits** (validated), but the `getConfluencePage`
+  `lastModified` is cached/stale and must **never** be trusted for change detection. Any `lastModified`-based
+  hint must be read **only from the CQL search result**.
+- **Timezone can't be pinned from read-only access** (the connector exposes no absolute timestamp, and the
+  absolute form is date-only). Low-risk in practice: old absolute dates never flip; only recent
+  relative-form pages near a midnight boundary could, and there over-flagging (an extra fetch) is safe.
+  Normalize to a single fixed tz (UTC is a safe default).
+- **Still no native timestamp.** `getConfluencePage` confirmed to expose no `version.when` / `createdAt` —
+  the body hash (Option A) remains the drift source of truth.
+
+Net: Option B is viable **only** as a day-granular pre-filter *hint* sourced strictly from the CQL result,
+with a content-hash fallback for unparseable strings — not as a standalone marker. Full spike write-up:
+[docs/brainstorms/2026-07-27-02-catalog-refresh-due-ttl-spike-results.md](docs/brainstorms/2026-07-27-02-catalog-refresh-due-ttl-spike-results.md).
+
 **Design impact:** confirmations and `catalog.source_refs[]` anchor to an opaque content-state marker compared by equality, not to a version number. See [docs/brainstorms/2026-06-25-02-confirmation-content-state-marker-requirements.md](docs/brainstorms/2026-06-25-02-confirmation-content-state-marker-requirements.md). For Confluence the marker is a content hash of the page body (Option A) — not `lastModified` — so change detection is not blocked by the missing version number.
 
 ## Confluence MCP: `getConfluencePage` Returns the Wrong Page Under Concurrency
