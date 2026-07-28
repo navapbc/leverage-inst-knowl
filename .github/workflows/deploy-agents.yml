@@ -9,7 +9,8 @@
 # Prerequisites (set once in repo Settings, on the `prod` environment):
 #   - Variable AWS_SSM_READ_ROLE_ARN = the github_ssm_read_role_arn Terraform output.
 #   - Variable AWS_REGION            = us-east-1.
-# The Anthropic API key is fetched from SSM (/ik-arch/prod/shared/ANTHROPIC_API_KEY) via GitHub
+#   - Variable SSM_PREFIX (optional)  = the Terraform var.ssm_prefix (defaults to /ik-arch/prod).
+# The Anthropic API key is fetched from SSM ($SSM_PREFIX/shared/ANTHROPIC_API_KEY) via GitHub
 # OIDC — one shared key, no GitHub secret. Auth uses a role scoped to reading only that parameter
 # (see infra/iam_github_oidc.tf). Same pattern in deploy-skills.yml.
 
@@ -39,6 +40,8 @@ jobs:
     # The prod environment scopes AWS_SSM_READ_ROLE_ARN / AWS_REGION (and enables optional
     # deployment protection rules). Env-scoped vars only resolve when the job declares this.
     environment: prod
+    env:
+      SSM_PREFIX: ${{ vars.SSM_PREFIX || '/ik-arch/prod' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -53,7 +56,7 @@ jobs:
 
       - name: Fetch Anthropic API key from SSM
         run: |
-          key=$(aws ssm get-parameter --name /ik-arch/prod/shared/ANTHROPIC_API_KEY \
+          key=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/ANTHROPIC_API_KEY" \
             --with-decryption --query Parameter.Value --output text)
           echo "::add-mask::$key"
           echo "ANTHROPIC_API_KEY=$key" >> "$GITHUB_ENV"

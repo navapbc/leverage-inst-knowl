@@ -10,6 +10,7 @@
 #   - Variable AWS_REGION            = us-east-1.
 #   - Variables LIK_UI_DB_HOST (= db_endpoint output), LIK_UI_DB_PORT (5432),
 #     LIK_UI_DB_NAME (lik-ui database name), LIK_UI_DB_USER (master username).
+#   - Variable SSM_PREFIX (optional) = the Terraform var.ssm_prefix (defaults to /ik-arch/prod).
 # The DB password and Anthropic key are read from SSM at run time (never GitHub secrets).
 
 name: Prune expired sessions
@@ -36,6 +37,7 @@ jobs:
     # when the job declares this.
     environment: prod
     env:
+      SSM_PREFIX: ${{ vars.SSM_PREFIX || '/ik-arch/prod' }}
       LIK_UI_ENV: prod
       LIK_UI_DB_HOST: ${{ vars.LIK_UI_DB_HOST }}
       LIK_UI_DB_PORT: ${{ vars.LIK_UI_DB_PORT }}
@@ -56,11 +58,11 @@ jobs:
 
       - name: Fetch secrets from SSM
         run: |
-          key=$(aws ssm get-parameter --name /ik-arch/prod/shared/ANTHROPIC_API_KEY \
+          key=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/ANTHROPIC_API_KEY" \
             --with-decryption --query Parameter.Value --output text)
           echo "::add-mask::$key"
           echo "LIK_UI_ANTHROPIC_API_KEY=$key" >> "$GITHUB_ENV"
-          pw=$(aws ssm get-parameter --name /ik-arch/prod/shared/DB_MASTER_PASSWORD \
+          pw=$(aws ssm get-parameter --name "$SSM_PREFIX/shared/DB_MASTER_PASSWORD" \
             --with-decryption --query Parameter.Value --output text)
           echo "::add-mask::$pw"
           echo "LIK_UI_DB_PASSWORD=$pw" >> "$GITHUB_ENV"
