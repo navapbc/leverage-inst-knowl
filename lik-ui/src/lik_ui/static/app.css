@@ -11,7 +11,7 @@
   --danger: #c05621;
   --status-ok: #2f855a; --status-warn: #c05621;
   /* Per-page body tints. */
-  --body-agents: #e1ecfd; --body-connections: #dfeaff; --body-sessions: #eafffc; --body-settings: #fdf9ea;
+  --body-agents: #e1ecfd; --body-connections: #dfeaff; --body-sessions: #eafffc; --body-settings: #fdf9ea; --body-stats: #f2f0fb;
   /* Chat transcript role bubbles. */
   --bubble-user-bg: #f0f6ff; --bubble-user-line: #cfe0f5;
   --bubble-tool-bg: #f7f7f5; --bubble-tool-line: #e6e6e0;
@@ -30,7 +30,7 @@
   --btn-secondary-bg: #23272e;
   --danger: #d46a3a;
   --status-ok: #5fb07f; --status-warn: #f0a072;
-  --body-agents: #12203a; --body-connections: #12203a; --body-sessions: #10241f; --body-settings: #2a2413;
+  --body-agents: #12203a; --body-connections: #12203a; --body-sessions: #10241f; --body-settings: #2a2413; --body-stats: #1c1830;
   --bubble-user-bg: #16233a; --bubble-user-line: #274063;
   --bubble-tool-bg: #1c1f24; --bubble-tool-line: #33373d;
   --bubble-mcp-bg: #241f33; --bubble-mcp-line: #3d3357;
@@ -47,6 +47,7 @@ body.agents-page { background: var(--body-agents); }
 body.connections-page { background: var(--body-connections); }
 body.sessions-page { background: var(--body-sessions); }
 body.settings-page { background: var(--body-settings); }
+body.stats-page { background: var(--body-stats); }
 a { color: var(--accent); }
 
 /* Top bar: navigation on the left, account (email + sign out) on the right. */
@@ -216,3 +217,26 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 .error-traceback { padding: .75rem; background: var(--error-bg); border: 1px solid var(--error-line);
   border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem;
   max-height: 32rem; overflow-y: auto; }
+
+/* Analytics pages (/stats, /all-stats). Server-rendered — no chart library or JS. */
+.stats-page main { max-width: 60rem; margin: 0 auto; padding: 1rem 1.25rem; }
+.stats-page h2 { font-size: 1.05rem; margin: 1.5rem 0 .5rem; }
+.stats-section-note { color: var(--muted); font-size: .85rem; margin: .1rem 0 .6rem; }
+/* Stat tiles: a responsive row of headline numbers. */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .6rem; }
+.stat-tile { border: 1px solid var(--line); border-radius: 8px; padding: .7rem .8rem; background: var(--card); }
+.stat-tile .stat-value { font-size: 1.4rem; font-weight: 600; }
+.stat-tile .stat-label { color: var(--muted); font-size: .8rem; }
+.stat-tile.flagged .stat-value { color: var(--status-warn); }
+/* Over-time bars: one labelled row per day, bar width is a server-computed percentage. */
+.bar-chart { display: flex; flex-direction: column; gap: .3rem; margin: .5rem 0; }
+.bar-row { display: grid; grid-template-columns: 6rem 1fr 7rem; align-items: center; gap: .5rem; font-size: .85rem; }
+.bar-track { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; height: 1rem; overflow: hidden; }
+.bar-fill { background: var(--accent); height: 100%; }
+.bar-value { color: var(--muted); text-align: right; }
+/* Tables reused for the per-user and live-session lists. */
+.stats-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.stats-table th, .stats-table td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line); }
+.stats-table td.num, .stats-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.stats-empty { color: var(--muted); font-style: italic; }
+.stats-unavailable { color: var(--status-warn); font-size: .8rem; }
