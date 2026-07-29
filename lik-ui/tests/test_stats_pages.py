@@ -111,3 +111,26 @@ def test_all_stats_not_linked_in_nav(db):
     client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
     _login(client)
     assert 'href="/all-stats"' not in client.get("/stats").text
+
+
+def test_stats_live_session_has_owner_delete_button(db):
+    # Own live session on /stats gets a Delete button that returns to /stats.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1")  # create a live session owned by alice
+    text = client.get("/stats").text
+    assert 'action="/sessions/delete"' in text
+    assert 'name="next" value="/stats"' in text
+
+
+def test_all_stats_no_delete_button_for_other_users_sessions(db):
+    # On /all-stats, a session owned by another user must NOT show a Delete button (owner-scoped).
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)  # alice
+    bob = Store(db).upsert_user("bob@navapbc.com")
+    Store(db).create_session(bob["id"], "agent_1", "bob_live", "Bob live session")
+    text = client.get("/all-stats").text
+    assert "Bob live session" in text            # listed in the live section
+    assert 'value="bob_live"' not in text        # but no delete form targets it

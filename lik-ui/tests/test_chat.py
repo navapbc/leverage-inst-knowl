@@ -1133,3 +1133,21 @@ def test_self_heal_by_non_owner_of_shared_session_writes_no_record(db):
     # No analytics record, and the owner's row survives (only the owner can self-heal it).
     assert Store(db).get_session_analytics(session_id) is None
     assert Store(db).get_session(session_id, _owner_id(db)) is not None
+
+
+def test_delete_session_returns_to_stats_when_next_is_stats(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    r = client.post("/sessions/delete", data={"session_id": session_id, "next": "/stats"})
+    assert r.status_code == 303 and r.headers["location"] == "/stats"
+
+
+def test_delete_session_ignores_unsafe_next_and_falls_back_to_sessions(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    r = client.post("/sessions/delete", data={"session_id": session_id, "next": "https://evil.example"})
+    assert r.status_code == 303 and r.headers["location"] == "/sessions"  # open-redirect refused

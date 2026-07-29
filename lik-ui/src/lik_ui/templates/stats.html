@@ -4,6 +4,52 @@
 {% block content %}
   <h1>Usage stats — {{ view.scope_label }}</h1>
 
+  {# ---- Live sessions: lightweight per-session read, cumulative numbers only ---- #}
+  <h2>Live sessions</h2>
+  <p class="stats-section-note">Not yet deleted. Cumulative tokens, timing, and status read on demand;
+    per-tool and per-message detail appears only once a session is deleted.</p>
+  {% if view.live.rows %}
+  <p class="stats-section-note">{{ "{:,}".format(view.live.totals.sessions) }} live ·
+    {{ "{:,}".format(view.live.totals.total_tokens) }} tokens</p>
+  <table class="stats-table">
+    <thead>
+      <tr>
+        <th>Session</th>{% if view.per_user is not none %}<th>User</th>{% endif %}
+        <th class="num">Tokens</th><th class="num">Active (s)</th><th>Status</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in view.live.rows %}
+      <tr>
+        <td><a href="/chat/{{ s.session_id | urlencode }}">{{ s.title or ("Session " ~ s.session_id) }}</a></td>
+        {% if view.per_user is not none %}<td>{{ s.user_email }}</td>{% endif %}
+        {% if s.available %}
+        <td class="num">{{ "{:,}".format(s.total_tokens) }}</td>
+        <td class="num">{{ s.active_seconds | round(1) if s.active_seconds is not none else "—" }}</td>
+        <td>{{ s.status or "—" }}</td>
+        {% else %}
+        <td class="num stats-unavailable" colspan="3">usage unavailable</td>
+        {% endif %}
+        <td class="stats-action">
+          {# Delete is owner-scoped, so only offer it for the viewer's own sessions (on /all-stats
+             a row may belong to another user, where the delete would be a no-op). #}
+          {% if s.user_id == user.id %}
+          <form method="post" action="/sessions/delete"
+                onsubmit="return confirm('Delete this session? This permanently removes its data and cannot be undone.');">
+            <input type="hidden" name="session_id" value="{{ s.session_id }}">
+            <input type="hidden" name="next" value="{{ view.page_path }}">
+            <button class="btn warning" type="submit">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="stats-empty">No live sessions.</p>
+  {% endif %}
+
   {# ---- Deleted sessions: the durable, fully-tallied records ---- #}
   <h2>Deleted sessions</h2>
   <p class="stats-section-note">Full usage captured when each session was deleted. This is where
@@ -54,39 +100,5 @@
   {% else %}
   <p class="stats-empty">No deleted sessions yet.</p>
   {% endif %}
-  {% endif %}
-
-  {# ---- Live sessions: lightweight per-session read, cumulative numbers only ---- #}
-  <h2>Live sessions</h2>
-  <p class="stats-section-note">Not yet deleted. Cumulative tokens, timing, and status read on demand;
-    per-tool and per-message detail appears only once a session is deleted.</p>
-  {% if view.live.rows %}
-  <p class="stats-section-note">{{ "{:,}".format(view.live.totals.sessions) }} live ·
-    {{ "{:,}".format(view.live.totals.total_tokens) }} tokens</p>
-  <table class="stats-table">
-    <thead>
-      <tr>
-        <th>Session</th>{% if view.per_user is not none %}<th>User</th>{% endif %}
-        <th class="num">Tokens</th><th class="num">Active (s)</th><th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for s in view.live.rows %}
-      <tr>
-        <td><a href="/chat/{{ s.session_id | urlencode }}">{{ s.title or ("Session " ~ s.session_id) }}</a></td>
-        {% if view.per_user is not none %}<td>{{ s.user_email }}</td>{% endif %}
-        {% if s.available %}
-        <td class="num">{{ "{:,}".format(s.total_tokens) }}</td>
-        <td class="num">{{ s.active_seconds | round(1) if s.active_seconds is not none else "—" }}</td>
-        <td>{{ s.status or "—" }}</td>
-        {% else %}
-        <td class="num stats-unavailable" colspan="3">usage unavailable</td>
-        {% endif %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="stats-empty">No live sessions.</p>
   {% endif %}
 {% endblock %}
