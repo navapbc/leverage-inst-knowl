@@ -6,6 +6,7 @@ their own modules in later units; this factory is the single place they are moun
 
 import logging
 import traceback as traceback_mod
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -29,6 +30,24 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 from .account import format_cadence  # noqa: E402 - avoids a circular import at module load
 
 templates.env.filters["cadence"] = format_cadence
+
+
+# Serialize a timestamp as an unambiguous UTC ISO 8601 string for a `data-utc` attribute. The
+# browser (tz.js) formats it into the user's chosen zone; the server never picks a display zone.
+# Forcing UTC here keeps the offset explicit regardless of the DB connection's session time zone.
+def _utc_iso(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+# Human-readable UTC fallback shown inside a `data-utc` element before tz.js runs (and for no-JS
+# clients). Forces UTC so the printed value matches its trailing "UTC" label regardless of the DB
+# connection's session time zone.
+def _utc_strftime(dt: datetime, fmt: str) -> str:
+    return dt.astimezone(timezone.utc).strftime(fmt)
+
+
+templates.env.filters["utc_iso"] = _utc_iso
+templates.env.filters["utcformat"] = _utc_strftime
 
 
 def build_app(

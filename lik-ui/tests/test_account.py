@@ -36,6 +36,14 @@ def test_settings_page_renders(db):
     assert "Delete my vault" in r.text
 
 
+def test_settings_page_has_timezone_selector(db):
+    """The time-zone preference is a client-side setting (like dark mode): the page ships the
+    empty selector and the tz.js module that populates it and persists the choice."""
+    html = _client(db)[0].get("/settings").text
+    assert 'id="tz-select"' in html
+    assert "/static/tz.js" in html
+
+
 def test_settings_page_lists_credentials(db):
     client, vc = _client(db)
     vc.credentials = [{"id": "vcrd_1", "display_name": "lik-mcp", "url": "https://mcp.example/mcp"}]

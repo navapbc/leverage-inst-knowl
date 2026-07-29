@@ -9,7 +9,7 @@
   {% if not is_owner %}
     <p class="muted-note">You're viewing a shared session read-only. Only its owner can send messages.</p>
     <p class="muted-note{% if session.delete_soon %} delete-warning{% endif %}">
-      This shared session auto-deletes on {{ session.auto_delete_local }} (end of day ET).{% if session.delete_soon %} Ask its owner to extend it if you still need it.{% endif %}
+      This shared session auto-deletes on <time data-utc="{{ session.auto_delete_at | utc_iso }}" data-format="date">{{ session.auto_delete_at | utcformat('%Y-%m-%d') }}</time>.{% if session.delete_soon %} Ask its owner to extend it if you still need it.{% endif %}
     </p>
   {% endif %}
 
@@ -45,12 +45,19 @@
     {% endif %}
     {% if is_owner %}
       <form method="post" action="/chat/{{ session.session_id | urlencode }}/auto-delete" class="auto-delete-form">
-        <label>
-          Auto-deletes at end of the chosen day (Eastern Time)
-          <input type="date" name="auto_delete_date" value="{{ session.auto_delete_local }}">
+        <p class="muted-note">Auto-deletes on
+          <time data-utc="{{ session.auto_delete_at | utc_iso }}" data-format="date">{{ session.auto_delete_at | utcformat('%Y-%m-%d') }}</time>.</p>
+        <label>Keep for
+          <span class="cadence-fields">
+            <input type="number" name="interval_count" min="1" max="{{ max_cadence_count }}"
+                   value="1" required aria-label="Keep-for count">
+            <select name="interval_unit" required aria-label="Keep-for unit">
+              {% for u in cadence_units %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+            </select>
+          </span>
         </label>
         <button class="btn" type="submit">Update</button>
-        <span class="muted-note" style="display: block;">Sessions are eventually deleted — you can push this out but not turn it off.</span>
+        <span class="muted-note" style="display: block;">Sets the new delete date to that far from now. Sessions are eventually deleted — you can push this out but not turn it off.</span>
       </form>
       <form method="post" action="/sessions/delete"
             onsubmit="return confirm('Delete this session? This permanently removes its data and cannot be undone.');">

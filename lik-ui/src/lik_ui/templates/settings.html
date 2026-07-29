@@ -12,6 +12,15 @@
   {% endif %}
 
   <div class="card">
+    <h2>Time zone</h2>
+    <p>Choose the time zone used to show dates and times across the app. This is saved in your
+       browser. "Auto" follows your device's time zone.</p>
+    <label>Show times in
+      <select id="tz-select" aria-label="Display time zone"></select>
+    </label>
+  </div>
+
+  <div class="card">
     <h2>Sessions</h2>
     <p><a href="/sessions">Your sessions</a> hold every conversation you've had in this app.
        Deleting them removes that data from the Claude platform. This cannot be undone.</p>
@@ -103,7 +112,7 @@
                 {% if r.paused %}
                   Paused{% if r.pause_reason == 'needs_reauth' %} · needs re-authentication (reconnect the source, then Resume){% endif %}
                 {% else %}
-                  Next run: {{ r.next_run_at.strftime('%Y-%m-%d %H:%M UTC') }}
+                  Next run: <time data-utc="{{ r.next_run_at | utc_iso }}" data-format="datetime">{{ r.next_run_at | utcformat('%Y-%m-%d %H:%M') }} UTC</time>
                 {% endif %}
               </div>
               {% if r.last_status %}
