@@ -329,19 +329,18 @@ class Store:
                 params,
             ).fetchone()
 
-    def session_analytics_daily(self, user_id: int | None = None) -> list[dict]:
-        """Per-day buckets of deleted-session count and total tokens, oldest first — the over-time
-        view (R12). Scoped to one user when ``user_id`` is given, else across all users."""
-        where, params = ("WHERE user_id = %s", (user_id,)) if user_id is not None else ("", ())
+    def session_analytics_series(self, user_id: int | None = None) -> list[dict]:
+        """Per-session (created_at, total tokens) for deleted sessions, oldest first — the raw data
+        for the over-time view (R12). Deliberately NOT pre-bucketed by day: day boundaries depend on
+        the viewer's display time zone, which is a client-only preference (the server stays UTC), so
+        the browser buckets these instants into local days. Scoped to one user when ``user_id`` is
+        given, else across all users. Rows with no created_at (thin captures) are skipped."""
+        where = "WHERE created_at IS NOT NULL" + (" AND user_id = %s" if user_id is not None else "")
+        params = (user_id,) if user_id is not None else ()
         with self.db.connection() as conn:
             return conn.execute(
-                f"""
-                SELECT date_trunc('day', deleted_at) AS day,
-                       count(*)                       AS sessions,
-                       COALESCE(sum({self._ANALYTICS_TOKENS}),0) AS tokens
-                FROM session_analytics {where}
-                GROUP BY day ORDER BY day
-                """,
+                f"SELECT created_at, {self._ANALYTICS_TOKENS} AS tokens "
+                f"FROM session_analytics {where} ORDER BY created_at",
                 params,
             ).fetchall()
 

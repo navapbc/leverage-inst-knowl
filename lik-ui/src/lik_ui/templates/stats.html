@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Usage stats · LIK{% endblock %}
 {% block body_class %}stats-page{% endblock %}
+{% block head %}<script src="/static/stats.js" defer></script>{% endblock %}
 {% block content %}
   <h1>Usage stats — {{ view.scope_label }}</h1>
 
@@ -79,18 +80,13 @@
     </tbody>
   </table>
 
-  {# ---- Over-time view: tokens per day, server-sized bars ---- #}
+  {# ---- Over-time view: tokens per day. Buckets are formed client-side (stats.js) in the
+         viewer's display time zone, since day boundaries depend on that client-only preference;
+         the server just emits the raw per-session UTC instants as data. ---- #}
   <h2>Tokens over time</h2>
-  {% if view.deleted.daily %}
-  <div class="bar-chart">
-    {% for row in view.deleted.daily %}
-    <div class="bar-row">
-      <span><time data-utc="{{ row.day | utc_iso }}" data-format="date">{{ row.day | utcformat('%Y-%m-%d') }}</time></span>
-      <span class="bar-track"><span class="bar-fill" style="width: {{ row.pct }}%"></span></span>
-      <span class="bar-value">{{ "{:,}".format(row.tokens) }} · {{ row.sessions }} sess</span>
-    </div>
-    {% endfor %}
-  </div>
+  {% if view.deleted.series %}
+  <div class="bar-chart" id="tokens-over-time" data-series='{{ view.deleted.series | tojson }}'></div>
+  <noscript><p class="stats-empty">Enable JavaScript to see the over-time chart.</p></noscript>
   {% else %}
   <p class="stats-empty">No deleted sessions yet.</p>
   {% endif %}

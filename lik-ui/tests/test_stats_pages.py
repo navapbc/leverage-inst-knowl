@@ -12,9 +12,11 @@ from tests.test_vault import FakeVaultClient
 
 
 def _seed_deleted(store, session_id, user_id, email, tokens, *, tools=3, errors=1):
+    from datetime import datetime, timezone
     store.write_session_analytics({
         "session_id": session_id, "user_id": user_id, "user_email": email,
-        "deletion_path": "prune", "input_tokens": tokens, "output_tokens": 0,
+        "deletion_path": "prune", "created_at": datetime.now(timezone.utc),
+        "input_tokens": tokens, "output_tokens": 0,
         "cache_read_tokens": 0, "cache_creation_tokens": 0,
         "tool_use_count": tools, "error_count": errors,
     })
@@ -46,7 +48,8 @@ def test_stats_shows_own_deleted_totals_and_bars(db):
     text = client.get("/stats").text
     assert "Deleted sessions" in text and "Tokens over time" in text
     assert "150" in text  # summed tokens rendered
-    assert "bar-fill" in text  # the over-time bars are present
+    # Bars are hydrated client-side (stats.js) from the raw per-session series data.
+    assert 'id="tokens-over-time"' in text and "data-series=" in text
 
 
 def test_stats_scoped_to_viewer_only(db):

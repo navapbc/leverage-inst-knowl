@@ -344,7 +344,8 @@ def test_list_sessions_due_carries_agent_and_created_at(store):
 def _seed_analytics(store, session_id, user_id, email, tokens, path="prune"):
     store.write_session_analytics({
         "session_id": session_id, "user_id": user_id, "user_email": email,
-        "deletion_path": path, "input_tokens": tokens, "output_tokens": 0,
+        "deletion_path": path, "created_at": datetime.now(timezone.utc),
+        "input_tokens": tokens, "output_tokens": 0,
         "cache_read_tokens": 0, "cache_creation_tokens": 0,
         "tool_use_count": 2, "error_count": 1,
     })
@@ -368,17 +369,27 @@ def test_analytics_totals_empty_is_zeroed(store):
     assert t["sessions"] == 0 and t["total_tokens"] == 0 and t["error_count"] == 0
 
 
-def test_analytics_daily_buckets_and_by_user(store):
+def test_analytics_series_and_by_user(store):
     a = store.upsert_user("a@navapbc.com")
     b = store.upsert_user("b@navapbc.com")
     _seed_analytics(store, "s1", a["id"], "a@navapbc.com", 100)
     _seed_analytics(store, "s2", b["id"], "b@navapbc.com", 40)
-    daily = store.session_analytics_daily()
-    assert sum(row["sessions"] for row in daily) == 2
-    assert sum(row["tokens"] for row in daily) == 140
+    # Raw per-session series (client buckets by local day); own-scoped vs. all-users.
+    assert len(store.session_analytics_series(a["id"])) == 1
+    series = store.session_analytics_series()
+    assert len(series) == 2 and sum(r["tokens"] for r in series) == 140
+    assert all(r["created_at"] is not None for r in series)
     by_user = store.session_analytics_by_user()
     assert by_user[0]["user_email"] == "a@navapbc.com" and by_user[0]["tokens"] == 100
     assert {r["user_email"] for r in by_user} == {"a@navapbc.com", "b@navapbc.com"}
+
+
+def test_analytics_series_skips_rows_without_created_at(store):
+    a = store.upsert_user("a@navapbc.com")
+    store.write_session_analytics({  # a thin/incomplete capture with no created_at
+        "session_id": "s1", "user_id": a["id"], "deletion_path": "self_heal", "capture_incomplete": True,
+    })
+    assert store.session_analytics_series() == []
 
 
 def test_list_all_sessions_spans_users_with_email(store):
