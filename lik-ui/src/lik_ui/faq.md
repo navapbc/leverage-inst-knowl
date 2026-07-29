@@ -52,6 +52,24 @@ can see how you worked with the agent and build on it (see [Share a chat session
 others](#share-a-chat-session-with-others)). Limitations: it's an early system with rough
 edges (see below), and it only reaches sources that have a supported connector.
 
+### Can I use LIK from other AI tools?
+
+Yes. LIK runs a service called **lik-mcp** that any MCP-capable AI tool (Claude Desktop, a coding
+assistant, another agent you build) can connect to. It enable those tools to use the **LIK Catalog** — a
+compact, searchable map of Nava's knowledge derived from your connected sources — so search across
+Nava's material is both faster and more on-target than pointing a raw tool at every source and hoping
+it finds the right thing. This is the
+[Discovery Layer](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/02-concepts.md) at
+work: rather than copying everything into one place, LIK derives just enough structure to make company
+knowledge quick to find and reuse, and lik-mcp exposes that structure to whatever tool you already use.
+It still uses your own sign-in and checks your permissions before returning anything, so you see only
+what you're allowed to see.
+
+The **LIK app** (lik-ui) is one such tool built on top of lik-mcp: it pairs the same governed
+knowledge with a set of curated, centrally-maintained agents and skills aimed at common use cases, plus
+point-and-click data connectors for the sources those agents need. If you'd rather bring your own tool,
+lik-mcp is there for it; if you'd rather have the whole setup handled for you, use the LIK app.
+
 ## What can the agent do, and how does it work?
 
 You pick an agent, connect the sources it needs, and ask it questions in chat. The agent itself runs
