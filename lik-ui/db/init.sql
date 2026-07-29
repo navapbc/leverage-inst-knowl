@@ -107,3 +107,47 @@ CREATE INDEX IF NOT EXISTS scheduled_runs_due_idx ON scheduled_runs (next_run_at
 -- Idempotent add for an existing prod table (CREATE TABLE IF NOT EXISTS won't alter it). Matches
 -- the non-destructive migration pattern used for sessions.auto_delete_at above.
 ALTER TABLE scheduled_runs ADD COLUMN IF NOT EXISTS last_duration_s integer;
+
+-- One durable analytics record per session, written just before the session is physically
+-- deleted (the only moment its usage is both complete and about to be lost). Deliberately has
+-- NO foreign key to users/sessions: those cascade-delete, and this record must OUTLIVE both so
+-- deleted sessions still count in analytics. user_id + user_email are denormalized so /all-stats
+-- can attribute usage "by whom" even after the user row is gone. Keyed by session_id so a
+-- re-attempted deletion (e.g. a manual delete that 502'd on the platform then retried) upserts
+-- the same row rather than duplicating it — guaranteeing exactly one record per session.
+--
+-- Metric columns are nullable: a capture whose platform read failed (or a self-heal where the
+-- platform session was already gone) still writes a row from local fields with capture_incomplete
+-- = true and a capture_reason, so missing analytics are counted and visible, never silently absent.
+CREATE TABLE IF NOT EXISTS session_analytics (
+    session_id            text        PRIMARY KEY,
+    user_id               bigint      NOT NULL,
+    user_email            text,
+    agent_id              text,
+    -- Which of the four deletion paths wrote this: 'manual', 'delete_all', 'prune', 'self_heal'.
+    deletion_path         text        NOT NULL,
+    -- Session lifespan: created_at from the local row (authoritative start), deleted_at = now().
+    created_at            timestamptz,
+    deleted_at            timestamptz NOT NULL DEFAULT now(),
+    -- True when the pre-delete usage read could not be fully captured; capture_reason says why.
+    capture_incomplete    boolean     NOT NULL DEFAULT false,
+    capture_reason        text,
+    -- Cumulative token usage, cache-read / cache-creation broken out separately (null if unread).
+    input_tokens          bigint,
+    output_tokens         bigint,
+    cache_read_tokens     bigint,
+    cache_creation_tokens bigint,
+    -- Timing: active = summed agent working time; wall_clock = elapsed since creation.
+    active_seconds        numeric,
+    wall_clock_seconds    numeric,
+    -- Per-event tallies (deleted sessions only; live sessions never carry these).
+    user_message_count    integer,
+    ai_message_count      integer,
+    tool_use_count        integer,
+    error_count           integer,
+    -- Per-tool and per-MCP-server counts, and error-type counts, as read-mostly JSON aggregates.
+    tool_breakdown        jsonb,
+    error_types           jsonb
+);
+CREATE INDEX IF NOT EXISTS session_analytics_user_idx ON session_analytics (user_id, deleted_at);
+CREATE INDEX IF NOT EXISTS session_analytics_deleted_idx ON session_analytics (deleted_at);

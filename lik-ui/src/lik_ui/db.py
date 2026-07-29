@@ -205,10 +205,13 @@ class Store:
     def list_sessions_due(self, cutoff: datetime) -> list[dict]:
         """Every session whose auto-delete time is at or before ``cutoff``, across all users
         (not owner-scoped — the scheduled cleanup acts as no single user). Returns each
-        session_id with its owning user_id so the caller can reuse the owner-scoped delete."""
+        session_id with its owning user_id so the caller can reuse the owner-scoped delete.
+        Also carries agent_id + created_at so the pre-delete analytics capture can populate a
+        record (including the local-only fallback) without a second per-session read."""
         with self.db.connection() as conn:
             return conn.execute(
-                "SELECT session_id, user_id FROM sessions WHERE auto_delete_at <= %s ORDER BY auto_delete_at",
+                "SELECT session_id, user_id, agent_id, created_at FROM sessions "
+                "WHERE auto_delete_at <= %s ORDER BY auto_delete_at",
                 (cutoff,),
             ).fetchall()
 
@@ -222,6 +225,47 @@ class Store:
             ).fetchone()
             conn.commit()
             return row is not None
+
+    # --- session analytics -----------------------------------------------------
+    # Durable per-session usage record, written just before physical deletion. Keyed by
+    # session_id and upserted, so a re-attempted deletion overwrites rather than duplicating
+    # (exactly one record per session). Not owner-scoped: the record outlives the user/session.
+    _ANALYTICS_COLS = (
+        "session_id", "user_id", "user_email", "agent_id", "deletion_path",
+        "created_at", "deleted_at", "capture_incomplete", "capture_reason",
+        "input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens",
+        "active_seconds", "wall_clock_seconds",
+        "user_message_count", "ai_message_count", "tool_use_count", "error_count",
+        "tool_breakdown", "error_types",
+    )
+    _ANALYTICS_JSON_COLS = frozenset({"tool_breakdown", "error_types"})
+
+    def write_session_analytics(self, record: dict) -> None:
+        """Upsert one analytics record keyed on ``session_id``. ``record`` supplies any subset of
+        the analytics columns; ``session_id``, ``user_id`` and ``deletion_path`` are required, the
+        rest default (``deleted_at`` to now(), ``capture_incomplete`` to false, metrics to NULL).
+        A second write for the same session overwrites the first, so capture is idempotent across
+        a re-attempted deletion."""
+        cols = [c for c in self._ANALYTICS_COLS if c in record]
+        values = [Json(record[c]) if c in self._ANALYTICS_JSON_COLS else record[c] for c in cols]
+        placeholders = ", ".join(["%s"] * len(cols))
+        # Overwrite every supplied column except the PK on conflict.
+        updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols if c != "session_id")
+        with self.db.connection() as conn:
+            conn.execute(
+                f"INSERT INTO session_analytics ({', '.join(cols)}) VALUES ({placeholders}) "
+                f"ON CONFLICT (session_id) DO UPDATE SET {updates}",
+                values,
+            )
+            conn.commit()
+
+    def get_session_analytics(self, session_id: str) -> dict | None:
+        """The analytics record for one session, or None. Used by tests and single-session views."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"SELECT {', '.join(self._ANALYTICS_COLS)} FROM session_analytics WHERE session_id = %s",
+                (session_id,),
+            ).fetchone()
 
     # --- scheduled runs --------------------------------------------------------
     # CRUD here is owner-scoped (the Settings UI). The scanner's cross-user claim/complete

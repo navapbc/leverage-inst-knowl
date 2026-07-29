@@ -279,3 +279,63 @@ def test_pause_and_flag_pauses_without_advancing(store):
     assert row["next_run_at"] == original_due  # not advanced
     # A paused row is never claimed even though it's due.
     assert store.claim_due_runs() == []
+
+
+def test_session_analytics_upsert_is_idempotent_on_session_id(store):
+    u = store.upsert_user("a@navapbc.com")
+    base = {"session_id": "s1", "user_id": u["id"], "deletion_path": "manual", "input_tokens": 10}
+    store.write_session_analytics(base)
+    # A second write for the same session overwrites — exactly one record (R5).
+    store.write_session_analytics({**base, "input_tokens": 99, "output_tokens": 5})
+    rec = store.get_session_analytics("s1")
+    assert rec["input_tokens"] == 99 and rec["output_tokens"] == 5
+    with store.db.connection() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM session_analytics").fetchone()["n"] == 1
+
+
+def test_session_analytics_full_record_roundtrips_including_jsonb(store):
+    u = store.upsert_user("a@navapbc.com")
+    record = {
+        "session_id": "s1", "user_id": u["id"], "user_email": "a@navapbc.com",
+        "agent_id": "agent_1", "deletion_path": "prune",
+        "input_tokens": 100, "output_tokens": 50, "cache_read_tokens": 10, "cache_creation_tokens": 7,
+        "active_seconds": 12.5, "wall_clock_seconds": 30.0,
+        "user_message_count": 3, "ai_message_count": 3, "tool_use_count": 4, "error_count": 1,
+        "tool_breakdown": {"tools": {"search": 3}, "servers": {"confluence": 3}},
+        "error_types": {"mcp_connection_failed": 1},
+    }
+    store.write_session_analytics(record)
+    rec = store.get_session_analytics("s1")
+    assert rec["tool_breakdown"] == {"tools": {"search": 3}, "servers": {"confluence": 3}}
+    assert rec["error_types"] == {"mcp_connection_failed": 1}
+    assert rec["cache_creation_tokens"] == 7 and rec["tool_use_count"] == 4
+
+
+def test_session_analytics_flagged_local_only_record(store):
+    u = store.upsert_user("a@navapbc.com")
+    store.write_session_analytics({
+        "session_id": "s1", "user_id": u["id"], "deletion_path": "self_heal",
+        "capture_incomplete": True, "capture_reason": "lost before capture",
+    })
+    rec = store.get_session_analytics("s1")
+    assert rec["capture_incomplete"] is True and rec["capture_reason"] == "lost before capture"
+    assert rec["input_tokens"] is None and rec["deleted_at"] is not None  # metrics null, still stamped
+
+
+def test_session_analytics_outlives_user_deletion(store):
+    u = store.upsert_user("a@navapbc.com")
+    store.write_session_analytics({"session_id": "s1", "user_id": u["id"], "deletion_path": "manual"})
+    # No FK cascade: deleting the user must NOT remove the analytics record.
+    with store.db.connection() as conn:
+        conn.execute("DELETE FROM users WHERE id = %s", (u["id"],))
+        conn.commit()
+    assert store.get_session_analytics("s1") is not None
+
+
+def test_list_sessions_due_carries_agent_and_created_at(store):
+    u = store.upsert_user("a@navapbc.com")
+    store.create_session(u["id"], "agent_7", "s1")
+    store.set_session_auto_delete_at("s1", u["id"], datetime.now(timezone.utc) - timedelta(days=1))
+    due = store.list_sessions_due(datetime.now(timezone.utc))
+    assert len(due) == 1
+    assert due[0]["agent_id"] == "agent_7" and due[0]["created_at"] is not None
