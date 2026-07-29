@@ -1,7 +1,7 @@
 ---
 title: "feat: Session analytics & /stats + /all-stats pages"
 type: feat
-status: active
+status: completed
 date: 2026-07-29
 origin: docs/brainstorms/2026-07-29-session-analytics-stats-page-requirements.md
 deepened: 2026-07-29
