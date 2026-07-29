@@ -28,6 +28,17 @@ permissions:
   id-token: write   # required for OIDC
   contents: read
 
+# Shared serialization group with scheduled-runs.yml (SAME group name — that is the point). A deploy
+# replaces a prod container via a rolling cutover Lightsail can't connection-drain, so deploying while
+# a scheduled agent run is in flight severs its long-lived lik-mcp MCP session and fails the sync
+# mid-run. Sharing the group makes a deploy wait for any running scan to finish first (and a scan wait
+# for a running deploy). Conservative: this also serializes lik-ui-only deploys, which don't affect a
+# sync — kept simple over a per-service group. cancel-in-progress: false so a queued deploy waits
+# rather than being dropped.
+concurrency:
+  group: lik-prod-mutations
+  cancel-in-progress: false
+
 jobs:
   push:
     runs-on: ubuntu-latest
