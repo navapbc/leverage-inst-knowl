@@ -116,6 +116,13 @@ connection gives the agent access to:
 
 [More: data-source availability](https://github.com/navapbc/leverage-inst-knowl/blob/main/mcp-availability.md)
 
+The list above isn't a fixed ceiling. Because sources connect through MCP servers, more can be added over
+time — including servers that aren't ordinary document stores. An MCP server could expose a RAG vector
+database, a knowledge graph, or a hybrid/federated search service that spans several systems at once, and
+the agent would reach it the same point-and-click way. As useful connectors appear, they can be added to
+broaden what an answer can draw on. To make the best use of new MCP server's capabilities,
+LIK's skills and agents should be updated to efficiently and effectively call on the MCP tools when appropriate.
+
 ### See what the agent is doing while it works
 
 The activity indicator shows the specific tool the agent is running (and how many times), and each reply
