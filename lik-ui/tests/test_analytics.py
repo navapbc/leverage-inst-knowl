@@ -164,3 +164,52 @@ def test_capture_never_raises_even_if_both_reads_raise(store):
 
     capture_session_analytics(store, BothRaise(), row, "delete_all")  # must not raise
     assert store.get_session_analytics("s1")["capture_incomplete"] is True
+
+
+# --- live section + read-model (U5) --------------------------------------------
+
+from lik_ui.analytics import build_live_section
+
+
+class _LiveClient:
+    def __init__(self, by_id, raise_on=()):
+        self._by_id = by_id
+        self._raise = set(raise_on)
+
+    def usage_snapshot(self, session_id):
+        if session_id in self._raise:
+            raise SessionNotFound(session_id)
+        return self._by_id[session_id]
+
+
+def _snap(**kw):
+    base = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0,
+            "active_seconds": None, "wall_clock_seconds": None, "status": "idle",
+            "created_at": None, "agent": "agent_1"}
+    base.update(kw)
+    return base
+
+
+def test_live_section_reports_cumulative_tokens_and_status_without_tallies():
+    sessions = [{"session_id": "s1"}, {"session_id": "s2"}]
+    client = _LiveClient({"s1": _snap(input=10, output=5), "s2": _snap(input=1, cache_read=4)})
+    out = build_live_section(client, sessions)
+    assert out["totals"] == {"sessions": 2, "total_tokens": 20}  # (10+5) + (1+4)
+    r1 = out["rows"][0]
+    assert r1["available"] is True and r1["total_tokens"] == 15 and r1["status"] == "idle"
+    # No per-tool / per-message tallies on live rows (R11 / AE4).
+    assert "tool_use_count" not in r1 and "tool_breakdown" not in r1
+
+
+def test_live_section_degrades_on_one_unreadable_session():
+    sessions = [{"session_id": "s1"}, {"session_id": "s2"}]
+    client = _LiveClient({"s1": _snap(input=10, output=5)}, raise_on={"s2"})
+    out = build_live_section(client, sessions)
+    assert out["rows"][0]["available"] is True
+    assert out["rows"][1]["available"] is False   # listed, marked unavailable, not fatal
+    assert out["totals"]["total_tokens"] == 15    # only the readable one contributes
+
+
+def test_live_section_stub_client_marks_all_unavailable():
+    out = build_live_section(None, [{"session_id": "s1"}])
+    assert out["rows"][0]["available"] is False and out["totals"]["total_tokens"] == 0

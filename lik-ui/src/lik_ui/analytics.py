@@ -54,6 +54,49 @@ def tally_events(events: Iterable[dict]) -> dict:
     }
 
 
+def build_live_section(sessions_client, sessions: list[dict]) -> dict:
+    """Assemble the live-sessions section (R10, R11): one lightweight ``usage_snapshot`` per live
+    session for its cumulative tokens, timing, and status — never the heavier per-tool/per-message
+    tally, which belongs to deleted sessions only.
+
+    Degrades gracefully: a session whose read fails is still listed with ``available=False`` so the
+    page never fails on one bad session; when the client is a stub (None) no reads are attempted and
+    every session is marked unavailable. Returns ``{"rows": [...], "totals": {...}}``."""
+    rows = []
+    totals = {"sessions": 0, "total_tokens": 0}
+    for s in sessions:
+        row = dict(s)
+        totals["sessions"] += 1
+        if sessions_client is None:
+            row["available"] = False
+            rows.append(row)
+            continue
+        try:
+            snap = sessions_client.usage_snapshot(s["session_id"])
+        except Exception:  # noqa: BLE001 - one unreadable session must not fail the page
+            row["available"] = False
+            rows.append(row)
+            continue
+        tokens = sum(
+            v or 0 for v in (snap.get("input"), snap.get("output"),
+                             snap.get("cache_read"), snap.get("cache_creation"))
+        )
+        row.update({
+            "available": True,
+            "input_tokens": snap.get("input"),
+            "output_tokens": snap.get("output"),
+            "cache_read_tokens": snap.get("cache_read"),
+            "cache_creation_tokens": snap.get("cache_creation"),
+            "total_tokens": tokens,
+            "active_seconds": snap.get("active_seconds"),
+            "wall_clock_seconds": snap.get("wall_clock_seconds"),
+            "status": snap.get("status"),
+        })
+        totals["total_tokens"] += tokens
+        rows.append(row)
+    return {"rows": rows, "totals": totals}
+
+
 def _base_record(store, session_row: dict, deletion_path: str) -> dict:
     """The record fields knowable from local state alone, used for every record (a full capture
     layers metrics on top). Reads ``session_row`` defensively with ``.get`` so a thin row (the

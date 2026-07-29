@@ -267,6 +267,77 @@ class Store:
                 (session_id,),
             ).fetchone()
 
+    def list_all_sessions(self) -> list[dict]:
+        """Every live session across all users, with the owner's email — the cross-user live list
+        behind /all-stats. Not owner-scoped (the operator view acts as no single user)."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                """
+                SELECT s.session_id, s.user_id, u.email AS user_email, s.agent_id,
+                       s.title, s.created_at, s.auto_delete_at
+                FROM sessions s JOIN users u ON u.id = s.user_id
+                ORDER BY s.created_at DESC
+                """
+            ).fetchall()
+
+    # Total tokens = the four usage columns summed, treating unread (NULL) metrics as 0.
+    _ANALYTICS_TOKENS = (
+        "COALESCE(input_tokens,0) + COALESCE(output_tokens,0) "
+        "+ COALESCE(cache_read_tokens,0) + COALESCE(cache_creation_tokens,0)"
+    )
+
+    def session_analytics_totals(self, user_id: int | None = None) -> dict:
+        """Aggregate totals over deleted-session records. Scoped to one user when ``user_id`` is
+        given (the /stats page), else across all users (/all-stats). Sums are 0 on an empty set."""
+        where, params = ("WHERE user_id = %s", (user_id,)) if user_id is not None else ("", ())
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"""
+                SELECT
+                    count(*)                                   AS sessions,
+                    COALESCE(sum(input_tokens),0)              AS input_tokens,
+                    COALESCE(sum(output_tokens),0)             AS output_tokens,
+                    COALESCE(sum(cache_read_tokens),0)         AS cache_read_tokens,
+                    COALESCE(sum(cache_creation_tokens),0)     AS cache_creation_tokens,
+                    COALESCE(sum({self._ANALYTICS_TOKENS}),0)  AS total_tokens,
+                    COALESCE(sum(tool_use_count),0)            AS tool_use_count,
+                    COALESCE(sum(error_count),0)               AS error_count,
+                    COALESCE(sum(CASE WHEN capture_incomplete THEN 1 ELSE 0 END),0) AS incomplete
+                FROM session_analytics {where}
+                """,
+                params,
+            ).fetchone()
+
+    def session_analytics_daily(self, user_id: int | None = None) -> list[dict]:
+        """Per-day buckets of deleted-session count and total tokens, oldest first — the over-time
+        view (R12). Scoped to one user when ``user_id`` is given, else across all users."""
+        where, params = ("WHERE user_id = %s", (user_id,)) if user_id is not None else ("", ())
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"""
+                SELECT date_trunc('day', deleted_at) AS day,
+                       count(*)                       AS sessions,
+                       COALESCE(sum({self._ANALYTICS_TOKENS}),0) AS tokens
+                FROM session_analytics {where}
+                GROUP BY day ORDER BY day
+                """,
+                params,
+            ).fetchall()
+
+    def session_analytics_by_user(self) -> list[dict]:
+        """Per-user totals over deleted-session records (the 'sessions per user' dimension of the
+        /all-stats view), busiest first. Cross-user; keyed by the denormalized email."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"""
+                SELECT COALESCE(user_email, '(unknown)') AS user_email,
+                       count(*)                          AS sessions,
+                       COALESCE(sum({self._ANALYTICS_TOKENS}),0) AS tokens
+                FROM session_analytics
+                GROUP BY user_email ORDER BY tokens DESC, sessions DESC
+                """
+            ).fetchall()
+
     # --- scheduled runs --------------------------------------------------------
     # CRUD here is owner-scoped (the Settings UI). The scanner's cross-user claim/complete
     # live below in the "scheduled runs (scanner)" section.

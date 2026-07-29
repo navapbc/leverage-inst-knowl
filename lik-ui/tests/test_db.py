@@ -339,3 +339,53 @@ def test_list_sessions_due_carries_agent_and_created_at(store):
     due = store.list_sessions_due(datetime.now(timezone.utc))
     assert len(due) == 1
     assert due[0]["agent_id"] == "agent_7" and due[0]["created_at"] is not None
+
+
+def _seed_analytics(store, session_id, user_id, email, tokens, path="prune"):
+    store.write_session_analytics({
+        "session_id": session_id, "user_id": user_id, "user_email": email,
+        "deletion_path": path, "input_tokens": tokens, "output_tokens": 0,
+        "cache_read_tokens": 0, "cache_creation_tokens": 0,
+        "tool_use_count": 2, "error_count": 1,
+    })
+
+
+def test_analytics_totals_scope_own_vs_all(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    _seed_analytics(store, "s1", a["id"], "a@navapbc.com", 100)
+    _seed_analytics(store, "s2", a["id"], "a@navapbc.com", 50)
+    _seed_analytics(store, "s3", b["id"], "b@navapbc.com", 10)
+    own = store.session_analytics_totals(a["id"])
+    assert own["sessions"] == 2 and own["total_tokens"] == 150 and own["tool_use_count"] == 4
+    all_users = store.session_analytics_totals()
+    assert all_users["sessions"] == 3 and all_users["total_tokens"] == 160
+
+
+def test_analytics_totals_empty_is_zeroed(store):
+    a = store.upsert_user("a@navapbc.com")
+    t = store.session_analytics_totals(a["id"])
+    assert t["sessions"] == 0 and t["total_tokens"] == 0 and t["error_count"] == 0
+
+
+def test_analytics_daily_buckets_and_by_user(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    _seed_analytics(store, "s1", a["id"], "a@navapbc.com", 100)
+    _seed_analytics(store, "s2", b["id"], "b@navapbc.com", 40)
+    daily = store.session_analytics_daily()
+    assert sum(row["sessions"] for row in daily) == 2
+    assert sum(row["tokens"] for row in daily) == 140
+    by_user = store.session_analytics_by_user()
+    assert by_user[0]["user_email"] == "a@navapbc.com" and by_user[0]["tokens"] == 100
+    assert {r["user_email"] for r in by_user} == {"a@navapbc.com", "b@navapbc.com"}
+
+
+def test_list_all_sessions_spans_users_with_email(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    store.create_session(a["id"], "agent_1", "s1")
+    store.create_session(b["id"], "agent_1", "s2")
+    rows = store.list_all_sessions()
+    assert {r["session_id"] for r in rows} == {"s1", "s2"}
+    assert {r["user_email"] for r in rows} == {"a@navapbc.com", "b@navapbc.com"}
