@@ -68,4 +68,4 @@ jobs:
       # the "Deploy skills to Claude platform" workflow (deploy-skills.yml).
       - name: Deploy agent(s), their skills, and environment(s)
         working-directory: scripts
-        run: uv run python deploy_agents.py --agent "${{ inputs.agent }}"
+        run: uv run --frozen python deploy_agents.py --agent "${{ inputs.agent }}"
