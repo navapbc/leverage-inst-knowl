@@ -183,7 +183,7 @@ boost; downs **soft-demote, never hide**; weight `edited_since=false` votes more
 Offer least-typing feedback:
 
 > *"Was a cited source right or wrong? Reply with its number to vouch it was right (e.g. `2`), or the number with a
-> trailing `-` to flag it was wrong (e.g. `2-`). Multiple separated by spaces or commas."*
+> trailing `-` to flag it was wrong (e.g. `2-`). Separate multiple sources with a space or comma."*
 
 A bare number (or trailing `+`) = **up**; a trailing `-` = **down**. On a down, ask one pick — *bad retrieval*
 (poor/irrelevant) or *wrong content* (factually wrong); on wrong content, ask what's wrong (capture as `comment`) and,
