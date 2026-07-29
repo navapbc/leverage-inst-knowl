@@ -332,3 +332,18 @@ def test_create_schedule_requires_login(db):
     )
     assert r.status_code == 303
     assert r.headers["location"] == "/login"
+
+
+def test_delete_all_sessions_captures_analytics_for_each(db):
+    # R6: delete-all routes every session through capture, tagged 'delete_all'.
+    sc = FakeSessionsClient()
+    client, _ = _client(db, sessions_client=sc)
+    user = Store(db).get_user_by_email("alice@navapbc.com")
+    Store(db).create_session(user["id"], "agent_1", "sess_a", "Chat A")
+    Store(db).create_session(user["id"], "agent_1", "sess_b", "Chat B")
+
+    client.post("/settings/sessions/delete-all")
+    for sid in ("sess_a", "sess_b"):
+        rec = Store(db).get_session_analytics(sid)
+        assert rec is not None and rec["deletion_path"] == "delete_all"
+        assert rec["capture_incomplete"] is False

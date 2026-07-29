@@ -139,3 +139,41 @@ def test_main_fails_closed_when_prod_api_key_missing(monkeypatch):
     monkeypatch.setattr(prune, "prune_due_sessions", _should_not_run)
     # Fails closed BEFORE constructing the store or deleting anything.
     assert prune.main() == 1
+
+
+class RichFakePlatform(FakePlatform):
+    """FakePlatform extended with the read surface capture needs (usage_snapshot + list_events)
+    so a prune can write a full, unflagged analytics record."""
+
+    def usage_snapshot(self, session_id):
+        return {"input": 5, "output": 3, "cache_read": 0, "cache_creation": 0,
+                "active_seconds": 1.0, "wall_clock_seconds": 2.0, "status": "idle",
+                "created_at": None, "agent": "agent_1"}
+
+    def list_events(self, session_id):
+        return iter([{"type": "user", "text": "q"}, {"type": "text", "text": "a"}])
+
+
+def test_prune_writes_one_analytics_record_per_due_session(store):
+    a = store.upsert_user("a@navapbc.com")
+    _expire(store, a["id"], "past1")
+    _expire(store, a["id"], "past2")
+    result = prune_due_sessions(store, RichFakePlatform())
+    assert result == PruneResult(deleted=2, failed=0)
+    for sid in ("past1", "past2"):
+        rec = store.get_session_analytics(sid)
+        assert rec is not None and rec["deletion_path"] == "prune"
+        assert rec["capture_incomplete"] is False and rec["input_tokens"] == 5
+        assert rec["user_message_count"] == 1 and rec["ai_message_count"] == 1
+
+
+def test_prune_records_even_when_platform_delete_fails(store):
+    a = store.upsert_user("a@navapbc.com")
+    _expire(store, a["id"], "boom")
+    _expire(store, a["id"], "ok")
+    result = prune_due_sessions(store, RichFakePlatform(raise_on={"boom"}))
+    assert result == PruneResult(deleted=1, failed=1)
+    # The failed session's row survives, but its analytics record was still captured beforehand.
+    assert store.get_session("boom", a["id"]) is not None
+    assert store.get_session_analytics("boom") is not None
+    assert store.get_session_analytics("ok") is not None

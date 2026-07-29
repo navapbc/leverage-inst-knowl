@@ -25,6 +25,7 @@ from typing import Protocol
 _SSE_HEARTBEAT_SECONDS = 15
 
 from .account import CADENCE_UNITS, MAX_CADENCE_COUNT, parse_cadence
+from .analytics import capture_session_analytics
 from .settings import Settings
 from .vault import ensure_user_vault
 
@@ -465,10 +466,12 @@ def register_chat_routes(app) -> None:
         session = request.app.state.store.get_session(session_id, user["id"])
         if not session:
             return RedirectResponse("/sessions", status_code=303)
+        # Capture analytics before anything is destroyed — the transcript is still readable here.
+        sessions_client: SessionsClient | None = request.app.state.sessions_client
+        capture_session_analytics(request.app.state.store, sessions_client, session, "manual")
         # Delete the platform session first so its retained data is actually removed; only
         # then drop the local row, keeping the list honest (a listed session still exists on
         # the platform). Stub/test mode has no platform session, so it deletes the row alone.
-        sessions_client: SessionsClient | None = request.app.state.sessions_client
         if sessions_client is not None:
             try:
                 sessions_client.delete_session(session_id)
@@ -568,9 +571,13 @@ def register_chat_routes(app) -> None:
             events = list(sessions_client.list_events(session["session_id"]))
             status = sessions_client.status(session["session_id"])
         except SessionNotFound:
-            # Platform session is gone (workspace switch or out-of-band delete). Drop the
-            # stale local row (owner-scoped) so it stops listing and erroring, and tell the
-            # client it's gone so it can send the user back to the sessions list.
+            # Platform session is gone (workspace switch or out-of-band delete). Capture a
+            # flagged "lost before capture" record so even a platform-lost session is counted
+            # (R9), then drop the stale local row (owner-scoped) so it stops listing and
+            # erroring, and tell the client it's gone so it can send the user back to the list.
+            capture_session_analytics(
+                request.app.state.store, sessions_client, session, "self_heal", platform_lost=True
+            )
             request.app.state.store.delete_session(session["session_id"], user["id"])
             return JSONResponse(
                 {"detail": "Session is not in the current workspace; session removed.", "gone": True},

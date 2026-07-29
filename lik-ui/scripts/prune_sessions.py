@@ -22,6 +22,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from lik_ui.analytics import capture_session_analytics
 from lik_ui.chat import SessionsClient, build_sessions_client
 from lik_ui.db import Database, Store
 from lik_ui.settings import Settings
@@ -43,6 +44,9 @@ def prune_due_sessions(
     failed = 0
     for s in store.list_sessions_due(now):
         session_id = s["session_id"]
+        # Capture analytics before the transcript is destroyed. Never raises, so it can't abort
+        # the run; a read failure yields a flagged record (see capture_session_analytics).
+        capture_session_analytics(store, sessions_client, s, "prune")
         # Platform first (idempotent — a session already gone on the platform is a success).
         # A failure here is isolated: skip the row so it retries next run, and keep going.
         if sessions_client is not None:

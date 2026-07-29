@@ -58,6 +58,13 @@ class FakeSessionsClient:
             raise SessionNotFound(session_id)
         yield from self.history
 
+    def usage_snapshot(self, session_id):
+        if self.not_found:
+            raise SessionNotFound(session_id)
+        return {"input": 12, "output": 8, "cache_read": 0, "cache_creation": 0,
+                "active_seconds": 1.0, "wall_clock_seconds": 2.0, "status": self.session_status,
+                "created_at": None, "agent": "agent_1"}
+
 
 class FakeAgentsClient:
     """Minimal agents client so the untitled-chat default can read the agent's label and the
@@ -1080,3 +1087,33 @@ def test_usage_snapshot_raises_session_not_found_when_gone():
     client._client = SimpleNamespace(beta=SimpleNamespace(sessions=SimpleNamespace(retrieve=_gone)))
     with pytest.raises(SessionNotFound):
         client.usage_snapshot("sesn_gone")
+
+
+def test_delete_session_captures_analytics_before_removal(db):
+    # AE1 / R5, R6: a manual delete writes exactly one unflagged analytics record, tagged 'manual'.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    client.post("/sessions/delete", data={"session_id": session_id})
+    rec = Store(db).get_session_analytics(session_id)
+    assert rec is not None
+    assert rec["deletion_path"] == "manual" and rec["capture_incomplete"] is False
+    assert rec["input_tokens"] == 12  # from usage_snapshot, captured before deletion
+
+
+def test_self_heal_captures_flagged_record_and_returns_410(db):
+    # AE3 / R9: a session gone from the platform still yields a flagged 'self_heal' record.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    sc.not_found = True  # platform session vanished out-of-band
+    r = client.get(f"/chat/{session_id}/history")
+    assert r.status_code == 410 and r.json().get("gone") is True
+    rec = Store(db).get_session_analytics(session_id)
+    assert rec is not None
+    assert rec["deletion_path"] == "self_heal" and rec["capture_incomplete"] is True
+    assert Store(db).get_session(session_id, _owner_id(db)) is None  # stale row dropped
