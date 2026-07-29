@@ -63,4 +63,4 @@ jobs:
 
       - name: Deploy skill(s)
         working-directory: scripts
-        run: uv run python deploy_skills.py --skill "${{ inputs.skill }}"
+        run: uv run --frozen python deploy_skills.py --skill "${{ inputs.skill }}"

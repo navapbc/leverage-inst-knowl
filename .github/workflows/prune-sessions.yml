@@ -95,7 +95,7 @@ jobs:
 
       - name: Prune expired sessions
         working-directory: lik-ui
-        run: uv run python scripts/prune_sessions.py
+        run: uv run --frozen python scripts/prune_sessions.py
 
       # This is the only alerting for an otherwise-invisible unattended job: a failed run (bad
       # credentials, DB unreachable, a partial-failure non-zero exit) opens a tracking issue so
