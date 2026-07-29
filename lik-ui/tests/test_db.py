@@ -389,3 +389,26 @@ def test_list_all_sessions_spans_users_with_email(store):
     rows = store.list_all_sessions()
     assert {r["session_id"] for r in rows} == {"s1", "s2"}
     assert {r["user_email"] for r in rows} == {"a@navapbc.com", "b@navapbc.com"}
+
+
+def test_analytics_totals_split_mcp_vs_builtin_tool_calls(store):
+    u = store.upsert_user("a@navapbc.com")
+    store.write_session_analytics({
+        "session_id": "s1", "user_id": u["id"], "deletion_path": "prune", "tool_use_count": 5,
+        "tool_breakdown": {"tools": {"search": 3, "think": 2},
+                           "servers": {"atlassian": 3, "builtin": 2}},
+    })
+    store.write_session_analytics({
+        "session_id": "s2", "user_id": u["id"], "deletion_path": "prune", "tool_use_count": 4,
+        "tool_breakdown": {"tools": {"get_pr": 4}, "servers": {"github": 4}},
+    })
+    # A flagged record with no tool_breakdown contributes 0 to the split (and null-safe).
+    store.write_session_analytics({
+        "session_id": "s3", "user_id": u["id"], "deletion_path": "self_heal", "capture_incomplete": True,
+    })
+    t = store.session_analytics_totals(u["id"])
+    assert t["tool_use_count"] == 9
+    assert t["mcp_tool_calls"] == 7      # atlassian 3 + github 4
+    assert t["builtin_tool_calls"] == 2  # builtin 2
+    # The split reconciles to the total (no calls fall outside a server bucket).
+    assert t["mcp_tool_calls"] + t["builtin_tool_calls"] == t["tool_use_count"]

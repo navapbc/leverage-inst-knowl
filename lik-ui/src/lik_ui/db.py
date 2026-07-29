@@ -309,10 +309,22 @@ class Store:
                     COALESCE(sum(cache_read_tokens),0)         AS cache_read_tokens,
                     COALESCE(sum(cache_creation_tokens),0)     AS cache_creation_tokens,
                     COALESCE(sum({self._ANALYTICS_TOKENS}),0)  AS total_tokens,
-                    COALESCE(sum(tool_use_count),0)            AS tool_use_count,
+                    COALESCE(sum(sa.tool_use_count),0)         AS tool_use_count,
+                    -- MCP vs. built-in split, derived from the per-server counts in tool_breakdown
+                    -- (every tool call is bucketed by server name, built-ins under 'builtin'), so it
+                    -- needs no dedicated column and reconciles to tool_use_count.
+                    COALESCE(sum(t.mcp),0)                     AS mcp_tool_calls,
+                    COALESCE(sum(t.builtin),0)                 AS builtin_tool_calls,
                     COALESCE(sum(error_count),0)               AS error_count,
                     COALESCE(sum(CASE WHEN capture_incomplete THEN 1 ELSE 0 END),0) AS incomplete
-                FROM session_analytics {where}
+                FROM session_analytics sa
+                LEFT JOIN LATERAL (
+                    SELECT
+                        COALESCE(sum(CASE WHEN kv.key <> 'builtin' THEN kv.value::int END),0) AS mcp,
+                        COALESCE(sum(CASE WHEN kv.key =  'builtin' THEN kv.value::int END),0) AS builtin
+                    FROM jsonb_each_text(COALESCE(sa.tool_breakdown->'servers', '{{}}'::jsonb)) AS kv
+                ) t ON true
+                {where}
                 """,
                 params,
             ).fetchone()

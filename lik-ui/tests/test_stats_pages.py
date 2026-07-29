@@ -71,7 +71,7 @@ def test_stats_live_section_shows_cumulative_only(db):
     client.get("/chat?agent_id=agent_1")  # create a live session
     text = client.get("/stats").text
     assert "Live sessions" in text and "usage unavailable" not in text
-    assert "tool calls" in text  # that label belongs to the DELETED totals grid...
+    assert "Tool calls" in text  # that label belongs to the DELETED totals table...
     # ...but the live table never emits per-tool breakdown markup.
     assert "tool_breakdown" not in text
 
@@ -149,3 +149,26 @@ def test_stats_live_table_shows_local_row_fields(db):
     # Once shared, the flag flips.
     Store(db).set_session_shared(session_id, _owner_id(db), True)
     assert "Shared" in client.get("/stats").text
+
+
+def test_stats_live_table_shows_input_output_columns(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1")
+    text = client.get("/stats").text
+    assert "<th class=\"num\">Input</th>" in text and "<th class=\"num\">Output</th>" in text
+    assert ">12<" in text and ">8<" in text  # FakeSessionsClient snapshot input=12, output=8
+
+
+def test_deleted_totals_show_mcp_split(db):
+    client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
+    _login(client)
+    store = Store(db)
+    store.write_session_analytics({
+        "session_id": "s1", "user_id": _owner_id(db), "user_email": "alice@navapbc.com",
+        "deletion_path": "prune", "tool_use_count": 3,
+        "tool_breakdown": {"tools": {"search": 2, "think": 1}, "servers": {"atlassian": 2, "builtin": 1}},
+    })
+    text = client.get("/stats").text
+    assert ">MCP<" in text and ">Non-MCP<" in text
