@@ -46,8 +46,8 @@ so it's a partial view when an answer spans many sources.
 everything into a new system, and makes connecting each source point-and-click rather than a
 technical chore. The agents and their skills are maintained centrally, so everyone is always
 on the latest version without doing anything. Sessions can also be shared read-only so others
-can see how you worked with the agent and build on it (see [Can I share a chat session with
-others?](#can-i-share-a-chat-session-with-others)). Limitations: it's an early system with rough
+can see how you worked with the agent and build on it (see [Share a chat session with
+others](#share-a-chat-session-with-others)). Limitations: it's an early system with rough
 edges (see below), and it only reaches sources that have a supported connector.
 
 ## What can the agent do, and how does it work?
