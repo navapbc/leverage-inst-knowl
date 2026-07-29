@@ -143,7 +143,7 @@ def test_stats_live_table_shows_local_row_fields(db):
     _login(client)
     session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
     text = client.get("/stats").text
-    assert "<th>Created</th>" in text and "<th>Deletes</th>" in text and "<th>Shared</th>" in text
+    assert "<th>Created</th>" in text and "<th>Deletes on</th>" in text and "<th>Shared</th>" in text
     assert 'data-format="date"' in text  # dated cells rendered via tz.js
     assert "Private" in text             # a fresh session is private by default
     # Once shared, the flag flips.
@@ -157,7 +157,7 @@ def test_stats_live_table_shows_input_output_columns(db):
     _login(client)
     client.get("/chat?agent_id=agent_1")
     text = client.get("/stats").text
-    assert "<th class=\"num\">Input</th>" in text and "<th class=\"num\">Output</th>" in text
+    assert '<th class="num">Input tokens</th>' in text and '<th class="num">Output tokens</th>' in text
     assert ">12<" in text and ">8<" in text  # FakeSessionsClient snapshot input=12, output=8
 
 
