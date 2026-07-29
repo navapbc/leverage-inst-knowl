@@ -234,8 +234,9 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 /* Over-time bars: one labelled row per day, bar width is a server-computed percentage. */
 .bar-chart { display: flex; flex-direction: column; gap: .3rem; margin: .5rem 0; }
 .bar-row { display: grid; grid-template-columns: 6rem 1fr 11rem; align-items: center; gap: .5rem; font-size: .85rem; }
-.bar-track { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; height: 1rem; overflow: hidden; }
-.bar-fill { background: var(--accent); height: 100%; }
+.bar-track { display: block; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; height: 1rem; overflow: hidden; }
+/* display:block so width/height apply — an inline <span> would ignore them and collapse the fill. */
+.bar-fill { display: block; background: var(--accent); height: 100%; min-width: 1px; }
 .bar-value { color: var(--muted); text-align: right; white-space: nowrap; }
 /* Tables reused for the per-user and live-session lists. */
 .stats-table { width: 100%; border-collapse: collapse; font-size: .88rem; }

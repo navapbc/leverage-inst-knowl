@@ -65,13 +65,13 @@
     <tbody>
       <tr><th scope="row">Sessions</th><td class="num">{{ "{:,}".format(d.sessions) }}</td></tr>
       <tr><th scope="row">Total tokens</th><td class="num">{{ "{:,}".format(d.total_tokens) }}</td></tr>
-      <tr class="sub"><td>Input</td><td class="num">{{ "{:,}".format(d.input_tokens) }}</td></tr>
-      <tr class="sub"><td>Output</td><td class="num">{{ "{:,}".format(d.output_tokens) }}</td></tr>
+      <tr class="sub"><td>Input tokens</td><td class="num">{{ "{:,}".format(d.input_tokens) }}</td></tr>
+      <tr class="sub"><td>Output tokens</td><td class="num">{{ "{:,}".format(d.output_tokens) }}</td></tr>
       <tr class="sub"><td>Cache read</td><td class="num">{{ "{:,}".format(d.cache_read_tokens) }}</td></tr>
       <tr class="sub"><td>Cache creation</td><td class="num">{{ "{:,}".format(d.cache_creation_tokens) }}</td></tr>
       <tr><th scope="row">Tool calls</th><td class="num">{{ "{:,}".format(d.tool_use_count) }}</td></tr>
-      <tr class="sub"><td>MCP</td><td class="num">{{ "{:,}".format(d.mcp_tool_calls) }}</td></tr>
-      <tr class="sub"><td>Non-MCP</td><td class="num">{{ "{:,}".format(d.builtin_tool_calls) }}</td></tr>
+      <tr class="sub"><td>MCP tool calls</td><td class="num">{{ "{:,}".format(d.mcp_tool_calls) }}</td></tr>
+      <tr class="sub"><td>Builtin tool calls</td><td class="num">{{ "{:,}".format(d.builtin_tool_calls) }}</td></tr>
       <tr><th scope="row">Errors</th><td class="num">{{ "{:,}".format(d.error_count) }}</td></tr>
       {% if d.incomplete %}
       <tr class="flagged"><th scope="row">Incomplete captures</th><td class="num">{{ "{:,}".format(d.incomplete) }}</td></tr>

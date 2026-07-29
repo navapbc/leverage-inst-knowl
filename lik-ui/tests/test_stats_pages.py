@@ -171,4 +171,4 @@ def test_deleted_totals_show_mcp_split(db):
         "tool_breakdown": {"tools": {"search": 2, "think": 1}, "servers": {"atlassian": 2, "builtin": 1}},
     })
     text = client.get("/stats").text
-    assert ">MCP<" in text and ">Non-MCP<" in text
+    assert "MCP tool calls" in text and "Builtin tool calls" in text
