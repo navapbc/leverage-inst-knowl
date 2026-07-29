@@ -190,6 +190,16 @@ Build the image:
 docker build -t lik-mcp .
 ```
 
+The build installs the **exact dependency set pinned in `uv.lock`** (it exports the lock to a
+frozen requirements set, then `pip install`s that), not a live re-resolution of the `>=` ranges in
+`pyproject.toml`. So the image is reproducible and a dependency's breaking major release can't
+sneak in on build date — that's what crashed a deploy when an unpinned build resolved `mcp 2.0`
+(hence the belt-and-suspenders `mcp[cli]...,<2` cap, which stays until the 2.x API migration). A
+stale lock (lock out of sync with `pyproject.toml`) fails the build loudly rather than resolving
+something else. To bump dependencies, run `uv lock --upgrade` (all) or `uv lock --upgrade-package
+<name>` (one), commit the lock diff, and let the deploy workflow's smoke-boot step verify the new
+image imports and serves before it is pushed.
+
 **1. Initialize the database first.** The image's entrypoint only creates the local
 `likdb_test` / `likdb_local` databases. Point at your real database and apply the schema
 once before serving — see [Initialize a deployed database](#initialize-a-deployed-database)
