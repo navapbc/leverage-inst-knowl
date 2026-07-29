@@ -8,7 +8,8 @@
   --card: #fff;                 /* cards and nested surfaces (pre blocks, detail panels) */
   --btn-fg: #fff;               /* text on an accent-filled button */
   --btn-secondary-bg: #fff;     /* secondary (outline) button fill */
-  --danger: #c05621;
+  --danger: #c53030;            /* red — destructive, irreversible (delete vault) */
+  --warning: #c05621;           /* orange — single-item delete (session, credential) */
   --status-ok: #2f855a; --status-warn: #c05621;
   /* Per-page body tints. */
   --body-agents: #e1ecfd; --body-connections: #dfeaff; --body-sessions: #eafffc; --body-settings: #fdf9ea; --body-stats: #f2f0fb;
@@ -28,7 +29,8 @@
   --card: #1e2126;
   --btn-fg: #10141a;            /* dark text reads better on the lighter dark-mode accent */
   --btn-secondary-bg: #23272e;
-  --danger: #d46a3a;
+  --danger: #e05a5a;
+  --warning: #d46a3a;
   --status-ok: #5fb07f; --status-warn: #f0a072;
   --body-agents: #12203a; --body-connections: #12203a; --body-sessions: #10241f; --body-settings: #2a2413; --body-stats: #1c1830;
   --bubble-user-bg: #16233a; --bubble-user-line: #274063;
@@ -67,6 +69,7 @@ a { color: var(--accent); }
   border-radius: 6px; background: var(--accent); color: var(--btn-fg); text-decoration: none; cursor: pointer; }
 .btn.secondary { background: var(--btn-secondary-bg); color: var(--accent); }
 .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.warning { background: var(--warning); border-color: var(--warning); color: #fff; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .start-chat { display: flex; gap: .5rem; align-items: center; }
 .start-chat input { flex: 1; padding: .5rem .6rem; font-size: 1.2rem; border: 1px solid var(--line); border-radius: 6px; }

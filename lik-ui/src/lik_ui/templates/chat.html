@@ -62,7 +62,7 @@
       <form method="post" action="/sessions/delete"
             onsubmit="return confirm('Delete this session? This permanently removes its data and cannot be undone.');">
         <input type="hidden" name="session_id" value="{{ session.session_id }}">
-        <button class="btn danger" type="submit">Delete session</button>
+        <button class="btn warning" type="submit">Delete session</button>
       </form>
     {% endif %}
   </details>
