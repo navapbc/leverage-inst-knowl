@@ -19,7 +19,21 @@ class Database:
     connections through ``connection()`` and never open their own."""
 
     def __init__(self, conninfo: str, *, min_size: int = 1, max_size: int = 4):
-        self.pool = ConnectionPool(conninfo, min_size=min_size, max_size=max_size, open=True, timeout=5)
+        # check on checkout: the scheduled-runs scanner borrows a connection for claim_due_runs,
+        # then holds the pool idle for a whole multi-minute agent run (no DB traffic) before the
+        # terminal complete_run. The public Postgres/network silently drops that idle connection,
+        # so an unchecked pool would hand back a dead socket and the final write would fail with
+        # "SSL error: unexpected eof while reading" — losing the run's recorded outcome.
+        # check_connection validates (and the pool reconnects) on checkout, so a stale connection
+        # is replaced before use instead of erroring mid-write.
+        self.pool = ConnectionPool(
+            conninfo,
+            min_size=min_size,
+            max_size=max_size,
+            open=True,
+            timeout=5,
+            check=ConnectionPool.check_connection,
+        )
 
     @contextmanager
     def connection(self):
