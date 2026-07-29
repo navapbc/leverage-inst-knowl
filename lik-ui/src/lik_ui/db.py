@@ -244,8 +244,14 @@ class Store:
         """Upsert one analytics record keyed on ``session_id``. ``record`` supplies any subset of
         the analytics columns; ``session_id``, ``user_id`` and ``deletion_path`` are required, the
         rest default (``deleted_at`` to now(), ``capture_incomplete`` to false, metrics to NULL).
-        A second write for the same session overwrites the first, so capture is idempotent across
-        a re-attempted deletion."""
+
+        A second write for the same session upserts in place (exactly one record), but a *flagged*
+        (incomplete) write never overwrites an existing *complete* record — see the WHERE guard
+        below. That handles the re-attempted-deletion case: a first attempt captures a full record,
+        the platform delete fails so the row survives, and a later retry can only re-read after the
+        platform session is gone. Without the guard that degraded retry would flip a complete row to
+        capture_incomplete=true while leaving its real metrics in place — a self-contradictory row
+        that also over-counts the incomplete tally. A complete capture still always wins."""
         cols = [c for c in self._ANALYTICS_COLS if c in record]
         values = [Json(record[c]) if c in self._ANALYTICS_JSON_COLS else record[c] for c in cols]
         placeholders = ", ".join(["%s"] * len(cols))
@@ -254,7 +260,10 @@ class Store:
         with self.db.connection() as conn:
             conn.execute(
                 f"INSERT INTO session_analytics ({', '.join(cols)}) VALUES ({placeholders}) "
-                f"ON CONFLICT (session_id) DO UPDATE SET {updates}",
+                f"ON CONFLICT (session_id) DO UPDATE SET {updates} "
+                # Update only when the stored row is itself incomplete, or the incoming row is
+                # complete — so an incomplete retry can't clobber a good, complete capture.
+                "WHERE session_analytics.capture_incomplete OR NOT EXCLUDED.capture_incomplete",
                 values,
             )
             conn.commit()

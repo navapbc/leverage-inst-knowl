@@ -213,3 +213,32 @@ def test_live_section_degrades_on_one_unreadable_session():
 def test_live_section_stub_client_marks_all_unavailable():
     out = build_live_section(None, [{"session_id": "s1"}])
     assert out["rows"][0]["available"] is False and out["totals"]["total_tokens"] == 0
+
+
+def test_incomplete_recapture_does_not_clobber_complete_record(store):
+    # Finding A: attempt 1 captures a full record; a later degraded retry (platform now gone) must
+    # NOT flip it to incomplete or wipe its metrics. A complete capture is authoritative.
+    row = _session_row(store)
+    snap = {"input": 100, "output": 40, "cache_read": 10, "cache_creation": 7,
+            "active_seconds": 1.0, "wall_clock_seconds": 2.0, "status": "idle",
+            "created_at": None, "agent": "agent_1"}
+    capture_session_analytics(store, FakeCapturePlatform(snapshot=snap, events=[]), row, "manual")
+    # Retry after the platform session is gone -> incomplete read.
+    capture_session_analytics(store, FakeCapturePlatform(raise_on_read=True), row, "manual")
+    rec = store.get_session_analytics("s1")
+    assert rec["capture_incomplete"] is False       # stays complete
+    assert rec["input_tokens"] == 100                # real metrics preserved
+    assert rec["capture_reason"] is None
+
+
+def test_complete_capture_overwrites_a_prior_incomplete_record(store):
+    # The reverse transition: an incomplete first attempt is upgraded by a later complete one.
+    row = _session_row(store)
+    capture_session_analytics(store, FakeCapturePlatform(raise_on_read=True), row, "manual")
+    assert store.get_session_analytics("s1")["capture_incomplete"] is True
+    snap = {"input": 55, "output": 0, "cache_read": 0, "cache_creation": 0,
+            "active_seconds": None, "wall_clock_seconds": None, "status": "idle",
+            "created_at": None, "agent": "agent_1"}
+    capture_session_analytics(store, FakeCapturePlatform(snapshot=snap, events=[]), row, "manual")
+    rec = store.get_session_analytics("s1")
+    assert rec["capture_incomplete"] is False and rec["input_tokens"] == 55

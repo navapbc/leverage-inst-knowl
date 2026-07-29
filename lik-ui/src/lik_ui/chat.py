@@ -571,14 +571,17 @@ def register_chat_routes(app) -> None:
             events = list(sessions_client.list_events(session["session_id"]))
             status = sessions_client.status(session["session_id"])
         except SessionNotFound:
-            # Platform session is gone (workspace switch or out-of-band delete). Capture a
-            # flagged "lost before capture" record so even a platform-lost session is counted
-            # (R9), then drop the stale local row (owner-scoped) so it stops listing and
-            # erroring, and tell the client it's gone so it can send the user back to the list.
-            capture_session_analytics(
-                request.app.state.store, sessions_client, session, "self_heal", platform_lost=True
-            )
-            request.app.state.store.delete_session(session["session_id"], user["id"])
+            # Platform session is gone (workspace switch or out-of-band delete). Only the OWNER
+            # self-heals: the local-row delete is owner-scoped, so a non-owner viewer of a shared
+            # session would delete nothing — and must not write a "deleted" analytics record for a
+            # row that still lives (that would double-count it across the live and deleted sections
+            # until the owner reconciles). For the owner, capture a flagged "lost before capture"
+            # record so even a platform-lost session is counted (R9), then drop the stale row.
+            if session["user_id"] == user["id"]:
+                capture_session_analytics(
+                    request.app.state.store, sessions_client, session, "self_heal", platform_lost=True
+                )
+                request.app.state.store.delete_session(session["session_id"], user["id"])
             return JSONResponse(
                 {"detail": "Session is not in the current workspace; session removed.", "gone": True},
                 status_code=410,
