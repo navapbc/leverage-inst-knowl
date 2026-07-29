@@ -170,10 +170,11 @@ jobs:
     environment: prod
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
-      # Single deployment environment, so the custom-domain URLs are hardcoded here (they
-      # must be passed, or the empty default detaches the live domain — see infra/lik_ui.tf).
-      MCP_CUSTOM_DOMAIN_URL: https://mcp.lik.navapbc.com
-      UI_CUSTOM_DOMAIN_URL: https://ui.lik.navapbc.com
+      # Custom-domain URLs come from the prod GitHub environment (Settings → Environments →
+      # prod → Variables). They MUST be set, or the empty Terraform default detaches the live
+      # domain — see infra/lik_ui.tf. infra/tf.sh supplies the same values for local applies.
+      MCP_CUSTOM_DOMAIN_URL: ${{ vars.MCP_CUSTOM_DOMAIN_URL }}
+      UI_CUSTOM_DOMAIN_URL: ${{ vars.UI_CUSTOM_DOMAIN_URL }}
     steps:
       - uses: actions/checkout@v6
 
@@ -236,6 +237,13 @@ jobs:
 
       - name: Terraform init
         run: terraform -chdir=infra init -input=false
+
+      - name: Require custom-domain URLs
+        run: |
+          # Unset GitHub vars resolve to "", which Terraform reads as "detach the live domain".
+          # Fail loud here rather than let a routine image swap silently drop the custom domain.
+          : "${MCP_CUSTOM_DOMAIN_URL:?set vars.MCP_CUSTOM_DOMAIN_URL on the prod GitHub environment}"
+          : "${UI_CUSTOM_DOMAIN_URL:?set vars.UI_CUSTOM_DOMAIN_URL on the prod GitHub environment}"
 
       - name: Terraform plan
         run: |
