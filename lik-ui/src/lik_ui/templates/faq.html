@@ -23,12 +23,63 @@
         // libs didn't load, fall back to literal text so the FAQ is never lost.
         if (window.marked && window.DOMPurify) {
           target.innerHTML = window.DOMPurify.sanitize(window.marked.parse(body));
+          addSectionLinks(target);
         } else {
           var pre = document.createElement("pre");
           pre.textContent = body;
           target.appendChild(pre);
         }
       })();
+
+      // Give each heading a stable, GitHub-style slug id and a click-to-copy "link" affordance,
+      // so a reader can grab a URL that jumps straight to any section. marked no longer emits
+      // heading ids on its own, so we do it here (this is also what makes in-page links like
+      // #share-a-chat-session-with-others resolve).
+      function slugify(text) {
+        return text.trim().toLowerCase()
+          .replace(/[^\w\s-]/g, "")   // drop punctuation, keep word chars, spaces, hyphens
+          .replace(/\s+/g, "-");
+      }
+      function addSectionLinks(root) {
+        var used = Object.create(null);
+        var headings = root.querySelectorAll("h1, h2, h3, h4, h5, h6");
+        headings.forEach(function (h) {
+          var slug = slugify(h.textContent) || "section";
+          // De-dupe repeated headings the way GitHub does: append -1, -2, ...
+          if (used[slug] != null) { used[slug] += 1; slug = slug + "-" + used[slug]; }
+          else { used[slug] = 0; }
+          h.id = slug;
+
+          var link = document.createElement("a");
+          link.className = "faq-anchor";
+          link.href = "#" + slug;
+          link.setAttribute("aria-label", "Copy link to this section");
+          link.title = "Copy link to this section";
+          link.textContent = "🔗";  // link emoji
+          link.addEventListener("click", function (e) {
+            e.preventDefault();
+            var url = location.origin + location.pathname + "#" + slug;
+            history.replaceState(null, "", "#" + slug);
+            var done = function () {
+              link.classList.add("copied");
+              setTimeout(function () { link.classList.remove("copied"); }, 1200);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(url).then(done, done);
+            } else {
+              done();
+            }
+          });
+          h.appendChild(link);
+        });
+
+        // Content renders after load, so the browser's native jump-to-hash has already run
+        // against an empty page — re-run it once headings exist.
+        if (location.hash) {
+          var el = root.querySelector(CSS.escape ? "#" + CSS.escape(location.hash.slice(1)) : location.hash);
+          if (el) el.scrollIntoView();
+        }
+      }
     </script>
   {% else %}
     <p>The FAQ couldn't be loaded right now —
