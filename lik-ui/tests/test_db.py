@@ -344,7 +344,8 @@ def test_list_sessions_due_carries_agent_and_created_at(store):
 def _seed_analytics(store, session_id, user_id, email, tokens, path="prune"):
     store.write_session_analytics({
         "session_id": session_id, "user_id": user_id, "user_email": email,
-        "deletion_path": path, "input_tokens": tokens, "output_tokens": 0,
+        "deletion_path": path, "created_at": datetime.now(timezone.utc),
+        "input_tokens": tokens, "output_tokens": 0,
         "cache_read_tokens": 0, "cache_creation_tokens": 0,
         "tool_use_count": 2, "error_count": 1,
     })
@@ -368,17 +369,27 @@ def test_analytics_totals_empty_is_zeroed(store):
     assert t["sessions"] == 0 and t["total_tokens"] == 0 and t["error_count"] == 0
 
 
-def test_analytics_daily_buckets_and_by_user(store):
+def test_analytics_series_and_by_user(store):
     a = store.upsert_user("a@navapbc.com")
     b = store.upsert_user("b@navapbc.com")
     _seed_analytics(store, "s1", a["id"], "a@navapbc.com", 100)
     _seed_analytics(store, "s2", b["id"], "b@navapbc.com", 40)
-    daily = store.session_analytics_daily()
-    assert sum(row["sessions"] for row in daily) == 2
-    assert sum(row["tokens"] for row in daily) == 140
+    # Raw per-session series (client buckets by local day); own-scoped vs. all-users.
+    assert len(store.session_analytics_series(a["id"])) == 1
+    series = store.session_analytics_series()
+    assert len(series) == 2 and sum(r["tokens"] for r in series) == 140
+    assert all(r["created_at"] is not None for r in series)
     by_user = store.session_analytics_by_user()
     assert by_user[0]["user_email"] == "a@navapbc.com" and by_user[0]["tokens"] == 100
     assert {r["user_email"] for r in by_user} == {"a@navapbc.com", "b@navapbc.com"}
+
+
+def test_analytics_series_skips_rows_without_created_at(store):
+    a = store.upsert_user("a@navapbc.com")
+    store.write_session_analytics({  # a thin/incomplete capture with no created_at
+        "session_id": "s1", "user_id": a["id"], "deletion_path": "self_heal", "capture_incomplete": True,
+    })
+    assert store.session_analytics_series() == []
 
 
 def test_list_all_sessions_spans_users_with_email(store):
@@ -389,3 +400,26 @@ def test_list_all_sessions_spans_users_with_email(store):
     rows = store.list_all_sessions()
     assert {r["session_id"] for r in rows} == {"s1", "s2"}
     assert {r["user_email"] for r in rows} == {"a@navapbc.com", "b@navapbc.com"}
+
+
+def test_analytics_totals_split_mcp_vs_builtin_tool_calls(store):
+    u = store.upsert_user("a@navapbc.com")
+    store.write_session_analytics({
+        "session_id": "s1", "user_id": u["id"], "deletion_path": "prune", "tool_use_count": 5,
+        "tool_breakdown": {"tools": {"search": 3, "think": 2},
+                           "servers": {"atlassian": 3, "builtin": 2}},
+    })
+    store.write_session_analytics({
+        "session_id": "s2", "user_id": u["id"], "deletion_path": "prune", "tool_use_count": 4,
+        "tool_breakdown": {"tools": {"get_pr": 4}, "servers": {"github": 4}},
+    })
+    # A flagged record with no tool_breakdown contributes 0 to the split (and null-safe).
+    store.write_session_analytics({
+        "session_id": "s3", "user_id": u["id"], "deletion_path": "self_heal", "capture_incomplete": True,
+    })
+    t = store.session_analytics_totals(u["id"])
+    assert t["tool_use_count"] == 9
+    assert t["mcp_tool_calls"] == 7      # atlassian 3 + github 4
+    assert t["builtin_tool_calls"] == 2  # builtin 2
+    # The split reconciles to the total (no calls fall outside a server bucket).
+    assert t["mcp_tool_calls"] + t["builtin_tool_calls"] == t["tool_use_count"]

@@ -308,7 +308,7 @@ def test_sessions_list_flags_session_near_deletion(db):
     Store(db).set_session_auto_delete_at(session_id, _owner_id(db), soon)
     text = client.get("/sessions").text
     assert "delete-warning" in text
-    assert "Deletes in 1 day" in text
+    assert "Auto-deletes in 1 day" in text
 
 
 def test_sessions_list_flags_same_day_deletion_as_today(db):
@@ -318,7 +318,7 @@ def test_sessions_list_flags_same_day_deletion_as_today(db):
     Store(db).set_session_auto_delete_at(session_id, _owner_id(db), datetime.now(timezone.utc) + timedelta(hours=2))
     text = client.get("/sessions").text
     assert "delete-warning" in text
-    assert "Deletes today" in text
+    assert "Auto-deletes today" in text
 
 
 def test_sessions_list_flags_session_at_window_boundary(db):
@@ -340,7 +340,7 @@ def test_sessions_list_shows_local_date_element_when_not_near(db):
     stored = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
     text = client.get("/sessions").text
     assert "delete-warning" not in text
-    assert "Deletes in" not in text
+    assert "Auto-deletes in" not in text  # far-future renders "Auto-deletes on <date>", not a countdown
     assert 'data-format="date"' in text
     assert f'data-utc="{stored.astimezone(timezone.utc).isoformat()}"' in text
     assert " ET" not in text  # the hardcoded zone label is gone
@@ -1133,3 +1133,21 @@ def test_self_heal_by_non_owner_of_shared_session_writes_no_record(db):
     # No analytics record, and the owner's row survives (only the owner can self-heal it).
     assert Store(db).get_session_analytics(session_id) is None
     assert Store(db).get_session(session_id, _owner_id(db)) is not None
+
+
+def test_delete_session_returns_to_stats_when_next_is_stats(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    r = client.post("/sessions/delete", data={"session_id": session_id, "next": "/stats"})
+    assert r.status_code == 303 and r.headers["location"] == "/stats"
+
+
+def test_delete_session_ignores_unsafe_next_and_falls_back_to_sessions(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    r = client.post("/sessions/delete", data={"session_id": session_id, "next": "https://evil.example"})
+    assert r.status_code == 303 and r.headers["location"] == "/sessions"  # open-redirect refused

@@ -1,40 +1,92 @@
 {% extends "base.html" %}
 {% block title %}Usage stats · LIK{% endblock %}
 {% block body_class %}stats-page{% endblock %}
+{% block head %}<script src="/static/stats.js" defer></script>{% endblock %}
 {% block content %}
   <h1>Usage stats — {{ view.scope_label }}</h1>
+
+  {# ---- Live sessions: lightweight per-session read, cumulative numbers only ---- #}
+  <h2>Live sessions</h2>
+  <p class="stats-section-note">Not yet deleted. Cumulative tokens, timing, and status read on demand;
+    per-tool and per-message detail appears only once a session is deleted.</p>
+  {% if view.live.rows %}
+  <p class="stats-section-note">{{ "{:,}".format(view.live.totals.sessions) }} live ·
+    {{ "{:,}".format(view.live.totals.total_tokens) }} tokens</p>
+  <table class="stats-table">
+    <thead>
+      <tr>
+        <th>Session</th>{% if view.per_user is not none %}<th>User</th>{% endif %}
+        <th>Created</th><th>Deletes on</th><th>Shared</th>
+        <th class="num">Input tokens</th><th class="num">Output tokens</th><th class="num">Active (s)</th><th>Status</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in view.live.rows %}
+      <tr>
+        <td><a href="/chat/{{ s.session_id | urlencode }}">{{ s.title or ("Session " ~ s.session_id) }}</a></td>
+        {% if view.per_user is not none %}<td>{{ s.user_email }}</td>{% endif %}
+        {# Local-row fields — always present regardless of the platform read below. #}
+        <td><time data-utc="{{ s.created_at | utc_iso }}" data-format="date">{{ s.created_at | utcformat('%Y-%m-%d') }}</time></td>
+        <td><time data-utc="{{ s.auto_delete_at | utc_iso }}" data-format="date">{{ s.auto_delete_at | utcformat('%Y-%m-%d') }}</time></td>
+        <td>{{ "Shared" if s.shared else "Private" }}</td>
+        {% if s.available %}
+        <td class="num">{{ "{:,}".format(s.input_tokens) if s.input_tokens is not none else "—" }}</td>
+        <td class="num">{{ "{:,}".format(s.output_tokens) if s.output_tokens is not none else "—" }}</td>
+        <td class="num">{{ s.active_seconds | round(1) if s.active_seconds is not none else "—" }}</td>
+        <td>{{ s.status or "—" }}</td>
+        {% else %}
+        <td class="num stats-unavailable" colspan="4">usage unavailable</td>
+        {% endif %}
+        <td class="stats-action">
+          {# Delete is owner-scoped, so only offer it for the viewer's own sessions (on /all-stats
+             a row may belong to another user, where the delete would be a no-op). #}
+          {% if s.user_id == user.id %}
+          <form method="post" action="/sessions/delete"
+                onsubmit="return confirm('Delete this session? This permanently removes its data and cannot be undone.');">
+            <input type="hidden" name="session_id" value="{{ s.session_id }}">
+            <input type="hidden" name="next" value="{{ view.page_path }}">
+            <button class="btn warning" type="submit">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="stats-empty">No live sessions.</p>
+  {% endif %}
 
   {# ---- Deleted sessions: the durable, fully-tallied records ---- #}
   <h2>Deleted sessions</h2>
   <p class="stats-section-note">Full usage captured when each session was deleted. This is where
     per-tool and per-error detail lives.</p>
   {% set d = view.deleted.totals %}
-  <div class="stat-grid">
-    <div class="stat-tile"><div class="stat-value">{{ "{:,}".format(d.sessions) }}</div><div class="stat-label">sessions</div></div>
-    <div class="stat-tile"><div class="stat-value">{{ "{:,}".format(d.total_tokens) }}</div><div class="stat-label">total tokens</div></div>
-    <div class="stat-tile"><div class="stat-value">{{ "{:,}".format(d.input_tokens) }}</div><div class="stat-label">input</div></div>
-    <div class="stat-tile"><div class="stat-value">{{ "{:,}".format(d.output_tokens) }}</div><div class="stat-label">output</div></div>
-    <div class="stat-tile"><div class="stat-value">{{ "{:,}".format(d.cache_read_tokens) }}</div><div class="stat-label">cache read</div></div>
-    <div class="stat-tile"><div class="stat-value">{{ "{:,}".format(d.cache_creation_tokens) }}</div><div class="stat-label">cache creation</div></div>
-    <div class="stat-tile"><div class="stat-value">{{ "{:,}".format(d.tool_use_count) }}</div><div class="stat-label">tool calls</div></div>
-    <div class="stat-tile"><div class="stat-value">{{ "{:,}".format(d.error_count) }}</div><div class="stat-label">errors</div></div>
-    {% if d.incomplete %}
-    <div class="stat-tile flagged"><div class="stat-value">{{ "{:,}".format(d.incomplete) }}</div><div class="stat-label">incomplete captures</div></div>
-    {% endif %}
-  </div>
+  <table class="stats-table totals-table">
+    <tbody>
+      <tr><th scope="row">Sessions</th><td class="num">{{ "{:,}".format(d.sessions) }}</td></tr>
+      <tr><th scope="row">Total tokens</th><td class="num">{{ "{:,}".format(d.total_tokens) }}</td></tr>
+      <tr class="sub"><td>Input tokens</td><td class="num">{{ "{:,}".format(d.input_tokens) }}</td></tr>
+      <tr class="sub"><td>Output tokens</td><td class="num">{{ "{:,}".format(d.output_tokens) }}</td></tr>
+      <tr class="sub"><td>Cache read</td><td class="num">{{ "{:,}".format(d.cache_read_tokens) }}</td></tr>
+      <tr class="sub"><td>Cache creation</td><td class="num">{{ "{:,}".format(d.cache_creation_tokens) }}</td></tr>
+      <tr><th scope="row">Tool calls</th><td class="num">{{ "{:,}".format(d.tool_use_count) }}</td></tr>
+      <tr class="sub"><td>MCP tool calls</td><td class="num">{{ "{:,}".format(d.mcp_tool_calls) }}</td></tr>
+      <tr class="sub"><td>Builtin tool calls</td><td class="num">{{ "{:,}".format(d.builtin_tool_calls) }}</td></tr>
+      <tr><th scope="row">Errors</th><td class="num">{{ "{:,}".format(d.error_count) }}</td></tr>
+      {% if d.incomplete %}
+      <tr class="flagged"><th scope="row">Incomplete captures</th><td class="num">{{ "{:,}".format(d.incomplete) }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
 
-  {# ---- Over-time view: tokens per day, server-sized bars ---- #}
+  {# ---- Over-time view: tokens per day. Buckets are formed client-side (stats.js) in the
+         viewer's display time zone, since day boundaries depend on that client-only preference;
+         the server just emits the raw per-session UTC instants as data. ---- #}
   <h2>Tokens over time</h2>
-  {% if view.deleted.daily %}
-  <div class="bar-chart">
-    {% for row in view.deleted.daily %}
-    <div class="bar-row">
-      <span><time data-utc="{{ row.day | utc_iso }}" data-format="date">{{ row.day | utcformat('%Y-%m-%d') }}</time></span>
-      <span class="bar-track"><span class="bar-fill" style="width: {{ row.pct }}%"></span></span>
-      <span class="bar-value">{{ "{:,}".format(row.tokens) }} · {{ row.sessions }} sess</span>
-    </div>
-    {% endfor %}
-  </div>
+  {% if view.deleted.series %}
+  <div class="bar-chart" id="tokens-over-time" data-series='{{ view.deleted.series | tojson }}'></div>
+  <noscript><p class="stats-empty">Enable JavaScript to see the over-time chart.</p></noscript>
   {% else %}
   <p class="stats-empty">No deleted sessions yet.</p>
   {% endif %}
@@ -54,39 +106,5 @@
   {% else %}
   <p class="stats-empty">No deleted sessions yet.</p>
   {% endif %}
-  {% endif %}
-
-  {# ---- Live sessions: lightweight per-session read, cumulative numbers only ---- #}
-  <h2>Live sessions</h2>
-  <p class="stats-section-note">Not yet deleted. Cumulative tokens, timing, and status read on demand;
-    per-tool and per-message detail appears only once a session is deleted.</p>
-  {% if view.live.rows %}
-  <p class="stats-section-note">{{ "{:,}".format(view.live.totals.sessions) }} live ·
-    {{ "{:,}".format(view.live.totals.total_tokens) }} tokens</p>
-  <table class="stats-table">
-    <thead>
-      <tr>
-        <th>Session</th>{% if view.per_user is not none %}<th>User</th>{% endif %}
-        <th class="num">Tokens</th><th class="num">Active (s)</th><th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for s in view.live.rows %}
-      <tr>
-        <td><a href="/chat/{{ s.session_id | urlencode }}">{{ s.title or ("Session " ~ s.session_id) }}</a></td>
-        {% if view.per_user is not none %}<td>{{ s.user_email }}</td>{% endif %}
-        {% if s.available %}
-        <td class="num">{{ "{:,}".format(s.total_tokens) }}</td>
-        <td class="num">{{ s.active_seconds | round(1) if s.active_seconds is not none else "—" }}</td>
-        <td>{{ s.status or "—" }}</td>
-        {% else %}
-        <td class="num stats-unavailable" colspan="3">usage unavailable</td>
-        {% endif %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="stats-empty">No live sessions.</p>
   {% endif %}
 {% endblock %}

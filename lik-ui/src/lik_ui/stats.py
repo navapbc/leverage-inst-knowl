@@ -14,28 +14,24 @@ from fastapi.responses import HTMLResponse
 from .analytics import build_live_section
 
 
-def _bars(rows: list[dict], value_key: str) -> list[dict]:
-    """Attach a 0–100 bar percentage to each daily bucket, sized against the largest bucket, so
-    the template can draw the over-time view without doing math. An all-zero set yields 0% bars."""
-    peak = max((row[value_key] for row in rows), default=0) or 0
-    out = []
-    for row in rows:
-        pct = round(100 * row[value_key] / peak) if peak else 0
-        out.append({**row, "pct": pct})
-    return out
+def _series(rows: list[dict]) -> list[dict]:
+    """Shape the per-session over-time rows into JSON-safe records (UTC ISO instant + int tokens)
+    for the client, which buckets them into local days in the viewer's display zone."""
+    return [{"created_at": r["created_at"].isoformat(), "tokens": int(r["tokens"])} for r in rows]
 
 
-def _stats_view(store, sessions_client, *, live_sessions, user_id, scope_label, per_user):
+def _stats_view(store, sessions_client, *, live_sessions, user_id, scope_label, per_user, page_path):
     """Assemble the shared stats view model for one scope. ``user_id`` is None for the all-users
-    (/all-stats) scope and the viewer's id for /stats."""
-    daily = store.session_analytics_daily(user_id)
+    (/all-stats) scope and the viewer's id for /stats. ``page_path`` is where a live-session delete
+    should return to."""
     return {
         "scope_label": scope_label,
+        "page_path": page_path,
         "per_user": store.session_analytics_by_user() if per_user else None,
         "live": build_live_section(sessions_client, live_sessions),
         "deleted": {
             "totals": store.session_analytics_totals(user_id),
-            "daily": _bars(daily, "tokens"),
+            "series": _series(store.session_analytics_series(user_id)),
         },
     }
 
@@ -57,6 +53,7 @@ def register_stats_routes(app: FastAPI) -> None:
             user_id=user["id"],
             scope_label="your sessions",
             per_user=False,
+            page_path="/stats",
         )
         return templates.TemplateResponse(request, "stats.html", {"user": user, "view": view})
 
@@ -74,5 +71,6 @@ def register_stats_routes(app: FastAPI) -> None:
             user_id=None,
             scope_label="all users",
             per_user=True,
+            page_path="/all-stats",
         )
         return templates.TemplateResponse(request, "stats.html", {"user": user, "view": view})

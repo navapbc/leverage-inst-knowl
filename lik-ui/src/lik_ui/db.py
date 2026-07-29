@@ -283,7 +283,7 @@ class Store:
             return conn.execute(
                 """
                 SELECT s.session_id, s.user_id, u.email AS user_email, s.agent_id,
-                       s.title, s.created_at, s.auto_delete_at
+                       s.title, s.shared, s.created_at, s.auto_delete_at
                 FROM sessions s JOIN users u ON u.id = s.user_id
                 ORDER BY s.created_at DESC
                 """
@@ -309,27 +309,38 @@ class Store:
                     COALESCE(sum(cache_read_tokens),0)         AS cache_read_tokens,
                     COALESCE(sum(cache_creation_tokens),0)     AS cache_creation_tokens,
                     COALESCE(sum({self._ANALYTICS_TOKENS}),0)  AS total_tokens,
-                    COALESCE(sum(tool_use_count),0)            AS tool_use_count,
+                    COALESCE(sum(sa.tool_use_count),0)         AS tool_use_count,
+                    -- MCP vs. built-in split, derived from the per-server counts in tool_breakdown
+                    -- (every tool call is bucketed by server name, built-ins under 'builtin'), so it
+                    -- needs no dedicated column and reconciles to tool_use_count.
+                    COALESCE(sum(t.mcp),0)                     AS mcp_tool_calls,
+                    COALESCE(sum(t.builtin),0)                 AS builtin_tool_calls,
                     COALESCE(sum(error_count),0)               AS error_count,
                     COALESCE(sum(CASE WHEN capture_incomplete THEN 1 ELSE 0 END),0) AS incomplete
-                FROM session_analytics {where}
+                FROM session_analytics sa
+                LEFT JOIN LATERAL (
+                    SELECT
+                        COALESCE(sum(CASE WHEN kv.key <> 'builtin' THEN kv.value::int END),0) AS mcp,
+                        COALESCE(sum(CASE WHEN kv.key =  'builtin' THEN kv.value::int END),0) AS builtin
+                    FROM jsonb_each_text(COALESCE(sa.tool_breakdown->'servers', '{{}}'::jsonb)) AS kv
+                ) t ON true
+                {where}
                 """,
                 params,
             ).fetchone()
 
-    def session_analytics_daily(self, user_id: int | None = None) -> list[dict]:
-        """Per-day buckets of deleted-session count and total tokens, oldest first — the over-time
-        view (R12). Scoped to one user when ``user_id`` is given, else across all users."""
-        where, params = ("WHERE user_id = %s", (user_id,)) if user_id is not None else ("", ())
+    def session_analytics_series(self, user_id: int | None = None) -> list[dict]:
+        """Per-session (created_at, total tokens) for deleted sessions, oldest first — the raw data
+        for the over-time view (R12). Deliberately NOT pre-bucketed by day: day boundaries depend on
+        the viewer's display time zone, which is a client-only preference (the server stays UTC), so
+        the browser buckets these instants into local days. Scoped to one user when ``user_id`` is
+        given, else across all users. Rows with no created_at (thin captures) are skipped."""
+        where = "WHERE created_at IS NOT NULL" + (" AND user_id = %s" if user_id is not None else "")
+        params = (user_id,) if user_id is not None else ()
         with self.db.connection() as conn:
             return conn.execute(
-                f"""
-                SELECT date_trunc('day', deleted_at) AS day,
-                       count(*)                       AS sessions,
-                       COALESCE(sum({self._ANALYTICS_TOKENS}),0) AS tokens
-                FROM session_analytics {where}
-                GROUP BY day ORDER BY day
-                """,
+                f"SELECT created_at, {self._ANALYTICS_TOKENS} AS tokens "
+                f"FROM session_analytics {where} ORDER BY created_at",
                 params,
             ).fetchall()
 

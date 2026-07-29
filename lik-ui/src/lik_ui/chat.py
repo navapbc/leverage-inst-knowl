@@ -462,10 +462,16 @@ def register_chat_routes(app) -> None:
         user = require_user(request)
         form = await request.form()
         session_id = form.get("session_id", "")
+        # Return to the page the delete was triggered from (the sessions list or a stats page),
+        # allowlisted so a crafted ``next`` can't turn this into an open redirect. Defaults to
+        # the sessions list, preserving the original behavior when no ``next`` is posted.
+        dest = form.get("next", "/sessions")
+        if dest not in ("/sessions", "/stats", "/all-stats"):
+            dest = "/sessions"
         # Ownership check: only the owning user can delete, and only an existing row.
         session = request.app.state.store.get_session(session_id, user["id"])
         if not session:
-            return RedirectResponse("/sessions", status_code=303)
+            return RedirectResponse(dest, status_code=303)
         # Capture analytics before anything is destroyed — the transcript is still readable here.
         sessions_client: SessionsClient | None = request.app.state.sessions_client
         capture_session_analytics(request.app.state.store, sessions_client, session, "manual")
@@ -478,7 +484,7 @@ def register_chat_routes(app) -> None:
             except Exception as exc:  # noqa: BLE001 - surface session/SDK errors as a page, not a 500
                 return HTMLResponse(f"Could not delete that session: {exc}", status_code=502)
         request.app.state.store.delete_session(session_id, user["id"])
-        return RedirectResponse("/sessions", status_code=303)
+        return RedirectResponse(dest, status_code=303)
 
     @app.post("/chat/{session_id}/share")
     async def share_session(request: Request, session_id: str):

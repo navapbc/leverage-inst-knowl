@@ -12,9 +12,11 @@ from tests.test_vault import FakeVaultClient
 
 
 def _seed_deleted(store, session_id, user_id, email, tokens, *, tools=3, errors=1):
+    from datetime import datetime, timezone
     store.write_session_analytics({
         "session_id": session_id, "user_id": user_id, "user_email": email,
-        "deletion_path": "prune", "input_tokens": tokens, "output_tokens": 0,
+        "deletion_path": "prune", "created_at": datetime.now(timezone.utc),
+        "input_tokens": tokens, "output_tokens": 0,
         "cache_read_tokens": 0, "cache_creation_tokens": 0,
         "tool_use_count": tools, "error_count": errors,
     })
@@ -46,7 +48,8 @@ def test_stats_shows_own_deleted_totals_and_bars(db):
     text = client.get("/stats").text
     assert "Deleted sessions" in text and "Tokens over time" in text
     assert "150" in text  # summed tokens rendered
-    assert "bar-fill" in text  # the over-time bars are present
+    # Bars are hydrated client-side (stats.js) from the raw per-session series data.
+    assert 'id="tokens-over-time"' in text and "data-series=" in text
 
 
 def test_stats_scoped_to_viewer_only(db):
@@ -71,7 +74,7 @@ def test_stats_live_section_shows_cumulative_only(db):
     client.get("/chat?agent_id=agent_1")  # create a live session
     text = client.get("/stats").text
     assert "Live sessions" in text and "usage unavailable" not in text
-    assert "tool calls" in text  # that label belongs to the DELETED totals grid...
+    assert "Tool calls" in text  # that label belongs to the DELETED totals table...
     # ...but the live table never emits per-tool breakdown markup.
     assert "tool_breakdown" not in text
 
@@ -111,3 +114,64 @@ def test_all_stats_not_linked_in_nav(db):
     client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
     _login(client)
     assert 'href="/all-stats"' not in client.get("/stats").text
+
+
+def test_stats_live_session_has_owner_delete_button(db):
+    # Own live session on /stats gets a Delete button that returns to /stats.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1")  # create a live session owned by alice
+    text = client.get("/stats").text
+    assert 'action="/sessions/delete"' in text
+    assert 'name="next" value="/stats"' in text
+
+
+def test_all_stats_no_delete_button_for_other_users_sessions(db):
+    # On /all-stats, a session owned by another user must NOT show a Delete button (owner-scoped).
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)  # alice
+    bob = Store(db).upsert_user("bob@navapbc.com")
+    Store(db).create_session(bob["id"], "agent_1", "bob_live", "Bob live session")
+    text = client.get("/all-stats").text
+    assert "Bob live session" in text            # listed in the live section
+    assert 'value="bob_live"' not in text        # but no delete form targets it
+
+
+def test_stats_live_table_shows_local_row_fields(db):
+    # created_at / auto_delete_at (as dated <time> cells) and the shared flag come from the DB row.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    text = client.get("/stats").text
+    assert "<th>Created</th>" in text and "<th>Deletes on</th>" in text and "<th>Shared</th>" in text
+    assert 'data-format="date"' in text  # dated cells rendered via tz.js
+    assert "Private" in text             # a fresh session is private by default
+    # Once shared, the flag flips.
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert "Shared" in client.get("/stats").text
+
+
+def test_stats_live_table_shows_input_output_columns(db):
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1")
+    text = client.get("/stats").text
+    assert '<th class="num">Input tokens</th>' in text and '<th class="num">Output tokens</th>' in text
+    assert ">12<" in text and ">8<" in text  # FakeSessionsClient snapshot input=12, output=8
+
+
+def test_deleted_totals_show_mcp_split(db):
+    client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
+    _login(client)
+    store = Store(db)
+    store.write_session_analytics({
+        "session_id": "s1", "user_id": _owner_id(db), "user_email": "alice@navapbc.com",
+        "deletion_path": "prune", "tool_use_count": 3,
+        "tool_breakdown": {"tools": {"search": 2, "think": 1}, "servers": {"atlassian": 2, "builtin": 1}},
+    })
+    text = client.get("/stats").text
+    assert "MCP tool calls" in text and "Builtin tool calls" in text
