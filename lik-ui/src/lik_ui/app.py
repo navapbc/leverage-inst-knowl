@@ -128,6 +128,7 @@ def build_app(
     from .chat import register_chat_routes
     from .faq import register_faq_routes
     from .oauth_connector import register_connection_routes
+    from .stats import register_stats_routes
 
     register_auth_routes(app)
     register_connection_routes(app)
@@ -135,5 +136,6 @@ def build_app(
     register_chat_routes(app)
     register_account_routes(app)
     register_faq_routes(app)
+    register_stats_routes(app)
 
     return app

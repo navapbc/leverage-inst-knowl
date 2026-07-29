@@ -205,10 +205,13 @@ class Store:
     def list_sessions_due(self, cutoff: datetime) -> list[dict]:
         """Every session whose auto-delete time is at or before ``cutoff``, across all users
         (not owner-scoped — the scheduled cleanup acts as no single user). Returns each
-        session_id with its owning user_id so the caller can reuse the owner-scoped delete."""
+        session_id with its owning user_id so the caller can reuse the owner-scoped delete.
+        Also carries agent_id + created_at so the pre-delete analytics capture can populate a
+        record (including the local-only fallback) without a second per-session read."""
         with self.db.connection() as conn:
             return conn.execute(
-                "SELECT session_id, user_id FROM sessions WHERE auto_delete_at <= %s ORDER BY auto_delete_at",
+                "SELECT session_id, user_id, agent_id, created_at FROM sessions "
+                "WHERE auto_delete_at <= %s ORDER BY auto_delete_at",
                 (cutoff,),
             ).fetchall()
 
@@ -222,6 +225,127 @@ class Store:
             ).fetchone()
             conn.commit()
             return row is not None
+
+    # --- session analytics -----------------------------------------------------
+    # Durable per-session usage record, written just before physical deletion. Keyed by
+    # session_id and upserted, so a re-attempted deletion overwrites rather than duplicating
+    # (exactly one record per session). Not owner-scoped: the record outlives the user/session.
+    _ANALYTICS_COLS = (
+        "session_id", "user_id", "user_email", "agent_id", "deletion_path",
+        "created_at", "deleted_at", "capture_incomplete", "capture_reason",
+        "input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens",
+        "active_seconds", "wall_clock_seconds",
+        "user_message_count", "ai_message_count", "tool_use_count", "error_count",
+        "tool_breakdown", "error_types",
+    )
+    _ANALYTICS_JSON_COLS = frozenset({"tool_breakdown", "error_types"})
+
+    def write_session_analytics(self, record: dict) -> None:
+        """Upsert one analytics record keyed on ``session_id``. ``record`` supplies any subset of
+        the analytics columns; ``session_id``, ``user_id`` and ``deletion_path`` are required, the
+        rest default (``deleted_at`` to now(), ``capture_incomplete`` to false, metrics to NULL).
+
+        A second write for the same session upserts in place (exactly one record), but a *flagged*
+        (incomplete) write never overwrites an existing *complete* record — see the WHERE guard
+        below. That handles the re-attempted-deletion case: a first attempt captures a full record,
+        the platform delete fails so the row survives, and a later retry can only re-read after the
+        platform session is gone. Without the guard that degraded retry would flip a complete row to
+        capture_incomplete=true while leaving its real metrics in place — a self-contradictory row
+        that also over-counts the incomplete tally. A complete capture still always wins."""
+        cols = [c for c in self._ANALYTICS_COLS if c in record]
+        values = [Json(record[c]) if c in self._ANALYTICS_JSON_COLS else record[c] for c in cols]
+        placeholders = ", ".join(["%s"] * len(cols))
+        # Overwrite every supplied column except the PK on conflict.
+        updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols if c != "session_id")
+        with self.db.connection() as conn:
+            conn.execute(
+                f"INSERT INTO session_analytics ({', '.join(cols)}) VALUES ({placeholders}) "
+                f"ON CONFLICT (session_id) DO UPDATE SET {updates} "
+                # Update only when the stored row is itself incomplete, or the incoming row is
+                # complete — so an incomplete retry can't clobber a good, complete capture.
+                "WHERE session_analytics.capture_incomplete OR NOT EXCLUDED.capture_incomplete",
+                values,
+            )
+            conn.commit()
+
+    def get_session_analytics(self, session_id: str) -> dict | None:
+        """The analytics record for one session, or None. Used by tests and single-session views."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"SELECT {', '.join(self._ANALYTICS_COLS)} FROM session_analytics WHERE session_id = %s",
+                (session_id,),
+            ).fetchone()
+
+    def list_all_sessions(self) -> list[dict]:
+        """Every live session across all users, with the owner's email — the cross-user live list
+        behind /all-stats. Not owner-scoped (the operator view acts as no single user)."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                """
+                SELECT s.session_id, s.user_id, u.email AS user_email, s.agent_id,
+                       s.title, s.created_at, s.auto_delete_at
+                FROM sessions s JOIN users u ON u.id = s.user_id
+                ORDER BY s.created_at DESC
+                """
+            ).fetchall()
+
+    # Total tokens = the four usage columns summed, treating unread (NULL) metrics as 0.
+    _ANALYTICS_TOKENS = (
+        "COALESCE(input_tokens,0) + COALESCE(output_tokens,0) "
+        "+ COALESCE(cache_read_tokens,0) + COALESCE(cache_creation_tokens,0)"
+    )
+
+    def session_analytics_totals(self, user_id: int | None = None) -> dict:
+        """Aggregate totals over deleted-session records. Scoped to one user when ``user_id`` is
+        given (the /stats page), else across all users (/all-stats). Sums are 0 on an empty set."""
+        where, params = ("WHERE user_id = %s", (user_id,)) if user_id is not None else ("", ())
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"""
+                SELECT
+                    count(*)                                   AS sessions,
+                    COALESCE(sum(input_tokens),0)              AS input_tokens,
+                    COALESCE(sum(output_tokens),0)             AS output_tokens,
+                    COALESCE(sum(cache_read_tokens),0)         AS cache_read_tokens,
+                    COALESCE(sum(cache_creation_tokens),0)     AS cache_creation_tokens,
+                    COALESCE(sum({self._ANALYTICS_TOKENS}),0)  AS total_tokens,
+                    COALESCE(sum(tool_use_count),0)            AS tool_use_count,
+                    COALESCE(sum(error_count),0)               AS error_count,
+                    COALESCE(sum(CASE WHEN capture_incomplete THEN 1 ELSE 0 END),0) AS incomplete
+                FROM session_analytics {where}
+                """,
+                params,
+            ).fetchone()
+
+    def session_analytics_daily(self, user_id: int | None = None) -> list[dict]:
+        """Per-day buckets of deleted-session count and total tokens, oldest first — the over-time
+        view (R12). Scoped to one user when ``user_id`` is given, else across all users."""
+        where, params = ("WHERE user_id = %s", (user_id,)) if user_id is not None else ("", ())
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"""
+                SELECT date_trunc('day', deleted_at) AS day,
+                       count(*)                       AS sessions,
+                       COALESCE(sum({self._ANALYTICS_TOKENS}),0) AS tokens
+                FROM session_analytics {where}
+                GROUP BY day ORDER BY day
+                """,
+                params,
+            ).fetchall()
+
+    def session_analytics_by_user(self) -> list[dict]:
+        """Per-user totals over deleted-session records (the 'sessions per user' dimension of the
+        /all-stats view), busiest first. Cross-user; keyed by the denormalized email."""
+        with self.db.connection() as conn:
+            return conn.execute(
+                f"""
+                SELECT COALESCE(user_email, '(unknown)') AS user_email,
+                       count(*)                          AS sessions,
+                       COALESCE(sum({self._ANALYTICS_TOKENS}),0) AS tokens
+                FROM session_analytics
+                GROUP BY user_email ORDER BY tokens DESC, sessions DESC
+                """
+            ).fetchall()
 
     # --- scheduled runs --------------------------------------------------------
     # CRUD here is owner-scoped (the Settings UI). The scanner's cross-user claim/complete

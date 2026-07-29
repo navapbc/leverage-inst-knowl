@@ -25,6 +25,7 @@ from typing import Protocol
 _SSE_HEARTBEAT_SECONDS = 15
 
 from .account import CADENCE_UNITS, MAX_CADENCE_COUNT, parse_cadence
+from .analytics import capture_session_analytics
 from .settings import Settings
 from .vault import ensure_user_vault
 
@@ -92,6 +93,14 @@ class SessionsClient(Protocol):
     def status(self, session_id: str) -> str:
         """Return the session's current lifecycle status (e.g. "idle", "queued",
         "running"). Read on page load so an in-flight turn can be reflected in the UI."""
+        ...
+
+    def usage_snapshot(self, session_id: str) -> dict:
+        """One lightweight per-session read of cumulative usage + timing + status, for the
+        live analytics section and the pre-delete capture. Returns
+        {"input", "output", "cache_read", "cache_creation", "active_seconds",
+        "wall_clock_seconds", "status", "created_at", "agent"} with None for any field the
+        platform omits. Raises ``SessionNotFound`` if the session is gone."""
         ...
 
     def resume_stream(self, session_id: str) -> Iterator[dict]:
@@ -350,6 +359,36 @@ class AnthropicSessionsClient:
                 return "queued"
         return status
 
+    def usage_snapshot(self, session_id: str) -> dict:
+        import anthropic
+
+        try:
+            session = self._client.beta.sessions.retrieve(session_id)
+        except anthropic.NotFoundError as exc:
+            raise SessionNotFound(session_id) from exc
+        usage = getattr(session, "usage", None)
+        stats = getattr(session, "stats", None)
+        # cache_creation is a nested object ({ephemeral_1h_input_tokens, ephemeral_5m_input_tokens}),
+        # not a flat count — sum its parts into one cache-creation total (guard the object itself None).
+        cc = getattr(usage, "cache_creation", None) if usage is not None else None
+        cache_creation = None
+        if cc is not None:
+            cache_creation = (getattr(cc, "ephemeral_1h_input_tokens", 0) or 0) + (
+                getattr(cc, "ephemeral_5m_input_tokens", 0) or 0
+            )
+        return {
+            "input": getattr(usage, "input_tokens", None) if usage is not None else None,
+            "output": getattr(usage, "output_tokens", None) if usage is not None else None,
+            "cache_read": getattr(usage, "cache_read_input_tokens", None) if usage is not None else None,
+            "cache_creation": cache_creation,
+            "active_seconds": getattr(stats, "active_seconds", None) if stats is not None else None,
+            # duration_seconds is elapsed-since-creation — the wall-clock lifespan.
+            "wall_clock_seconds": getattr(stats, "duration_seconds", None) if stats is not None else None,
+            "status": (getattr(session, "status", "") or "").lower(),
+            "created_at": getattr(session, "created_at", None),
+            "agent": getattr(session, "agent", None),
+        }
+
     def resume_stream(self, session_id: str) -> Iterator[dict]:
         # Only attach when a turn is actually in flight: subscribing to an idle session
         # would block waiting for events that never come. This re-checks status (the page
@@ -427,10 +466,12 @@ def register_chat_routes(app) -> None:
         session = request.app.state.store.get_session(session_id, user["id"])
         if not session:
             return RedirectResponse("/sessions", status_code=303)
+        # Capture analytics before anything is destroyed — the transcript is still readable here.
+        sessions_client: SessionsClient | None = request.app.state.sessions_client
+        capture_session_analytics(request.app.state.store, sessions_client, session, "manual")
         # Delete the platform session first so its retained data is actually removed; only
         # then drop the local row, keeping the list honest (a listed session still exists on
         # the platform). Stub/test mode has no platform session, so it deletes the row alone.
-        sessions_client: SessionsClient | None = request.app.state.sessions_client
         if sessions_client is not None:
             try:
                 sessions_client.delete_session(session_id)
@@ -530,10 +571,17 @@ def register_chat_routes(app) -> None:
             events = list(sessions_client.list_events(session["session_id"]))
             status = sessions_client.status(session["session_id"])
         except SessionNotFound:
-            # Platform session is gone (workspace switch or out-of-band delete). Drop the
-            # stale local row (owner-scoped) so it stops listing and erroring, and tell the
-            # client it's gone so it can send the user back to the sessions list.
-            request.app.state.store.delete_session(session["session_id"], user["id"])
+            # Platform session is gone (workspace switch or out-of-band delete). Only the OWNER
+            # self-heals: the local-row delete is owner-scoped, so a non-owner viewer of a shared
+            # session would delete nothing — and must not write a "deleted" analytics record for a
+            # row that still lives (that would double-count it across the live and deleted sections
+            # until the owner reconciles). For the owner, capture a flagged "lost before capture"
+            # record so even a platform-lost session is counted (R9), then drop the stale row.
+            if session["user_id"] == user["id"]:
+                capture_session_analytics(
+                    request.app.state.store, sessions_client, session, "self_heal", platform_lost=True
+                )
+                request.app.state.store.delete_session(session["session_id"], user["id"])
             return JSONResponse(
                 {"detail": "Session is not in the current workspace; session removed.", "gone": True},
                 status_code=410,

@@ -8,6 +8,7 @@ credentials).
 
 from datetime import timedelta
 
+from .analytics import capture_session_analytics
 from .vault import VaultClient, delete_user_vault
 
 # Cadence in the scheduler UI (v1 — free cron expressions are deferred): the user picks a whole
@@ -159,6 +160,8 @@ def register_account_routes(app) -> None:
         # so a retry safely resumes. Stub/test mode has no platform session; the rows go alone.
         try:
             for s in store.list_sessions(user["id"]):
+                # Capture analytics before this session's data is destroyed (per session).
+                capture_session_analytics(store, sessions_client, s, "delete_all")
                 if sessions_client is not None:
                     sessions_client.delete_session(s["session_id"])
                 store.delete_session(s["session_id"], user["id"])

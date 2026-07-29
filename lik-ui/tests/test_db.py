@@ -279,3 +279,113 @@ def test_pause_and_flag_pauses_without_advancing(store):
     assert row["next_run_at"] == original_due  # not advanced
     # A paused row is never claimed even though it's due.
     assert store.claim_due_runs() == []
+
+
+def test_session_analytics_upsert_is_idempotent_on_session_id(store):
+    u = store.upsert_user("a@navapbc.com")
+    base = {"session_id": "s1", "user_id": u["id"], "deletion_path": "manual", "input_tokens": 10}
+    store.write_session_analytics(base)
+    # A second write for the same session overwrites — exactly one record (R5).
+    store.write_session_analytics({**base, "input_tokens": 99, "output_tokens": 5})
+    rec = store.get_session_analytics("s1")
+    assert rec["input_tokens"] == 99 and rec["output_tokens"] == 5
+    with store.db.connection() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM session_analytics").fetchone()["n"] == 1
+
+
+def test_session_analytics_full_record_roundtrips_including_jsonb(store):
+    u = store.upsert_user("a@navapbc.com")
+    record = {
+        "session_id": "s1", "user_id": u["id"], "user_email": "a@navapbc.com",
+        "agent_id": "agent_1", "deletion_path": "prune",
+        "input_tokens": 100, "output_tokens": 50, "cache_read_tokens": 10, "cache_creation_tokens": 7,
+        "active_seconds": 12.5, "wall_clock_seconds": 30.0,
+        "user_message_count": 3, "ai_message_count": 3, "tool_use_count": 4, "error_count": 1,
+        "tool_breakdown": {"tools": {"search": 3}, "servers": {"confluence": 3}},
+        "error_types": {"mcp_connection_failed": 1},
+    }
+    store.write_session_analytics(record)
+    rec = store.get_session_analytics("s1")
+    assert rec["tool_breakdown"] == {"tools": {"search": 3}, "servers": {"confluence": 3}}
+    assert rec["error_types"] == {"mcp_connection_failed": 1}
+    assert rec["cache_creation_tokens"] == 7 and rec["tool_use_count"] == 4
+
+
+def test_session_analytics_flagged_local_only_record(store):
+    u = store.upsert_user("a@navapbc.com")
+    store.write_session_analytics({
+        "session_id": "s1", "user_id": u["id"], "deletion_path": "self_heal",
+        "capture_incomplete": True, "capture_reason": "lost before capture",
+    })
+    rec = store.get_session_analytics("s1")
+    assert rec["capture_incomplete"] is True and rec["capture_reason"] == "lost before capture"
+    assert rec["input_tokens"] is None and rec["deleted_at"] is not None  # metrics null, still stamped
+
+
+def test_session_analytics_outlives_user_deletion(store):
+    u = store.upsert_user("a@navapbc.com")
+    store.write_session_analytics({"session_id": "s1", "user_id": u["id"], "deletion_path": "manual"})
+    # No FK cascade: deleting the user must NOT remove the analytics record.
+    with store.db.connection() as conn:
+        conn.execute("DELETE FROM users WHERE id = %s", (u["id"],))
+        conn.commit()
+    assert store.get_session_analytics("s1") is not None
+
+
+def test_list_sessions_due_carries_agent_and_created_at(store):
+    u = store.upsert_user("a@navapbc.com")
+    store.create_session(u["id"], "agent_7", "s1")
+    store.set_session_auto_delete_at("s1", u["id"], datetime.now(timezone.utc) - timedelta(days=1))
+    due = store.list_sessions_due(datetime.now(timezone.utc))
+    assert len(due) == 1
+    assert due[0]["agent_id"] == "agent_7" and due[0]["created_at"] is not None
+
+
+def _seed_analytics(store, session_id, user_id, email, tokens, path="prune"):
+    store.write_session_analytics({
+        "session_id": session_id, "user_id": user_id, "user_email": email,
+        "deletion_path": path, "input_tokens": tokens, "output_tokens": 0,
+        "cache_read_tokens": 0, "cache_creation_tokens": 0,
+        "tool_use_count": 2, "error_count": 1,
+    })
+
+
+def test_analytics_totals_scope_own_vs_all(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    _seed_analytics(store, "s1", a["id"], "a@navapbc.com", 100)
+    _seed_analytics(store, "s2", a["id"], "a@navapbc.com", 50)
+    _seed_analytics(store, "s3", b["id"], "b@navapbc.com", 10)
+    own = store.session_analytics_totals(a["id"])
+    assert own["sessions"] == 2 and own["total_tokens"] == 150 and own["tool_use_count"] == 4
+    all_users = store.session_analytics_totals()
+    assert all_users["sessions"] == 3 and all_users["total_tokens"] == 160
+
+
+def test_analytics_totals_empty_is_zeroed(store):
+    a = store.upsert_user("a@navapbc.com")
+    t = store.session_analytics_totals(a["id"])
+    assert t["sessions"] == 0 and t["total_tokens"] == 0 and t["error_count"] == 0
+
+
+def test_analytics_daily_buckets_and_by_user(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    _seed_analytics(store, "s1", a["id"], "a@navapbc.com", 100)
+    _seed_analytics(store, "s2", b["id"], "b@navapbc.com", 40)
+    daily = store.session_analytics_daily()
+    assert sum(row["sessions"] for row in daily) == 2
+    assert sum(row["tokens"] for row in daily) == 140
+    by_user = store.session_analytics_by_user()
+    assert by_user[0]["user_email"] == "a@navapbc.com" and by_user[0]["tokens"] == 100
+    assert {r["user_email"] for r in by_user} == {"a@navapbc.com", "b@navapbc.com"}
+
+
+def test_list_all_sessions_spans_users_with_email(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    store.create_session(a["id"], "agent_1", "s1")
+    store.create_session(b["id"], "agent_1", "s2")
+    rows = store.list_all_sessions()
+    assert {r["session_id"] for r in rows} == {"s1", "s2"}
+    assert {r["user_email"] for r in rows} == {"a@navapbc.com", "b@navapbc.com"}

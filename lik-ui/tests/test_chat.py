@@ -58,6 +58,13 @@ class FakeSessionsClient:
             raise SessionNotFound(session_id)
         yield from self.history
 
+    def usage_snapshot(self, session_id):
+        if self.not_found:
+            raise SessionNotFound(session_id)
+        return {"input": 12, "output": 8, "cache_read": 0, "cache_creation": 0,
+                "active_seconds": 1.0, "wall_clock_seconds": 2.0, "status": self.session_status,
+                "created_at": None, "agent": "agent_1"}
+
 
 class FakeAgentsClient:
     """Minimal agents client so the untitled-chat default can read the agent's label and the
@@ -1026,3 +1033,103 @@ def test_delete_session_is_idempotent_when_platform_session_gone():
     client._client.beta.sessions.delete = _boom
     with pytest.raises(RuntimeError):
         client.delete_session("sesn_x")
+
+
+def _retrieve_client(session_obj):
+    """An AnthropicSessionsClient whose beta.sessions.retrieve returns ``session_obj``."""
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+    client._client = SimpleNamespace(
+        beta=SimpleNamespace(sessions=SimpleNamespace(retrieve=lambda session_id: session_obj))
+    )
+    return client
+
+
+def test_usage_snapshot_reads_cumulative_usage_timing_and_status():
+    from datetime import datetime, timezone
+
+    created = datetime(2026, 7, 27, 14, 0, 0, tzinfo=timezone.utc)
+    session = SimpleNamespace(
+        usage=SimpleNamespace(
+            input_tokens=100, output_tokens=40, cache_read_input_tokens=10,
+            cache_creation=SimpleNamespace(ephemeral_1h_input_tokens=3, ephemeral_5m_input_tokens=4),
+        ),
+        stats=SimpleNamespace(active_seconds=12.5, duration_seconds=30.0),
+        status="IDLE", created_at=created, agent="agent_1",
+    )
+    snap = _retrieve_client(session).usage_snapshot("s")
+    assert snap["input"] == 100 and snap["output"] == 40 and snap["cache_read"] == 10
+    assert snap["cache_creation"] == 7  # 3 + 4, summed from the nested object
+    assert snap["active_seconds"] == 12.5 and snap["wall_clock_seconds"] == 30.0
+    assert snap["status"] == "idle" and snap["created_at"] == created and snap["agent"] == "agent_1"
+
+
+def test_usage_snapshot_tolerates_missing_usage_and_stats():
+    session = SimpleNamespace(usage=None, stats=None, status=None, created_at=None, agent=None)
+    snap = _retrieve_client(session).usage_snapshot("s")
+    assert snap["input"] is None and snap["cache_creation"] is None
+    assert snap["active_seconds"] is None and snap["wall_clock_seconds"] is None
+    assert snap["status"] == ""
+
+
+def test_usage_snapshot_raises_session_not_found_when_gone():
+    import anthropic
+    import httpx
+
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+
+    def _gone(session_id):
+        raise anthropic.NotFoundError(
+            "gone",
+            response=httpx.Response(404, request=httpx.Request("GET", "https://api.anthropic.com/x")),
+            body=None,
+        )
+
+    client._client = SimpleNamespace(beta=SimpleNamespace(sessions=SimpleNamespace(retrieve=_gone)))
+    with pytest.raises(SessionNotFound):
+        client.usage_snapshot("sesn_gone")
+
+
+def test_delete_session_captures_analytics_before_removal(db):
+    # AE1 / R5, R6: a manual delete writes exactly one unflagged analytics record, tagged 'manual'.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    client.post("/sessions/delete", data={"session_id": session_id})
+    rec = Store(db).get_session_analytics(session_id)
+    assert rec is not None
+    assert rec["deletion_path"] == "manual" and rec["capture_incomplete"] is False
+    assert rec["input_tokens"] == 12  # from usage_snapshot, captured before deletion
+
+
+def test_self_heal_captures_flagged_record_and_returns_410(db):
+    # AE3 / R9: a session gone from the platform still yields a flagged 'self_heal' record.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    sc.not_found = True  # platform session vanished out-of-band
+    r = client.get(f"/chat/{session_id}/history")
+    assert r.status_code == 410 and r.json().get("gone") is True
+    rec = Store(db).get_session_analytics(session_id)
+    assert rec is not None
+    assert rec["deletion_path"] == "self_heal" and rec["capture_incomplete"] is True
+    assert Store(db).get_session(session_id, _owner_id(db)) is None  # stale row dropped
+
+
+def test_self_heal_by_non_owner_of_shared_session_writes_no_record(db):
+    # Finding B: a non-owner viewing a shared, platform-gone session hits the self-heal branch,
+    # but the owner-scoped delete is a no-op — so no "deleted" analytics record must be written
+    # (else the still-live session double-counts across the live and deleted sections).
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    assert Store(db).set_session_shared(session_id, _owner_id(db), True)
+
+    sc.not_found = True  # platform session vanished
+    r = viewer.get(f"/chat/{session_id}/history")
+    assert r.status_code == 410 and r.json().get("gone") is True
+    # No analytics record, and the owner's row survives (only the owner can self-heal it).
+    assert Store(db).get_session_analytics(session_id) is None
+    assert Store(db).get_session(session_id, _owner_id(db)) is not None
