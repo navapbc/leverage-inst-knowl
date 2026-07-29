@@ -1026,3 +1026,57 @@ def test_delete_session_is_idempotent_when_platform_session_gone():
     client._client.beta.sessions.delete = _boom
     with pytest.raises(RuntimeError):
         client.delete_session("sesn_x")
+
+
+def _retrieve_client(session_obj):
+    """An AnthropicSessionsClient whose beta.sessions.retrieve returns ``session_obj``."""
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+    client._client = SimpleNamespace(
+        beta=SimpleNamespace(sessions=SimpleNamespace(retrieve=lambda session_id: session_obj))
+    )
+    return client
+
+
+def test_usage_snapshot_reads_cumulative_usage_timing_and_status():
+    from datetime import datetime, timezone
+
+    created = datetime(2026, 7, 27, 14, 0, 0, tzinfo=timezone.utc)
+    session = SimpleNamespace(
+        usage=SimpleNamespace(
+            input_tokens=100, output_tokens=40, cache_read_input_tokens=10,
+            cache_creation=SimpleNamespace(ephemeral_1h_input_tokens=3, ephemeral_5m_input_tokens=4),
+        ),
+        stats=SimpleNamespace(active_seconds=12.5, duration_seconds=30.0),
+        status="IDLE", created_at=created, agent="agent_1",
+    )
+    snap = _retrieve_client(session).usage_snapshot("s")
+    assert snap["input"] == 100 and snap["output"] == 40 and snap["cache_read"] == 10
+    assert snap["cache_creation"] == 7  # 3 + 4, summed from the nested object
+    assert snap["active_seconds"] == 12.5 and snap["wall_clock_seconds"] == 30.0
+    assert snap["status"] == "idle" and snap["created_at"] == created and snap["agent"] == "agent_1"
+
+
+def test_usage_snapshot_tolerates_missing_usage_and_stats():
+    session = SimpleNamespace(usage=None, stats=None, status=None, created_at=None, agent=None)
+    snap = _retrieve_client(session).usage_snapshot("s")
+    assert snap["input"] is None and snap["cache_creation"] is None
+    assert snap["active_seconds"] is None and snap["wall_clock_seconds"] is None
+    assert snap["status"] == ""
+
+
+def test_usage_snapshot_raises_session_not_found_when_gone():
+    import anthropic
+    import httpx
+
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+
+    def _gone(session_id):
+        raise anthropic.NotFoundError(
+            "gone",
+            response=httpx.Response(404, request=httpx.Request("GET", "https://api.anthropic.com/x")),
+            body=None,
+        )
+
+    client._client = SimpleNamespace(beta=SimpleNamespace(sessions=SimpleNamespace(retrieve=_gone)))
+    with pytest.raises(SessionNotFound):
+        client.usage_snapshot("sesn_gone")

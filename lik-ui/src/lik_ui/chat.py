@@ -94,6 +94,14 @@ class SessionsClient(Protocol):
         "running"). Read on page load so an in-flight turn can be reflected in the UI."""
         ...
 
+    def usage_snapshot(self, session_id: str) -> dict:
+        """One lightweight per-session read of cumulative usage + timing + status, for the
+        live analytics section and the pre-delete capture. Returns
+        {"input", "output", "cache_read", "cache_creation", "active_seconds",
+        "wall_clock_seconds", "status", "created_at", "agent"} with None for any field the
+        platform omits. Raises ``SessionNotFound`` if the session is gone."""
+        ...
+
     def resume_stream(self, session_id: str) -> Iterator[dict]:
         """Attach to an already in-flight turn without sending anything, yielding its
         remaining events in the same normalized vocabulary as ``send_and_stream``. Used
@@ -349,6 +357,36 @@ class AnthropicSessionsClient:
             ):
                 return "queued"
         return status
+
+    def usage_snapshot(self, session_id: str) -> dict:
+        import anthropic
+
+        try:
+            session = self._client.beta.sessions.retrieve(session_id)
+        except anthropic.NotFoundError as exc:
+            raise SessionNotFound(session_id) from exc
+        usage = getattr(session, "usage", None)
+        stats = getattr(session, "stats", None)
+        # cache_creation is a nested object ({ephemeral_1h_input_tokens, ephemeral_5m_input_tokens}),
+        # not a flat count — sum its parts into one cache-creation total (guard the object itself None).
+        cc = getattr(usage, "cache_creation", None) if usage is not None else None
+        cache_creation = None
+        if cc is not None:
+            cache_creation = (getattr(cc, "ephemeral_1h_input_tokens", 0) or 0) + (
+                getattr(cc, "ephemeral_5m_input_tokens", 0) or 0
+            )
+        return {
+            "input": getattr(usage, "input_tokens", None) if usage is not None else None,
+            "output": getattr(usage, "output_tokens", None) if usage is not None else None,
+            "cache_read": getattr(usage, "cache_read_input_tokens", None) if usage is not None else None,
+            "cache_creation": cache_creation,
+            "active_seconds": getattr(stats, "active_seconds", None) if stats is not None else None,
+            # duration_seconds is elapsed-since-creation — the wall-clock lifespan.
+            "wall_clock_seconds": getattr(stats, "duration_seconds", None) if stats is not None else None,
+            "status": (getattr(session, "status", "") or "").lower(),
+            "created_at": getattr(session, "created_at", None),
+            "agent": getattr(session, "agent", None),
+        }
 
     def resume_stream(self, session_id: str) -> Iterator[dict]:
         # Only attach when a turn is actually in flight: subscribing to an idle session
