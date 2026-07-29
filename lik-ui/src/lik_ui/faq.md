@@ -14,6 +14,8 @@ Nava's existing data sources (Google Drive, Confluence, Jira, GitHub, Slack, and
 company knowledge fast to find and reuse, without copying everything into one place and without
 becoming a competing source of truth.
 
+![The idea behind LIK](/static/lik-the-idea-diagram.svg)
+
 [More: project overview](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/01-overview.md)
 
 ### How is this different from other AI tools?
@@ -59,6 +61,10 @@ separate service (lik-mcp) supplies Nava's governed knowledge.
 
 [More: why we run on Claude Managed Agents](https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md)
 
+**LIK key concepts**
+
+![LIK key concepts](/static/lik-key-concepts-diagram.svg)
+
 ### Pick the right agent for your question
 
 The picker groups purpose-built agents into labeled sections, and a Knowledge Search Agent routes a
@@ -97,6 +103,10 @@ connection gives the agent access to:
 The activity indicator shows the specific tool the agent is running (and how many times), and each reply
 notes how long the turn took. Useful because long agent turns no longer look frozen — you can tell it's
 making progress and roughly how much work a question took.
+
+**How data flows through LIK**
+
+![How data flows through LIK](/static/lik-data-flows-diagram.svg)
 
 ### Guardrails on agents that change shared data
 
@@ -159,3 +169,7 @@ The full design lives in the [v0.5 documents](https://github.com/navapbc/leverag
 (overview, concepts, examples, strategy, architecture, access control, storage, open questions —
 all linked above). For how the agent runtime is divided between Anthropic's platform and Nava's own
 apps, see [Claude Managed Agents](https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md).
+
+**LIK levels**
+
+![LIK levels](/static/lik-levels-diagram.svg)
