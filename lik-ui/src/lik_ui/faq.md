@@ -65,10 +65,32 @@ The picker groups purpose-built agents into labeled sections, and a Knowledge Se
 question to the matching source of knowledge (projects, org guidance, or practice knowledge) for you.
 Useful because you don't have to know which specialist to ask — you get a clear menu and sensible routing.
 
-### Connect many data sources, including Slack
+### Connect many data sources
 
 You can point-and-click to connect the sources the agent needs — Confluence/Jira, GitHub, Google Drive,
-Salesforce, and Slack. Useful because an answer can draw on the places your team actually works, not just one.
+and Slack. Useful because an answer can draw on the places your team actually works, not just one.
+Which sources are reachable depends on whether each offers a supported connector (MCP server): the ones listed
+have official ones; some Google apps and other sources are community or third-party, and a few have none yet.
+
+When you connect a source you sign in to that provider yourself and approve the LIK app. Approving hands LIK a
+personal access token (an OAuth grant) that stands in for you, so whichever agent you use acts **on your
+behalf**: it can reach exactly what you can reach in that source and nothing more, and each person connects
+their own sources. The consent is for the LIK app as a whole — every agent in it draws on the same connection,
+you don't re-approve per agent. The provider itself enforces your permissions on every request — LIK never
+holds a shared, all-access login, and connecting one source doesn't expose anything in the others. What each
+connection gives the agent access to:
+
+- **`atlassian`** — Confluence pages and Jira issues (with their comments and attachments) in the Atlassian
+  sites you belong to.
+- **`google-drive-drivemcp`** — Google Docs, Sheets, Slides, and other files in your Google Drive, read-only.
+- **`github`** — the repositories, code, issues, and pull requests your GitHub account can see, including
+  your organization membership.
+- **`slack`** — messages, channels, canvases, and people you can already see in Slack, read-only (search and
+  history — the agent can look things up but can't post, react, or edit on your behalf).
+- **`lik-mcp`** — Nava's own governed knowledge layer (the Discovery Layer material derived from the sources
+  above); it uses your sign-in to identify you and still checks your permissions before returning anything.
+
+[More: data-source availability](https://github.com/navapbc/leverage-inst-knowl/blob/main/mcp-availability.md)
 
 ### See what the agent is doing while it works
 
@@ -115,14 +137,6 @@ pages, and quirks of specific data-source connectors. These are tracked and work
 deliberately.
 
 [More: known limitations](https://github.com/navapbc/leverage-inst-knowl/blob/main/limitations.md)
-
-## Which data sources can it connect to?
-
-It depends on whether each source offers a supported connector (MCP server). Confluence/Jira,
-GitHub, Slack, Google Drive, and Salesforce have official ones; some Google apps and other sources
-are community or third-party, and a few have none yet.
-
-[More: data-source availability](https://github.com/navapbc/leverage-inst-knowl/blob/main/mcp-availability.md)
 
 ## Where can I learn more?
 
