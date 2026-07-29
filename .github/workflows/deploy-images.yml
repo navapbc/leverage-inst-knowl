@@ -70,6 +70,53 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: docker build -t ${{ matrix.name }}:${{ github.sha }} ./${{ matrix.name }}
 
+      # Boot the freshly built image and confirm it serves its health endpoint BEFORE pushing.
+      # This catches an import/boot break — like the mcp-2.0 crash that removed a module imported
+      # at startup — in CI, so a broken image never consumes a Lightsail deploy/rollback cycle.
+      # Neither app needs a reachable DB to answer its health probe (the connection pool opens
+      # lazily in the background), so a standalone container is sufficient — no DB sidecar.
+      - name: Smoke boot
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          name="${{ matrix.name }}"
+          img="${name}:${{ github.sha }}"
+          cname="smoke-${name}"
+          if [ "$name" = "lik-mcp" ]; then
+            # Boot in the prod auth mode the deploy uses; dummy OAuth values satisfy the
+            # fail-closed startup guard. /mcp answers 401 under auth — the Lightsail health
+            # check treats 200-499 as alive (see infra/lik_mcp.tf), so mirror that range.
+            docker run -d --name "$cname" -p 8000:8000 \
+              -e LIK_OAUTH_CLIENT_ID=smoke \
+              -e LIK_RESOURCE_SERVER_URL=https://mcp.example.test/mcp \
+              -e LIK_HTTP_ALLOWED_HOSTS="localhost,localhost:*,127.0.0.1,127.0.0.1:*,0.0.0.0,0.0.0.0:*" \
+              "$img"
+            url="http://127.0.0.1:8000/mcp"; lo=200; hi=499
+          else
+            docker run -d --name "$cname" -p 8001:8001 \
+              -e LIK_UI_ENV=local \
+              -e LIK_UI_HTTP_ALLOWED_HOSTS="localhost,localhost:*,127.0.0.1,127.0.0.1:*" \
+              "$img"
+            url="http://127.0.0.1:8001/healthz"; lo=200; hi=200
+          fi
+          for i in $(seq 1 30); do
+            # `|| code=000` (assignment, not echo) keeps $code a clean 3-digit value even when
+            # curl hits connection-refused during the boot window — avoids a set -e arithmetic abort.
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$url" 2>/dev/null) || code=000
+            if [ "$code" -ge "$lo" ] && [ "$code" -le "$hi" ]; then
+              echo "healthy: $url -> $code (after ${i} probe(s))"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::${name} image did not become healthy ($url, last HTTP code=$code) — see container logs below"
+          docker logs "$cname" 2>&1 | tail -50
+          exit 1
+
+      - name: Smoke boot teardown
+        if: always() && steps.gate.outputs.skip != 'true'
+        run: docker rm -f "smoke-${{ matrix.name }}" >/dev/null 2>&1 || true
+
       - name: Push to Lightsail registry
         if: steps.gate.outputs.skip != 'true'
         run: |

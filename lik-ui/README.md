@@ -65,6 +65,16 @@ LIK_UI_DB_HOST=... LIK_UI_DB_PORT=... LIK_UI_DB_NAME=... LIK_UI_DB_USER=... \
 (Or apply `db/init.sql` with `psql` directly if you prefer.) `scripts/init_db.py` mirrors
 lik-mcp's `scripts/init_db.py`, extended with the `--ssm-prefix` prod path.
 
+## Reproducible container builds
+
+The `Dockerfile` installs the **exact dependency set pinned in `uv.lock`** (it exports the lock to
+a frozen requirements set, then `pip install`s that), not a live re-resolution of the `>=` ranges in
+`pyproject.toml`. So the image is reproducible and a dependency's breaking major release can't sneak
+in on build date. A stale lock (out of sync with `pyproject.toml`) fails the build loudly. To bump
+dependencies, run `uv lock --upgrade` (all) or `uv lock --upgrade-package <name>` (one), commit the
+lock diff, and let the deploy workflow's smoke-boot step verify the new image imports and serves
+`/healthz` before it is pushed.
+
 ## Test
 
 ```
