@@ -201,6 +201,9 @@ are handled in Step 3b.
   when the `lastModified` string didn't parse — the row then always processes next run rather than skipping on a bad
   hint. *(Omit this field entirely if the change-hint bucket has been dropped.)*
 - `computed_by`: `"sync-catalog-from-project-indexes"`
+  *(⚠️ This literal is also the catalog upsert key for skill rows. If this skill is ever renamed, existing rows'
+  `computed_by` must be migrated to the new value in the same change — otherwise a sync no longer matches them and
+  silently inserts duplicates instead of updating in place. See the skill-rename note in the repo `CLAUDE.md`.)*
 - `row_provenance`: `"skill"`
 
 Leave other fields at defaults (`provenance=ai-generated`, `freshness=current`, `sensitivity=cleared`, empty
