@@ -25,10 +25,18 @@ permissions:
   contents: read
   issues: write     # a failed scan opens a tracking issue (ops-level alerting; owner-level is in-app)
 
-# Never let two scans overlap (a slow run + the next tick) — the atomic claim also guards this,
-# but serializing avoids racing on the same due rows at all.
+# Shared, repo-wide serialization group (see deploy-images.yml, which uses the SAME group). It does
+# two jobs at once:
+#   1. Never let two scans overlap (a slow run + the next tick) — the atomic claim also guards this,
+#      but serializing avoids racing on the same due rows at all.
+#   2. Never let a container deploy run WHILE a scan is running. A scheduled run drives an agent that
+#      holds a long-lived MCP session to lik-mcp; a deploy replaces that container (a rolling cutover
+#      Lightsail can't drain), which severs the session mid-run and fails the sync. Sharing the group
+#      makes a deploy queue behind an in-flight scan (and vice versa) instead of colliding.
+# Trade-off: an urgent deploy waits up to one scan (~tens of minutes). Acceptable — runs are
+# idempotent/resumable, so the cost of a collision would only be a wasted re-run, not data loss.
 concurrency:
-  group: scheduled-runs
+  group: lik-prod-mutations
   cancel-in-progress: false
 
 jobs:
