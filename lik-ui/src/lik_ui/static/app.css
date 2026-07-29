@@ -222,7 +222,7 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
   max-height: 32rem; overflow-y: auto; }
 
 /* Analytics pages (/stats, /all-stats). Server-rendered — no chart library or JS. */
-.stats-page main { max-width: 60rem; margin: 0 auto; padding: 1rem 1.25rem; }
+.stats-page main { max-width: 84rem; margin: 0 auto; padding: 1rem 1.25rem; }
 .stats-page h2 { font-size: 1.05rem; margin: 1.5rem 0 .5rem; }
 .stats-section-note { color: var(--muted); font-size: .85rem; margin: .1rem 0 .6rem; }
 /* Stat tiles: a responsive row of headline numbers. */
@@ -249,3 +249,18 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 .totals-table th[scope="row"] { font-weight: 600; }
 .totals-table tr.sub td:first-child { padding-left: 1.5rem; color: var(--muted); font-weight: 400; }
 .totals-table tr.flagged th, .totals-table tr.flagged td { color: var(--status-warn); }
+/* FAQ section headings: a click-to-copy link that surfaces on hover/focus. */
+.faq-content :is(h1, h2, h3, h4, h5, h6) { position: relative; }
+.faq-anchor {
+  margin-left: .4rem; font-size: .7em; text-decoration: none; opacity: 0;
+  transition: opacity .12s ease; vertical-align: middle; cursor: pointer;
+}
+.faq-content :is(h1, h2, h3, h4, h5, h6):hover .faq-anchor,
+.faq-anchor:focus { opacity: .6; }
+.faq-anchor:hover { opacity: 1; }
+.faq-anchor.copied { opacity: 1; }
+/* Brief "Copied" confirmation on a successful copy. */
+.faq-anchor.copied::after {
+  content: "Copied"; margin-left: .35rem; font-size: .85em; color: var(--status-ok);
+  font-weight: 600; vertical-align: middle;
+}

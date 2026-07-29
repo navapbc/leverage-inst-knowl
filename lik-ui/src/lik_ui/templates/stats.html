@@ -16,8 +16,9 @@
     <thead>
       <tr>
         <th>Session</th>{% if view.per_user is not none %}<th>User</th>{% endif %}
+        <th>Agent</th>
         <th>Created</th><th>Deletes on</th><th>Shared</th>
-        <th class="num">Input tokens</th><th class="num">Output tokens</th><th class="num">Active (s)</th><th>Status</th><th></th>
+        <th class="num">Input tokens</th><th class="num">Output tokens</th><th class="num">Active seconds</th><th>Status</th><th></th>
       </tr>
     </thead>
     <tbody>
@@ -25,6 +26,7 @@
       <tr>
         <td><a href="/chat/{{ s.session_id | urlencode }}">{{ s.title or ("Session " ~ s.session_id) }}</a></td>
         {% if view.per_user is not none %}<td>{{ s.user_email }}</td>{% endif %}
+        <td>{{ s.agent_label or "—" }}</td>
         {# Local-row fields — always present regardless of the platform read below. #}
         <td><time data-utc="{{ s.created_at | utc_iso }}" data-format="date">{{ s.created_at | utcformat('%Y-%m-%d') }}</time></td>
         <td><time data-utc="{{ s.auto_delete_at | utc_iso }}" data-format="date">{{ s.auto_delete_at | utcformat('%Y-%m-%d') }}</time></td>

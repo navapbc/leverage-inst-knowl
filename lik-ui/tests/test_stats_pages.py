@@ -79,6 +79,42 @@ def test_stats_live_section_shows_cumulative_only(db):
     assert "tool_breakdown" not in text
 
 
+def test_stats_live_section_shows_agent_name(db):
+    # The live table resolves each session's agent id to its human-readable name.
+    client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1")  # create a live session
+    text = client.get("/stats").text
+    assert "<th>Agent</th>" in text
+    assert "Discovery Layer Agent" in text  # FakeAgentsClient.describe() name
+
+
+def test_stats_live_section_falls_back_to_agent_id(db):
+    # When the name can't be resolved (describe raises), the raw agent id is shown instead.
+    class BrokenAgents:
+        def resolve_agent_id(self, name):
+            return "agent_1"
+
+        def resolve_environment_id(self, name):
+            return "env_1"
+
+        def describe(self, agent_id):
+            raise RuntimeError("platform unreachable")
+
+    from pathlib import Path
+
+    from tests.test_oauth_connector import RecordingVaultClient
+    oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
+    settings = Settings(env="test", agents_config_path=Path(__file__).parent / "fixtures" / "agents.toml")
+    app = build_app(settings, store=Store(db), app_oidc=oidc, vault_client=RecordingVaultClient(),
+                    agents_client=BrokenAgents(), sessions_client=FakeSessionsClient())
+    client = TestClient(app, follow_redirects=False)
+    _login(client)
+    client.get("/chat?agent_id=agent_1")
+    text = client.get("/stats").text
+    assert "agent_1" in text  # raw id rendered as the fallback label
+
+
 def test_stats_link_in_nav_after_settings(db):
     client = TestClient(_app(db, FakeSessionsClient()), follow_redirects=False)
     _login(client)

@@ -20,15 +20,39 @@ def _series(rows: list[dict]) -> list[dict]:
     return [{"created_at": r["created_at"].isoformat(), "tokens": int(r["tokens"])} for r in rows]
 
 
-def _stats_view(store, sessions_client, *, live_sessions, user_id, scope_label, per_user, page_path):
+def _agent_label(agents_client, agent_id):
+    """Human-readable name for an agent id, falling back to the id itself when the name can't be
+    resolved (no client, lookup failure, or an agent with no name). Never raises — a stats page must
+    render even if the agents platform is unreachable."""
+    if not agent_id:
+        return agent_id
+    if agents_client is None:
+        return agent_id
+    try:
+        return agents_client.describe(agent_id).get("name") or agent_id
+    except Exception:  # noqa: BLE001 - a resolution failure must not fail the stats page
+        return agent_id
+
+
+def _label_agents(agents_client, rows):
+    """Attach ``agent_label`` to each live-session row. Resolves each distinct agent id once so a
+    page full of same-agent sessions makes a single lookup (the client also memoizes)."""
+    labels = {aid: _agent_label(agents_client, aid) for aid in {r.get("agent_id") for r in rows}}
+    for r in rows:
+        r["agent_label"] = labels.get(r.get("agent_id"))
+
+
+def _stats_view(store, sessions_client, agents_client, *, live_sessions, user_id, scope_label, per_user, page_path):
     """Assemble the shared stats view model for one scope. ``user_id`` is None for the all-users
     (/all-stats) scope and the viewer's id for /stats. ``page_path`` is where a live-session delete
     should return to."""
+    live = build_live_section(sessions_client, live_sessions)
+    _label_agents(agents_client, live["rows"])
     return {
         "scope_label": scope_label,
         "page_path": page_path,
         "per_user": store.session_analytics_by_user() if per_user else None,
-        "live": build_live_section(sessions_client, live_sessions),
+        "live": live,
         "deleted": {
             "totals": store.session_analytics_totals(user_id),
             "series": _series(store.session_analytics_series(user_id)),
@@ -46,9 +70,11 @@ def register_stats_routes(app: FastAPI) -> None:
         user = require_user(request)
         store = request.app.state.store
         sessions_client = request.app.state.sessions_client
+        agents_client = request.app.state.agents_client
         view = _stats_view(
             store,
             sessions_client,
+            agents_client,
             live_sessions=store.list_sessions(user["id"]),
             user_id=user["id"],
             scope_label="your sessions",
@@ -64,9 +90,11 @@ def register_stats_routes(app: FastAPI) -> None:
         user = require_user(request)
         store = request.app.state.store
         sessions_client = request.app.state.sessions_client
+        agents_client = request.app.state.agents_client
         view = _stats_view(
             store,
             sessions_client,
+            agents_client,
             live_sessions=store.list_all_sessions(),
             user_id=None,
             scope_label="all users",
