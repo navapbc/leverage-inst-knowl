@@ -283,7 +283,7 @@ class Store:
             return conn.execute(
                 """
                 SELECT s.session_id, s.user_id, u.email AS user_email, s.agent_id,
-                       s.title, s.created_at, s.auto_delete_at
+                       s.title, s.shared, s.created_at, s.auto_delete_at
                 FROM sessions s JOIN users u ON u.id = s.user_id
                 ORDER BY s.created_at DESC
                 """

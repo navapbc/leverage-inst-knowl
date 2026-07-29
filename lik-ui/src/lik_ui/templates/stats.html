@@ -15,6 +15,7 @@
     <thead>
       <tr>
         <th>Session</th>{% if view.per_user is not none %}<th>User</th>{% endif %}
+        <th>Created</th><th>Deletes</th><th>Shared</th>
         <th class="num">Tokens</th><th class="num">Active (s)</th><th>Status</th><th></th>
       </tr>
     </thead>
@@ -23,6 +24,10 @@
       <tr>
         <td><a href="/chat/{{ s.session_id | urlencode }}">{{ s.title or ("Session " ~ s.session_id) }}</a></td>
         {% if view.per_user is not none %}<td>{{ s.user_email }}</td>{% endif %}
+        {# Local-row fields — always present regardless of the platform read below. #}
+        <td><time data-utc="{{ s.created_at | utc_iso }}" data-format="date">{{ s.created_at | utcformat('%Y-%m-%d') }}</time></td>
+        <td><time data-utc="{{ s.auto_delete_at | utc_iso }}" data-format="date">{{ s.auto_delete_at | utcformat('%Y-%m-%d') }}</time></td>
+        <td>{{ "Shared" if s.shared else "Private" }}</td>
         {% if s.available %}
         <td class="num">{{ "{:,}".format(s.total_tokens) }}</td>
         <td class="num">{{ s.active_seconds | round(1) if s.active_seconds is not none else "—" }}</td>

@@ -134,3 +134,18 @@ def test_all_stats_no_delete_button_for_other_users_sessions(db):
     text = client.get("/all-stats").text
     assert "Bob live session" in text            # listed in the live section
     assert 'value="bob_live"' not in text        # but no delete form targets it
+
+
+def test_stats_live_table_shows_local_row_fields(db):
+    # created_at / auto_delete_at (as dated <time> cells) and the shared flag come from the DB row.
+    sc = FakeSessionsClient()
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+    text = client.get("/stats").text
+    assert "<th>Created</th>" in text and "<th>Deletes</th>" in text and "<th>Shared</th>" in text
+    assert 'data-format="date"' in text  # dated cells rendered via tz.js
+    assert "Private" in text             # a fresh session is private by default
+    # Once shared, the flag flips.
+    Store(db).set_session_shared(session_id, _owner_id(db), True)
+    assert "Shared" in client.get("/stats").text
