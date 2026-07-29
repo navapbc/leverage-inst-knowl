@@ -16,14 +16,14 @@ Its outputs come in three kinds:
 - **The Catalog** — an index to look up where a topic's material lives, and the first place to start answering a question. It's built only from the DL records — not the full sources — so it's the coarse, topic-level map of what exists and where across many systems. Without it, a tool would have to search every system just to learn what exists before it could begin.
 - **Confirmation signals** — people vouching that the source behind an answer was right, or flagging it wrong. Without them, future answers couldn't favor the sources people have already confirmed or steer clear of ones flagged wrong — so the system would never grow more trustworthy the more it's used.
 
-Almost all of this is **disposable** — recomputed from the sources on demand, so it's never backed up; rebuild or discard it freely. The parts kept safe are those a person **touched by hand** — a DL record someone edited or verified, the answers people save, and the confirmations they leave — because nothing can regenerate them. (These live in a Data Source or DL's own store, which backs them up.)
+Almost all of this is **disposable** — recomputed from the sources on demand, so it's never backed up; any one such piece can be rebuilt or discarded freely. The parts that are **backed up instead** are those a person **touched by hand**: a DL record someone edited or verified, the answers people save, the Catalog entries people register by hand, and the confirmations they leave. Each is preserved by the store it lives in — a Data Source, or DL's own store.
 
 ## The value
 
 - **Faster, cheaper answers** — work is computed once and reused by every tool, instead of every tool re-searching every data source on every question.
 - **More trustworthy answers** — answers cite their sources, carry content-freshness signals, and accumulate confirmations from the people who used them.
 - **Knowledge stays governed** — each original data source keeps controlling who can see what; the Discovery Layer never becomes a back door to restricted data.
-- **Low ongoing cost** — almost everything is rebuilt or discarded on demand; only what a person touched by hand is kept — hand-edited records, saved answers, confirmations — so there's little to maintain.
+- **Low ongoing cost** — almost everything is rebuilt or discarded on demand; only what a person touched by hand is kept — hand-edited records, saved answers, hand-registered Catalog entries, and confirmations — so there's little to maintain.
 
 ## Guiding principles
 
