@@ -7,7 +7,10 @@ seam — it imports NO web/FastAPI/app symbols, so the standalone prune script (
 ``app.py``. Route handlers live in ``stats.py``.
 """
 
+import logging
 from collections.abc import Iterable
+
+logger = logging.getLogger(__name__)
 
 # The four code paths that physically delete a session; each stamps its label on the record.
 DELETION_PATHS = ("manual", "delete_all", "prune", "self_heal")
@@ -49,3 +52,88 @@ def tally_events(events: Iterable[dict]) -> dict:
         "tool_breakdown": {"tools": tools, "servers": servers},
         "error_types": error_types,
     }
+
+
+def _base_record(store, session_row: dict, deletion_path: str) -> dict:
+    """The record fields knowable from local state alone, used for every record (a full capture
+    layers metrics on top). Reads ``session_row`` defensively with ``.get`` so a thin row (the
+    prune path selects only session_id/user_id/agent_id/created_at) can never raise here — a
+    raise in the fallback would abort the deletion, the opposite of "capture never blocks delete"."""
+    user_id = session_row.get("user_id")
+    record = {
+        "session_id": session_row.get("session_id"),
+        "user_id": user_id,
+        "user_email": _lookup_email(store, user_id),
+        "agent_id": session_row.get("agent_id"),
+        "created_at": session_row.get("created_at"),
+        "deletion_path": deletion_path,
+    }
+    return record
+
+
+def _lookup_email(store, user_id) -> str | None:
+    """Denormalize the owner's email onto the record so /all-stats can attribute usage by whom
+    even after the user row is gone. Best-effort — never let a lookup failure block capture."""
+    if user_id is None:
+        return None
+    try:
+        user = store.get_user_by_id(user_id)
+    except Exception:  # noqa: BLE001 - a lookup failure must not block capture
+        return None
+    return user["email"] if user else None
+
+
+def capture_session_analytics(
+    store,
+    sessions_client,
+    session_row: dict,
+    deletion_path: str,
+    *,
+    platform_lost: bool = False,
+) -> None:
+    """Write exactly one durable analytics record for ``session_row`` just before it is physically
+    deleted — the single shared step all four deletion paths route through (R5, R6).
+
+    - When the platform is readable, the record carries full usage: cumulative tokens (with the
+      cache-read / cache-creation split), active + wall-clock timing, message counts, the per-tool
+      and per-MCP-server tool-use breakdown, error counts with types, agent, lifespan, and path (R7).
+    - When ``platform_lost`` is set (self-heal — the platform session is already gone) or the
+      client is a stub (None), or the pre-delete read fails for any reason, the record is still
+      written from local fields and flagged ``capture_incomplete`` with a reason (R8, R9).
+
+    Never raises: capture must not block deletion. A write failure is logged, not propagated."""
+    record = _base_record(store, session_row, deletion_path)
+    session_id = record["session_id"]
+
+    if platform_lost:
+        record["capture_incomplete"] = True
+        record["capture_reason"] = "lost before capture (platform session already gone)"
+    elif sessions_client is None:
+        record["capture_incomplete"] = True
+        record["capture_reason"] = "platform client unavailable"
+    else:
+        try:
+            # All-or-nothing read: any failure flags the whole record rather than storing a
+            # partial mix of read and missing metrics.
+            snap = sessions_client.usage_snapshot(session_id)
+            tally = tally_events(sessions_client.list_events(session_id))
+            record.update(
+                {
+                    "capture_incomplete": False,
+                    "input_tokens": snap.get("input"),
+                    "output_tokens": snap.get("output"),
+                    "cache_read_tokens": snap.get("cache_read"),
+                    "cache_creation_tokens": snap.get("cache_creation"),
+                    "active_seconds": snap.get("active_seconds"),
+                    "wall_clock_seconds": snap.get("wall_clock_seconds"),
+                    **tally,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - degrade to a flagged local-only record
+            record["capture_incomplete"] = True
+            record["capture_reason"] = f"usage read failed: {exc}"
+
+    try:
+        store.write_session_analytics(record)
+    except Exception:  # noqa: BLE001 - never block deletion on an analytics write failure
+        logger.exception("failed to write session_analytics for %s", session_id)
