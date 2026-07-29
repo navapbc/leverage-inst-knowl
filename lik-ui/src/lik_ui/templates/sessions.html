@@ -14,7 +14,7 @@
           {%- if s.delete_soon -%}
             Deletes {% if s.delete_days == 0 %}today{% else %}in {{ s.delete_days }} day{{ 's' if s.delete_days != 1 else '' }}{% endif %}
           {%- else -%}
-            Deletes {{ s.auto_delete_local }} ET
+            Deletes <time data-utc="{{ s.auto_delete_at | utc_iso }}" data-format="date">{{ s.auto_delete_at | utcformat('%Y-%m-%d') }}</time>
           {%- endif -%}
         </span>
       </span>

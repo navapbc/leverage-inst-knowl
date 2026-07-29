@@ -324,16 +324,19 @@ def test_sessions_list_flags_session_at_window_boundary(db):
     assert "delete-warning" in client.get("/sessions").text
 
 
-def test_sessions_list_shows_plain_date_when_not_near(db):
-    from zoneinfo import ZoneInfo
+def test_sessions_list_shows_local_date_element_when_not_near(db):
+    from datetime import timezone
 
     client, session_id = _start_session(db, FakeSessionsClient())
-    # Default is +7 days, well outside the 3-day window; the list shows the ET calendar date.
-    et = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"].astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+    # Default is +7 days, well outside the 3-day window; the list emits the delete instant as a
+    # UTC `data-utc` date element (tz.js renders it in the viewer's zone), with no hardcoded ET.
+    stored = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
     text = client.get("/sessions").text
     assert "delete-warning" not in text
     assert "Deletes in" not in text
-    assert f"Deletes {et} ET" in text
+    assert 'data-format="date"' in text
+    assert f'data-utc="{stored.astimezone(timezone.utc).isoformat()}"' in text
+    assert " ET" not in text  # the hardcoded zone label is gone
 
 
 def test_chat_page_lists_declared_servers_for_auto_approve(db):
@@ -907,60 +910,55 @@ def test_share_checkbox_shows_only_for_owner(db):
     assert "/share" not in viewer.get(f"/chat/{session_id}").text     # viewer does not
 
 
-def test_owner_reschedules_auto_delete_to_a_future_date(db):
+def test_owner_reschedules_auto_delete_by_duration(db):
     from datetime import datetime, timedelta, timezone
-    from zoneinfo import ZoneInfo
 
     sc = FakeSessionsClient()
     owner, viewer, session_id = _owner_and_viewer(db, sc)
-    future = (datetime.now(timezone.utc) + timedelta(days=30)).date()
-    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": future.isoformat()})
+    before_post = datetime.now(timezone.utc)
+    r = owner.post(f"/chat/{session_id}/auto-delete",
+                   data={"interval_count": "2", "interval_unit": "weeks"})
     assert r.status_code == 303 and r.headers["location"] == f"/chat/{session_id}"
     stored = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
-    # The picked date is stored as the END of that day in Eastern Time (survives through the
-    # whole chosen day), as the equivalent UTC instant.
-    expected = datetime(future.year, future.month, future.day, 23, 59, 59,
-                        tzinfo=ZoneInfo("America/New_York")).astimezone(timezone.utc)
-    assert stored == expected
+    # Stored as now() + interval in UTC — no time zone involved. Lands ~14 days out (a small
+    # tolerance absorbs the time between capturing before_post and the server's own now()).
+    expected = before_post + timedelta(weeks=2)
+    assert abs((stored - expected).total_seconds()) < 60
 
 
-def test_reschedule_rejects_past_date_and_leaves_row_unchanged(db):
+def test_reschedule_min_duration_is_always_in_the_future(db):
+    from datetime import datetime, timezone
 
+    sc = FakeSessionsClient()
+    owner, viewer, session_id = _owner_and_viewer(db, sc)
+    # The smallest allowed interval (1 day) still pushes the delete time into the future, so a
+    # session can be pushed out but never turned off (no separate future check needed).
+    r = owner.post(f"/chat/{session_id}/auto-delete",
+                   data={"interval_count": "1", "interval_unit": "days"})
+    assert r.status_code == 303
+    stored = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
+    assert stored > datetime.now(timezone.utc)
+
+
+def test_reschedule_rejects_invalid_duration_and_leaves_row_unchanged(db):
     sc = FakeSessionsClient()
     owner, viewer, session_id = _owner_and_viewer(db, sc)
     before = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
-    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": "2000-01-01"})
-    assert r.status_code == 400
+    for bad in ({"interval_count": "0", "interval_unit": "days"},      # below minimum
+                {"interval_count": "-1", "interval_unit": "days"},     # negative
+                {"interval_count": "not-an-int", "interval_unit": "days"},  # non-integer
+                {"interval_count": "2", "interval_unit": "hours"}):    # unknown unit
+        r = owner.post(f"/chat/{session_id}/auto-delete", data=bad)
+        assert r.status_code == 400
     assert Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"] == before
 
 
-def test_reschedule_rejects_malformed_date(db):
-    sc = FakeSessionsClient()
-    owner, viewer, session_id = _owner_and_viewer(db, sc)
-    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": "not-a-date"})
-    assert r.status_code == 400
-
-
-def test_reschedule_rejects_todays_et_date(db):
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    sc = FakeSessionsClient()
-    owner, viewer, session_id = _owner_and_viewer(db, sc)
-    today_et = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
-    # Today is not a future date — immediate deletion is the Delete button's job.
-    r = owner.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": today_et})
-    assert r.status_code == 400
-
-
 def test_non_owner_cannot_reschedule_anothers_session(db):
-    from datetime import datetime, timedelta, timezone
-
     sc = FakeSessionsClient()
     owner, viewer, session_id = _owner_and_viewer(db, sc)
     before = Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"]
-    future = (datetime.now(timezone.utc) + timedelta(days=30)).date()
-    viewer.post(f"/chat/{session_id}/auto-delete", data={"auto_delete_date": future.isoformat()})
+    viewer.post(f"/chat/{session_id}/auto-delete",
+                data={"interval_count": "4", "interval_unit": "weeks"})
     # Owner-scoped: the viewer's post changes nothing.
     assert Store(db).get_session(session_id, _owner_id(db))["auto_delete_at"] == before
 
