@@ -58,7 +58,10 @@ and indexing your content into their own store (e.g., a vector database), so a f
 outside the source. LIK's own store instead holds only the compact pointers and summaries it's
 deliberately given — never a bulk copy or search-index of your content — so sensitive material
 stays in its original source under that source's controls, and what LIK keeps in its own store
-is under Nava's control rather than swept in wholesale.
+is under Nava's control rather than swept in wholesale. Copying content into a separate store
+also creates an ongoing upkeep problem: the duplicate drifts out of date as the source changes
+and has to be continually re-synced — something LIK largely sidesteps by not holding a copy in
+the first place.
 If nothing else, LIK can be a baseline for comparison against other tools.
 
 ### Can I use LIK from other AI tools?
