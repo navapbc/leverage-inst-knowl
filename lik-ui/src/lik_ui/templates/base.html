@@ -34,7 +34,7 @@
     </nav>
     <div class="topbar-account">
       <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <span class="topbar-email">{{ user.email }}</span>
+      <span class="topbar-email">{{ user.email | replace("@navapbc.com", "") }}</span>
       <a href="/logout">Sign out</a>
     </div>
   </header>
