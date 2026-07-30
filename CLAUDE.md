@@ -35,6 +35,12 @@
   expired", run `AWS_PROFILE=lik mise exec -- aws login` (opens a browser) and retry. Secrets live in SSM
   under `/ik-arch/prod/` (e.g. `LIK_UI_ANTHROPIC_API_KEY`; the agent roster in `lik-ui/src/lik_ui/agents.toml`
   lists agents by name, resolved to ids at startup).
+* **Deploying the app services (`lik-ui`, `lik-mcp`).** Deploy via the **`deploy-images.yml`** GitHub Actions
+  workflow (manual dispatch) — choose the `service` input `lik-ui`, `lik-mcp`, or `both`. It builds the image,
+  smoke-boots it, pushes to the Lightsail registry, and auto-applies **only** a clean image swap (any other
+  Terraform plan is left for a maintainer to review and `./tf.sh apply` locally). This is how app code —
+  including the lik-ui FAQ (`lik-ui/src/lik_ui/faq.md`) — reaches prod; merging to `main` does **not** deploy on
+  its own. (Skills and agents deploy separately via `deploy-skills.yml` / `deploy-agents.yml`, above.)
 * **Diagnosing OAuth / MCP-auth / session failures:** chat transcripts and credentials are NOT stored in
   this repo — they live on the Anthropic Managed Agents platform, queried via the Python `anthropic` SDK
   (`beta.sessions` / `beta.vaults`). See `docs/oauth.md` → "Diagnosing a failing connection" for the

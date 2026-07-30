@@ -70,7 +70,7 @@ knowledge with a set of curated, centrally-maintained agents and skills aimed at
 point-and-click data connectors for the sources those agents need. If you'd rather bring your own tool,
 lik-mcp is there for it; if you'd rather have the whole setup handled for you, use the LIK app.
 
-## What can the agent do, and how does it work?
+## What can a LIK agent do, and how does it work?
 
 You pick an agent, connect the sources it needs, and ask it questions in chat. The agent itself runs
 on Anthropic's **Claude Managed Agents** platform — Anthropic runs the model-and-tools loop and a
@@ -83,13 +83,7 @@ separate service (lik-mcp) supplies Nava's governed knowledge.
 
 ![LIK key concepts](/static/lik-key-concepts-diagram.svg)
 
-### Pick the right agent for your question
-
-The picker groups purpose-built agents into labeled sections, and a Knowledge Search Agent routes a
-question to the matching source of knowledge (projects, org guidance, or practice knowledge) for you.
-Useful because you don't have to know which specialist to ask — you get a clear menu and sensible routing.
-
-### Connect many data sources
+### Easily connect to Nava data sources
 
 You can point-and-click to connect the sources the agent needs — Confluence/Jira, GitHub, Google Drive,
 and Slack. Useful because an answer can draw on the places your team actually works, not just one.
@@ -123,20 +117,20 @@ the agent would reach it the same point-and-click way. As useful connectors appe
 broaden what an answer can draw on. To make the best use of new MCP server's capabilities,
 LIK's skills and agents should be updated to efficiently and effectively call on the MCP tools when appropriate.
 
-### See what the agent is doing while it works
-
-The activity indicator shows the specific tool the agent is running (and how many times), and each reply
-notes how long the turn took. Useful because long agent turns no longer look frozen — you can tell it's
-making progress and roughly how much work a question took.
-
-**How data flows through LIK**
+### How data flows through LIK
 
 ![How data flows through LIK](/static/lik-data-flows-diagram.svg)
 
-### Guardrails on agents that change shared data
+```
+DSs → DL-creation skill (one of many, per source/team) → DL record (tagged `discovery-layer`, in a store, via MCP)
+DL records → Catalog-registration skill (the registrar) → Catalog pointer (via MCP)
+AI tools → Query skill (one of many, per topic) → known DL output directly, else read Catalog → follow pointers
+Designated artifact (a saved synthesis, or any pre-existing record a person points at) → the person designates it an entry point; if they opt to register → the governed writer writes the Catalog pointer (human-owned row), optionally tagging the source
+Confirmations → service-fronted store (via MCP)
+Durable updates → DSs
+```
 
-Agents that can write to or change shared data are hidden behind a Settings toggle and kept separate from
-read-only ones. Useful because you won't stumble into a data-changing agent by accident.
+More details in the "Data flows" section of [Architecture](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/05-architecture.md) 
 
 ### Schedule an agent to run on its own
 
@@ -159,11 +153,6 @@ their own chat and keep going — for example, adding context they can reach but
 restricted Google Docs). They can ask the agent to summarize or aggregate as they go, but that's a
 convenience, not a privacy guarantee: the agent can't reliably strip sensitive details, so whoever
 adds or re-shares information is responsible for making sure it's appropriate to share onward.
-
-### Control over your chat data
-
-You can delete a session yourself, and sessions are also cleaned up automatically after a set time. Useful
-because sensitive material a session pulled in doesn't linger indefinitely.
 
 ## What are its limitations?
 
