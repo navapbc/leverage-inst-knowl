@@ -62,7 +62,7 @@ The home for DL's structured data — the **Catalog** and **confirmation signals
 
 **Two governed-writer modes** (both writes go through the single governed writer; they differ only in whether a user is attributed):
 - **Autonomous** — Catalog rows the registrar derives, with no user in the loop.
-- **User-attributed** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the governed writer still performs the write, but needs the user's token both to attribute it and to rate-limit per person.
+- **User-attributed** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a human-owned row's `updated_by`); the governed writer still performs the write, but needs the user's token both to attribute it and to rate-limit per person.
 
 **Used for:** the Catalog and confirmation signals; high-stakes ranking; untrusted writers needing hard write-time enforcement.
 
