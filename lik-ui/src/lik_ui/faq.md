@@ -204,6 +204,6 @@ The full design lives in the [v0.5 documents](https://github.com/navapbc/leverag
 all linked above). For how the agent runtime is divided between Anthropic's platform and Nava's own
 apps, see [Claude Managed Agents](https://github.com/navapbc/leverage-inst-knowl/blob/main/claude-managed-agents.md).
 
-**LIK levels**
+**LIK implementation strategy**
 
-![LIK levels](/static/lik-levels-diagram.svg)
+![LIK strategy](/static/lik-strategy-diagram.svg)
