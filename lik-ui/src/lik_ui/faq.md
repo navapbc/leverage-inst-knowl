@@ -162,6 +162,17 @@ restricted Google Docs). They can ask the agent to summarize or aggregate as the
 convenience, not a privacy guarantee: the agent can't reliably strip sensitive details, so whoever
 adds or re-shares information is responsible for making sure it's appropriate to share onward.
 
+### Register a page as a go-to entry point
+
+If you already know the best page, doc, or sheet for a topic, you can ask the Catalog Registration Agent to make it
+the go-to entry point — just point it at the page and say something like "register this as the entry point for X."
+The agent reads the page, agrees with you on the topic it should answer, and lists it in the Catalog so the next
+person finds it in one lookup. You don't need edit access to the page — being able to read it is enough.
+
+It also asks whether you're **vouching** for the page or just **flagging** it as a useful pointer. Vouching makes it
+the default entry point for that topic; flagging still lists it, but ranks it below any vouched page. Either way the
+page you pointed at is registered on your behalf and stays put — nothing re-writes or replaces it automatically.
+
 ## What are its limitations?
 
 It's an early system with known rough edges — for example, how change is detected in Confluence
