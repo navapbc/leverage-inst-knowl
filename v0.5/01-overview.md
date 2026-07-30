@@ -23,6 +23,7 @@ Almost all of this is **disposable** — recomputed from the sources on demand, 
 - **Faster, cheaper answers** — work is computed once and reused by every tool, instead of every tool re-searching every data source on every question.
 - **More trustworthy answers** — answers cite their sources, carry content-freshness signals, and accumulate confirmations from the people who used them.
 - **Knowledge stays governed** — each original data source keeps controlling who can see what; the Discovery Layer never becomes a back door to restricted data.
+- **Control over what's stored** — the Discovery Layer's own store holds only the entry points it is deliberately given — summaries, indexes, pointers, and confirmation signals — never a bulk copy or search-index of the sources' content. Sensitive material stays in its original source under that source's controls instead of being duplicated into a new store, so there's no second copy to secure and what lands in the Discovery Layer is under our control, not swept in wholesale.
 - **Low ongoing cost** — almost everything is rebuilt or discarded on demand; only what a person touched by hand is kept — hand-edited records, saved answers, hand-registered Catalog entries, and confirmations — so there's little to maintain.
 
 ## Guiding principles

@@ -52,6 +52,14 @@ can see how you worked with the agent and build on it (see [Share a chat session
 others](#share-a-chat-session-with-others)). Limitations: it's an early system with rough
 edges (see below), and it only reaches sources that have a supported connector.
 
+When compared with [enterprise search tools](https://github.com/navapbc/leverage-inst-knowl/blob/main/enterprise-search-tools.md) (like Glean, GoSearch, and Onyx), LIK provides
+much more control over sensitive data: many tools work by ingesting
+and indexing your content into their own store (e.g., a vector database), so a full copy lives
+outside the source. LIK's own store instead holds only the compact pointers and summaries it's
+deliberately given — never a bulk copy or search-index of your content — so sensitive material
+stays in its original source under that source's controls, and what LIK keeps in its own store is under Nava's
+control rather than swept in wholesale.
+
 ### Can I use LIK from other AI tools?
 
 Yes. LIK runs a service called **lik-mcp** that any MCP-capable AI tool (Claude Desktop, a coding
