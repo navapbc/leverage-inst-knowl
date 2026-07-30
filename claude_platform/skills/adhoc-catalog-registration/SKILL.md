@@ -126,7 +126,7 @@ label). Otherwise **skip tagging entirely** — never attempt a write to a recor
 - `store_kind`: `"confluence"` for a page, `"gdoc"` for a Google doc, `"gsheet"` for a Google sheet
   *(never `"gdrive"` — the Catalog doesn't recognize it)*
 - `locator`: the Confluence page ID or the Drive file ID
-- `source_refs`: `[{ "id": "<page or file id>", "source_state": "<Confluence body hash, or Drive modifiedTime/version>" }]`
+- `source_refs`: `[{ "id": "<page or file id>", "source_state": "<Confluence body hash | Drive modifiedTime>" }]`
 - `verification`: from Step 3 (`"human-verified"` or `"unverified"`)
 - `verified_by` / `verified_at`: set when vouching (Step 3); otherwise omit
 - `access_groups`: from Step 4 (empty if unspecified)
