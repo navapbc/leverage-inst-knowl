@@ -34,20 +34,26 @@ def _agent_label(agents_client, agent_id):
         return agent_id
 
 
-def _label_agents(agents_client, rows):
-    """Attach ``agent_label`` to each live-session row. Resolves each distinct agent id once so a
-    page full of same-agent sessions makes a single lookup (the client also memoizes)."""
-    labels = {aid: _agent_label(agents_client, aid) for aid in {r.get("agent_id") for r in rows}}
+def _label_agents(agents_client, agents_roster, rows):
+    """Attach a short ``agent_label`` to each live-session row — the agent's session-title prefix
+    from the roster, falling back to the agent's resolved name, then its id. Resolves each distinct
+    agent id once so a page full of same-agent sessions makes a single lookup (the client also
+    memoizes)."""
+    prefixes = {a.agent_id: a.session_title_prefix for a in agents_roster if a.session_title_prefix}
+    labels = {
+        aid: prefixes.get(aid) or _agent_label(agents_client, aid)
+        for aid in {r.get("agent_id") for r in rows}
+    }
     for r in rows:
         r["agent_label"] = labels.get(r.get("agent_id"))
 
 
-def _stats_view(store, sessions_client, agents_client, *, live_sessions, user_id, scope_label, per_user, page_path):
+def _stats_view(store, sessions_client, agents_client, agents_roster, *, live_sessions, user_id, scope_label, per_user, page_path):
     """Assemble the shared stats view model for one scope. ``user_id`` is None for the all-users
     (/all-stats) scope and the viewer's id for /stats. ``page_path`` is where a live-session delete
     should return to."""
     live = build_live_section(sessions_client, live_sessions)
-    _label_agents(agents_client, live["rows"])
+    _label_agents(agents_client, agents_roster, live["rows"])
     return {
         "scope_label": scope_label,
         "page_path": page_path,
@@ -75,6 +81,7 @@ def register_stats_routes(app: FastAPI) -> None:
             store,
             sessions_client,
             agents_client,
+            request.app.state.agents,
             live_sessions=store.list_sessions(user["id"]),
             user_id=user["id"],
             scope_label="your sessions",
@@ -95,6 +102,7 @@ def register_stats_routes(app: FastAPI) -> None:
             store,
             sessions_client,
             agents_client,
+            request.app.state.agents,
             live_sessions=store.list_all_sessions(),
             user_id=None,
             scope_label="all users",

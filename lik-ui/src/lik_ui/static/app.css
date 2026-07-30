@@ -242,6 +242,7 @@ details.skills .skill-note { color: var(--muted); font-size: .78rem; }
 .stats-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .stats-table th, .stats-table td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line); }
 .stats-table td.num, .stats-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.stats-shared { text-align: center; }
 .stats-empty { color: var(--muted); font-style: italic; }
 .stats-unavailable { color: var(--status-warn); font-size: .8rem; }
 /* Deleted-session totals: a compact two-column table. Token components indent under the total. */
