@@ -5,7 +5,8 @@
   <h1>LIK — Leveraging Institutional Knowledge</h1>
   <p>Connect the data sources an AI agent needs and chat with it across
      Nava's institutional knowledge. <a href="/faq">Learn more in the FAQ</a>.</p>
-  <h2>Choose an agent</h2>
+  {% if has_sessions %}<p><a href="/sessions">Resume a previous chat session</a></p>{% endif %}
+  <h2>Choose an agent to start a new chat session</h2>
   <div class="card notice">
     <strong>Before you start</strong>
     <p>This service runs on the Claude Managed Agents platform, which is currently in

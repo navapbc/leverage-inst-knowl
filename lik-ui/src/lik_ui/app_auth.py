@@ -215,6 +215,7 @@ def register_auth_routes(app: FastAPI) -> None:
         user = require_user(request)
         agents_client = request.app.state.agents_client
         settings: Settings = request.app.state.settings
+        has_sessions = bool(request.app.state.store.list_sessions(user["id"]))
         # Management (write-capable) agents are hidden unless the user opted in. This is a
         # visibility guardrail only: /connections and /chat still resolve a management agent
         # reached by a direct URL — the toggle never gates access.
@@ -249,4 +250,6 @@ def register_auth_routes(app: FastAPI) -> None:
         if default_agents:
             groups.append({"name": "Other" if groups else "", "agents": default_agents})
 
-        return templates.TemplateResponse(request, "agents.html", {"user": user, "groups": groups})
+        return templates.TemplateResponse(
+            request, "agents.html", {"user": user, "groups": groups, "has_sessions": has_sessions}
+        )
