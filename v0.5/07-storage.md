@@ -4,7 +4,7 @@
 
 Discovery Layer (DL) outputs deliberately live in more than one store, picked by **who consumes the output** and **how much write-time integrity it needs**. Two properties drive every choice:
 
-- **In-place update vs. create-only** — can a re-derivation revise the *same* artifact at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (the Catalog, confirmation signals, re-derived summaries) needs in-place update.
+- **In-place update vs. create-only** — can a re-derivation revise the *same* record at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (the Catalog, confirmation signals, re-derived summaries) needs in-place update.
 - **Versioned vs. non-versioned** — does the store give attribution, an audit log, and revert *for free*, or must a governed-writer regime supply them?
 
 The three stores below sit at different points on both axes.
@@ -21,7 +21,7 @@ The default for anything human-readable and for small-scale tables.
 | **Versioning** | Native **version history** — supplies attribution, the audit log, and **revert as recovery**, with no extra machinery. |
 | **Identity** | Edits attributed to an SSO identity. A DL-creation skill writes under **its own credential** — typically a non-human service account (e.g., `summarizer@navapbc.com`), separate from the service-fronted store's governed writer — appearing in version history like any editor. The writing identity is **not** what marks provenance (that rides on change-detection, <u>Architecture</u> §5), so it is not architecturally fixed. |
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning configured.* |
-| **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. |
+| **Governance** | Treated as **"just another DS record"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. |
 
 **Used for:** summaries, indexes, and other human-readable DL outputs. *(The Catalog and confirmation signals are not stored here — they need keyed lookup and write-time enforcement, so they live in the service-fronted store below.)*
 
@@ -49,7 +49,7 @@ The home for DL's structured data — the **Catalog** and **confirmation signals
 | **Versioning** | **Non-versioned** — no free attribution, audit log, or revert; it carries explicit `created_at` / `updated_at` / `updated_by` audit columns and relies on **backup/retention** for recovery. |
 | **Access enforcement** | No native Google Group grant. Needs a **`Google Group → Postgres role` bridge**, or a fronting service that resolves the caller's groups into a **row-level-security predicate**. (Index the access-group column — GIN — for query-time filtering.) |
 | **Governance** | A non-versioned store, so its writer runs under the governed-writer controls. |
-| **Backup/retention** | Required for the **non-recomputable** data it holds — confirmation signals, plus any human-created Catalog rows a non-versioned store can't revert. Skill-computed signals and Catalog rows recover by re-derivation; human-created/verified *artifacts* aren't stored here — they live in a DS, which backs them up. |
+| **Backup/retention** | Required for the **non-recomputable** data it holds — confirmation signals, plus any human-created Catalog rows a non-versioned store can't revert. Skill-computed signals and Catalog rows recover by re-derivation; human-created/verified *records* aren't stored here — they live in a DS, which backs them up. |
 
 **Served through scoped tools, never raw SQL.** The MCP service exposes **intent-named tools** — e.g., `confirm_source`, `register_catalog_entry` — each enforcing its own rules *at write time* (rate-limiting, de-duplication, "reject a confirmation whose citation doesn't resolve"). A generic `run_sql` would hand that enforcement back to the caller and forfeit the reason for moving off a page.
 

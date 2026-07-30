@@ -10,7 +10,7 @@ The whole design reuses the existing Google sign-in rather than standing up a ne
 
 Most DSs don't express permissions as Google Groups (Slack channels, Atlassian roles, Salesforce profiles, Workday models). For each DS feeding a *materialized* DL store, document whether Group attachment is possible and, where not, how native ACLs normalize. There the mapping is the **primary** mechanism.
 
-**For the Discovery Layer:** propagated ACL metadata is used for routing only; real enforcement is the target store's. Where an artifact lives in a DS, that DS's native permissions enforce. Write governance is per store (see <u>Storage</u>).
+**For the Discovery Layer:** propagated ACL metadata is used for routing only; real enforcement is the target store's. Where a record lives in a DS, that DS's native permissions enforce. Write governance is per store (see <u>Storage</u>).
 
 ## Identity rules
 
@@ -31,13 +31,13 @@ Propagated ACL metadata is a **cache**; a stale cache leaks access after revocat
 
 The skill must capture each item's **source ACL at read time** — failure silently widens access.
 
-## Computed / aggregated artifacts
+## Computed / aggregated records
 
 A cross-DS aggregation has no single source ACL. Rather than computing a most-restrictive intersection at runtime, each materialized output is assigned **one sensitivity tier / audience group** named by the skill author (**default-deny** until cleared). Blending tiers in one output is a smell — split the output.
 
 A genuinely cross-tier output is served either by an **admin-provisioned audience group** whose membership *is* the intended union, or — absent a standing audience — by storing **pointers/instructions** directing permitted users to recompute under their own SSO at query time. The skill never computes an intersection. Before writing, the skill asserts the named group is no broader than every input source's audience; on failure the output stays default-deny.
 
-**User-saved syntheses (Level 4) differ.** A person, not a skill, authors the artifact, so there is no skill author to name the group ahead of time. The **saving user sets the audience** under their own SSO and is **responsible** for choosing one no broader than the sources the synthesis drew on (**default-deny** if they specify nothing). The skill may surface the sources' restrictions to inform that choice, but it never sets access itself. The cross-tier caution above still applies — the user makes the call.
+**User-saved syntheses (Level 4) differ.** A person, not a skill, authors the record, so there is no skill author to name the group ahead of time. The **saving user sets the audience** under their own SSO and is **responsible** for choosing one no broader than the sources the synthesis drew on (**default-deny** if they specify nothing). The skill may surface the sources' restrictions to inform that choice, but it never sets access itself. The cross-tier caution above still applies — the user makes the call.
 
 ## Three sharing states
 
