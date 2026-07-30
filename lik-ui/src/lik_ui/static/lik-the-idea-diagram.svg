@@ -20,24 +20,29 @@
   <text x="350" y="144" text-anchor="middle" font-size="9" font-weight="700" fill="#5A8BA8">Two parts live in the Layer's own store (most of it lives below, in the Data Sources):</text>
 
   <!-- Catalog -->
-  <rect x="62" y="154" width="576" height="82" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
-  <rect x="62" y="154" width="124" height="82" rx="6" fill="#D6EAF8"/>
-  <text x="124" y="188" text-anchor="middle" font-size="9" font-weight="700" fill="#1B4A6B">Recomputable</text>
-  <text x="124" y="202" text-anchor="middle" font-size="9" font-weight="700" fill="#1B4A6B">— no backup</text>
-  <text x="412" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="#1B4A6B">The Catalog  —  where to start</text>
-  <text x="412" y="193" text-anchor="middle" font-size="9" fill="#2A7EAA">index: topic → where its material lives · one lookup, then follow the pointer</text>
-  <text x="412" y="208" text-anchor="middle" font-size="9" fill="#2A7EAA">built only from the discovery-layer DS records — the coarse, cross-system view</text>
-  <text x="412" y="225" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">without it: search every system to learn what exists &amp; where</text>
+  <rect x="62" y="154" width="280" height="174" rx="6" fill="#FFFFFF" stroke="#2A7EAA" stroke-width="2"/>
+  <rect x="62" y="164" width="280" height="24" fill="#D6EAF8"/>
+  <text x="202" y="180" text-anchor="middle" font-size="9" font-weight="700" fill="#1B4A6B">Recomputable — no backup required</text>
+  <text x="202" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#1B4A6B">The Catalog — start here for answers</text>
+  <text x="202" y="222" text-anchor="middle" font-size="9" fill="#2A7EAA">index: topic → where its material lives</text>
+  <text x="202" y="235" text-anchor="middle" font-size="9" fill="#2A7EAA">· one lookup, then follow the pointer</text>
+  <text x="202" y="253" text-anchor="middle" font-size="9" fill="#2A7EAA">built only from the discovery-layer DS</text>
+  <text x="202" y="266" text-anchor="middle" font-size="9" fill="#2A7EAA">records — the coarse, cross-system view</text>
+  <text x="202" y="284" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">without it: search every system to learn</text>
+  <text x="202" y="296" text-anchor="middle" font-size="8.5" font-style="italic" fill="#5A8BA8">what exists &amp; where</text>
 
   <!-- Confirmation signals -->
-  <rect x="62" y="246" width="576" height="82" rx="6" fill="#FFFFFF" stroke="#9B59B6" stroke-width="1.5"/>
-  <rect x="62" y="246" width="124" height="82" rx="6" fill="#F4ECF7"/>
-  <text x="124" y="280" text-anchor="middle" font-size="9" font-weight="700" fill="#6C2A6A">Backed up by</text>
-  <text x="124" y="294" text-anchor="middle" font-size="9" font-weight="700" fill="#6C2A6A">the Layer</text>
-  <text x="412" y="268" text-anchor="middle" font-size="12" font-weight="700" fill="#6C2A6A">Confirmation signals</text>
-  <text x="412" y="285" text-anchor="middle" font-size="9" fill="#8E44AD">people vouch the cited source was right — or flag it wrong</text>
-  <text x="412" y="300" text-anchor="middle" font-size="9" fill="#8E44AD">can't be re-derived → the one part the Layer must keep itself</text>
-  <text x="412" y="317" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">without them: answers can't favor confirmed sources; never grows more trustworthy</text>
+  <rect x="358" y="154" width="280" height="174" rx="6" fill="#FFFFFF" stroke="#9B59B6" stroke-width="1.5"/>
+  <rect x="358" y="164" width="280" height="24" fill="#F4ECF7"/>
+  <text x="498" y="180" text-anchor="middle" font-size="9" font-weight="700" fill="#6C2A6A">Backed up by the Layer</text>
+  <text x="498" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#6C2A6A">Confirmation signals</text>
+  <text x="498" y="222" text-anchor="middle" font-size="9" fill="#8E44AD">people vouch the cited source was</text>
+  <text x="498" y="235" text-anchor="middle" font-size="9" fill="#8E44AD">right — or flag it wrong</text>
+  <text x="498" y="253" text-anchor="middle" font-size="9" fill="#8E44AD">can't be re-derived → the one part</text>
+  <text x="498" y="266" text-anchor="middle" font-size="9" fill="#8E44AD">the Layer must keep itself</text>
+  <text x="498" y="284" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">without them: answers can't favor</text>
+  <text x="498" y="296" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">confirmed sources; never grows</text>
+  <text x="498" y="308" text-anchor="middle" font-size="8.5" font-style="italic" fill="#A569BD">more trustworthy</text>
 
   <!-- ===== "WITHOUT" rail ===== -->
   <rect x="684" y="154" width="186" height="130" rx="7" fill="#FDEDEC" stroke="#C0392B" stroke-width="1.5"/>
@@ -49,14 +54,14 @@
   <text x="777" y="264" text-anchor="middle" font-size="9.5" fill="#B03A2E">authority</text>
 
   <!-- built-from connector: DL records (below) -> Discovery Layer store (Catalog) -->
-  <line x1="250" y1="402" x2="250" y2="338" stroke="#1B4A6B" stroke-width="1.5" marker-end="url(#aDark)"/>
-  <text x="262" y="362" font-size="9" fill="#1B4A6B">the Catalog is built</text>
-  <text x="262" y="374" font-size="9" fill="#1B4A6B">from the DL records</text>
+  <line x1="202" y1="402" x2="202" y2="330" stroke="#1B4A6B" stroke-width="1.5" marker-end="url(#aDark)"/>
+  <text x="214" y="362" font-size="9" fill="#1B4A6B">the Catalog is built</text>
+  <text x="214" y="374" font-size="9" fill="#1B4A6B">from the DL records</text>
 
   <!-- ===== DATA SOURCES (bottom) ===== -->
   <rect x="40" y="402" width="830" height="196" rx="7" fill="#1B4A6B"/>
   <text x="455" y="425" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Data Sources</text>
-  <text x="455" y="443" text-anchor="middle" font-size="9.5" fill="#A8CCED">Drive · Confluence · Jira · GitHub · Slack · Salesforce · Workday</text>
+  <text x="455" y="443" text-anchor="middle" font-size="9.5" fill="#A8CCED">Drive · Confluence · Jira · GitHub · Slack · and more</text>
   <text x="455" y="459" text-anchor="middle" font-size="9" font-style="italic" fill="#7AABCE">each system controls who may see what · holds two kinds of DS record:</text>
 
   <!-- DL records: discovery-layer DS records, derived (most of the Discovery Layer) -->
