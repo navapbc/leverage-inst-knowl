@@ -6,7 +6,7 @@
 
 - **Build vs. buy.** Glean / GoSearch / SearchUnify / Onyx / PipesHub / SWIRL already ingest these DSs, enforce permissions, and provide AI retrieval. Decide DL's delta (likely cross-source aggregations + confirmation signals) and consider scoping DL to just that. Compare the MVP against the realistic *buy* alternative, not only "no DL."
 - **MVP is a full production build, not a minimum proof.** Front-load a falsification experiment — index 1–2 DSs, build hints, A/B an agent with vs. without DL — before the full build.
-- **DL output-type prioritization.** Partition the DL output types (summaries, indexes, hints, aggregations, freshness) into MVP-required / second-iteration / post-validation.
+- **DL resource-type prioritization.** Partition the DL resource types (summaries, indexes, hints, aggregations, freshness) into MVP-required / second-iteration / post-validation.
 - **AI-skill scope.** Catalog registration is now pulled out into a **separate Catalog-registration skill** (<u>Architecture</u> §3, §5) — it discovers `discovery-layer`-tagged records and owns the Catalog rows, while the DL-creation skills own producing and re-deriving content. The DL-creation skill still bundles ETL + trust/ranking + ACL propagation + store selection; consider narrowing that scope further for the MVP.
 - **DS selection criteria** are undefined (connector availability, Group support, pilot coverage).
 - **Per-DS identity delegation.** For each candidate DS, confirm whether it supports on-behalf-of token exchange, per-user OAuth consent (stored refresh token), or no per-user path at all — the last excludes it from Level 1 (<u>Access Control</u>).

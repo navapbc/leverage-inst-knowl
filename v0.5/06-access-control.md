@@ -41,7 +41,7 @@ A genuinely cross-tier output is served either by an **admin-provisioned audienc
 
 ## Three sharing states
 
-Every DL output carries one of:
+Every DL resource carries one of:
 
 1. **Shared with a specified Google Group** — the group that should see it.
 2. **Explicitly unrestricted** — an affirmative flag set to open the output org-wide.
@@ -60,7 +60,7 @@ Enforcement is the **store's own native group/role grant** (mechanics per store 
 
 What separates these is data on the row (who created it, whether skill- or human-owned), not a distinct credential. This one writer is a single point of failure — a compromised credential poisons ACLs, hints, and trust for every query — so it runs under: **no long-lived keys** (e.g., Workload Identity Federation), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on every write. Full mechanics in <u>Storage</u>.
 
-**DL outputs in a version-history DS (summaries, indexes) are deliberately *not* under this regime** — a DL-creation skill writes them under its own credential (typically a service account, a **separate** identity from the governed writer); access is enforced at the target store, and the DL-creation skill's re-derive pass and the registrar's validation pass replace the governed-writer controls, with version-history revert as recovery. The **Catalog and confirmation signals**, by contrast, live in the service-fronted store and *do* run under these controls; their non-recomputable data recovers by backup, not revert.
+**DL resources in a version-history DS (summaries, indexes) are deliberately *not* under this regime** — a DL-creation skill writes them under its own credential (typically a service account, a **separate** identity from the governed writer); access is enforced at the target store, and the DL-creation skill's re-derive pass and the registrar's validation pass replace the governed-writer controls, with version-history revert as recovery. The **Catalog and confirmation signals**, by contrast, live in the service-fronted store and *do* run under these controls; their non-recomputable data recovers by backup, not revert.
 
 ## Third-party integration trust boundary
 

@@ -1,8 +1,8 @@
 # Storage Reference
 
-*How each backing store behaves once chosen. The <u>Architecture</u> and <u>Strategy</u> decide **which** output lands in **which** store; this file documents **how** each store behaves — so those docs refer here instead of repeating the mechanics.*
+*How each backing store behaves once chosen. The <u>Architecture</u> and <u>Strategy</u> decide **which** resource lands in **which** store; this file documents **how** each store behaves — so those docs refer here instead of repeating the mechanics.*
 
-Discovery Layer (DL) outputs deliberately live in more than one store, picked by **who consumes the output** and **how much write-time integrity it needs**. Two properties drive every choice:
+Discovery Layer (DL) resources deliberately live in more than one store, picked by **who consumes the resource** and **how much write-time integrity it needs**. Two properties drive every choice:
 
 - **In-place update vs. create-only** — can a re-derivation revise the *same* record at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (the Catalog, confirmation signals, re-derived summaries) needs in-place update.
 - **Versioned vs. non-versioned** — does the store give attribution, an audit log, and revert *for free*, or must a governed-writer regime supply them?
@@ -23,7 +23,7 @@ The default for anything human-readable and for small-scale tables.
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning configured.* |
 | **Governance** | Treated as **"just another DS record"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. |
 
-**Used for:** summaries, indexes, and other human-readable DL outputs. *(The Catalog and confirmation signals are not stored here — they need keyed lookup and write-time enforcement, so they live in the service-fronted store below.)*
+**Used for:** summaries, indexes, and other human-readable DL resources. *(The Catalog and confirmation signals are not stored here — they need keyed lookup and write-time enforcement, so they live in the service-fronted store below.)*
 
 ---
 
@@ -31,7 +31,7 @@ The default for anything human-readable and for small-scale tables.
 
 | Property | Behavior |
 |---|---|
-| **Write model** | **Create-only** — the available Drive connector can *create* a file but **cannot update one in place**. Any output revised on each re-derivation therefore **cannot live in a Doc or Sheet**. This is the single reason Confluence, not a Doc/Sheet, backs every in-place-updated DL output. |
+| **Write model** | **Create-only** — the available Drive connector can *create* a file but **cannot update one in place**. Any output revised on each re-derivation therefore **cannot live in a Doc or Sheet**. This is the single reason Confluence, not a Doc/Sheet, backs every in-place-updated DL resource. |
 | **Versioning** | Drive has native version history, but the create-only limit makes it unusable as a re-derivation target regardless. |
 | **Access enforcement** | Native sharing to a **Google Group** — direct, no sync layer. |
 

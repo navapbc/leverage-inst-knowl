@@ -133,7 +133,7 @@ LIK's skills and agents should be updated to efficiently and effectively call on
 ```
 DSs → DL-creation skill (one of many, per source/team) → DL record (tagged `discovery-layer`, in a store, via MCP)
 DL records → Catalog-registration skill (the registrar) → Catalog pointer (via MCP)
-AI tools → Query skill (one of many, per topic) → known DL output directly, else read Catalog → follow pointers
+AI tools → Query skill (one of many, per topic) → known DL resource directly, else read Catalog → follow pointers
 Designated artifact (a saved synthesis, or any pre-existing record a person points at) → the person designates it an entry point; if they opt to register → the governed writer writes the Catalog pointer (human-owned row), optionally tagging the source
 Confirmations → service-fronted store (via MCP)
 Durable updates → DSs

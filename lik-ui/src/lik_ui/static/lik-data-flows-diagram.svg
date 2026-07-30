@@ -69,7 +69,7 @@
   <!-- ===== DATA SOURCES ===== -->
   <rect x="14" y="430" width="846" height="214" rx="7" fill="#1B4A6B"/>
   <text x="437" y="453" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Data Sources — authoritative</text>
-  <text x="437" y="471" text-anchor="middle" font-size="9.5" fill="#A8CCED">Confluence · Jira · GitHub · Slack · Google Drive · Salesforce · Workday</text>
+  <text x="437" y="471" text-anchor="middle" font-size="9.5" fill="#A8CCED">Confluence · Jira · GitHub · Slack · Google Drive · and more</text>
   <text x="437" y="486" text-anchor="middle" font-size="9" font-style="italic" fill="#7AABCE">all durable writes happen here · each system controls who may see what</text>
 
   <!-- DL records sub-box (most of the Discovery Layer, living in the Data Sources) -->

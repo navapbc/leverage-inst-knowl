@@ -62,7 +62,7 @@
   <text x="293" y="283" text-anchor="middle" font-size="8.5" fill="#5D8A5E">scheduled re-derivation bounds staleness</text>
 
   <rect x="454" y="216" width="382" height="74" rx="5" fill="#FFFFFF" stroke="#2D8B57" stroke-width="1.2"/>
-  <text x="645" y="238" text-anchor="middle" font-size="10" font-weight="700" fill="#1A5E34">2.4  DL output types — written into a DS</text>
+  <text x="645" y="238" text-anchor="middle" font-size="10" font-weight="700" fill="#1A5E34">2.4  DL resource types — written into a DS</text>
   <text x="645" y="254" text-anchor="middle" font-size="9" fill="#2D8B57">distilled prose · digests · indexes · pointers · freshness signals</text>
   <text x="645" y="269" text-anchor="middle" font-size="9" fill="#2D8B57">tagged discovery-layer · updated in place (same page)</text>
   <text x="645" y="283" text-anchor="middle" font-size="8" fill="#5D8A5E">2.2 ai-gen recomputable · human-verified/created durable · 2.3 one tier, default-deny</text>
@@ -113,7 +113,7 @@
   <rect x="618" y="400" width="144" height="18" rx="9" fill="#D6EAF8" stroke="#2A7EAA" stroke-width="1"/>
   <text x="690" y="412" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1B4A6B">WELL-KNOWN ADDRESS</text>
   <text x="690" y="434" text-anchor="middle" font-size="11" font-weight="700" fill="#1B4A6B">Catalog — DL's "yellow pages"</text>
-  <text x="690" y="451" text-anchor="middle" font-size="9" fill="#2A7EAA">maps  type + subject  →  location of any DL output</text>
+  <text x="690" y="451" text-anchor="middle" font-size="9" fill="#2A7EAA">maps  type + subject  →  location of any DL resource</text>
   <text x="690" y="467" text-anchor="middle" font-size="9" fill="#2A7EAA">keyed lookup is the floor · optional semantic search</text>
   <text x="690" y="483" text-anchor="middle" font-size="9" fill="#2A7EAA">the fallback when a Query skill can't place a question</text>
   <text x="690" y="499" text-anchor="middle" font-size="9" fill="#2A7EAA">stores pointers, not permissions · broken row = cache miss</text>
