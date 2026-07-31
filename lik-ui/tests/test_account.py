@@ -301,6 +301,97 @@ def test_delete_schedule(db):
     assert Store(db).list_scheduled_runs(_uid(db)) == []
 
 
+def test_edit_schedule_updates_agent_cadence_and_prompt(db):
+    from datetime import timedelta
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent("Sched Agent", max_runtime=600),
+                      _sched_agent("Other Agent", max_runtime=1200))
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
+    run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
+    r = client.post(f"/settings/scheduled-runs/{run_id}/edit",
+                    data={"agent_name": "Other Agent", "interval_count": "2", "interval_unit": "weeks",
+                          "prompt": "new prompt"})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/settings?scheduled_updated=1"
+    row = Store(db).list_scheduled_runs(_uid(db))[0]
+    assert row["agent_name"] == "Other Agent"
+    assert row["prompt"] == "new prompt"
+    assert row["run_interval"] == timedelta(weeks=2)
+    assert row["max_runtime_s"] == 1200  # re-materialized from the new agent's roster value
+
+
+def test_settings_renders_prefilled_edit_form(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent("Sched Agent"), _sched_agent("Other Agent"))
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Other Agent", "interval_count": "2", "interval_unit": "weeks",
+                      "prompt": "sync the indexes"})
+    run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
+    html = client.get("/settings").text
+    # The edit form posts to the edit route and is pre-filled with the schedule's current values.
+    assert f'action="/settings/scheduled-runs/{run_id}/edit"' in html
+    assert 'sync the indexes' in html  # prompt pre-filled in the textarea
+    # The current agent and cadence are pre-selected.
+    assert '<option value="Other Agent" selected>' in html
+    assert 'value="2"' in html  # cadence count derived from the 2-week interval
+    assert '<option value="weeks" selected>' in html
+
+
+def test_edit_form_shows_current_agent_even_if_no_longer_schedulable(db):
+    # Create with a schedulable agent, then drop it from the roster; the edit form must still
+    # offer the stored agent as the selected option so its value round-trips on save.
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent("Sched Agent"))
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
+    _with_schedulable(client, _sched_agent("Different Agent"))  # roster no longer has "Sched Agent"
+    html = client.get("/settings").text
+    assert '<option value="Sched Agent" selected>Sched Agent</option>' in html
+
+
+def test_edit_schedule_rejects_bad_input_without_mutating(db):
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent("Sched Agent"), _sched_agent("Plain Agent", schedulable=False))
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
+    run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
+    base = {"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"}
+    for bad in ({**base, "agent_name": "Plain Agent"},        # not schedulable
+                {**base, "interval_count": "0"},               # below the minimum
+                {**base, "interval_unit": "hours"},            # unknown unit
+                {**base, "prompt": "  "}):                     # empty message
+        r = client.post(f"/settings/scheduled-runs/{run_id}/edit", data=bad)
+        assert r.headers["location"] == "/settings?scheduled_error=1"
+    # The original row is untouched.
+    row = Store(db).list_scheduled_runs(_uid(db))[0]
+    assert (row["agent_name"], row["prompt"]) == ("Sched Agent", "go")
+
+
+def test_edit_schedule_is_owner_scoped(db):
+    # A second user's edit is a no-op on the owner's row (owner-scoped store update).
+    client, _ = _client(db)
+    _with_schedulable(client, _sched_agent())
+    client.post("/settings/scheduled-runs",
+                data={"agent_name": "Sched Agent", "interval_count": "1", "interval_unit": "days", "prompt": "go"})
+    run_id = Store(db).list_scheduled_runs(_uid(db))[0]["id"]
+    other = Store(db).upsert_user("mallory@navapbc.com")
+    ok = Store(db).update_scheduled_run(run_id, other["id"], "x", "hijacked", __import__("datetime").timedelta(days=1), 1800)
+    assert ok is False
+    assert Store(db).list_scheduled_runs(_uid(db))[0]["prompt"] == "go"
+
+
+def test_edit_schedule_requires_login(db):
+    oidc = FakeOidc({})
+    app = build_app(Settings(env="test"), store=Store(db), app_oidc=oidc, vault_client=FakeVaultClient())
+    r = TestClient(app, follow_redirects=False).post(
+        "/settings/scheduled-runs/1/edit",
+        data={"agent_name": "x", "interval_count": "1", "interval_unit": "days", "prompt": "y"},
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/login"
+
+
 def test_needs_reauth_badge_renders(db):
     client, _ = _client(db)
     _with_schedulable(client, _sched_agent())

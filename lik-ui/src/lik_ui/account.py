@@ -43,6 +43,18 @@ def format_cadence(interval: timedelta) -> str:
     return "every day" if days == 1 else f"every {days} days"
 
 
+def cadence_parts(interval: timedelta) -> tuple[int, str]:
+    """Decompose a stored run_interval back into the (count, unit) pair the cadence picker submits,
+    so the edit form can pre-select a schedule's current cadence. Uses the same unit rule as
+    ``format_cadence`` — weeks when the interval is a whole number of weeks, else days — so a value
+    round-trips through ``parse_cadence`` unchanged. Never returns a count below 1 (a sub-day stored
+    interval, which the picker can't create, floors to 1 day)."""
+    days = round(interval.total_seconds() / 86400)
+    if days >= 7 and days % 7 == 0:
+        return days // 7, "weeks"
+    return max(1, days), "days"
+
+
 def register_account_routes(app) -> None:
     from fastapi import Request
     from fastapi.responses import HTMLResponse, RedirectResponse
@@ -53,7 +65,7 @@ def register_account_routes(app) -> None:
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(
         request: Request, deleted: str = "", sessions_deleted: str = "",
-        scheduled: str = "", scheduled_error: str = "",
+        scheduled: str = "", scheduled_error: str = "", scheduled_updated: str = "",
     ):
         user = require_user(request)
         store = request.app.state.store
@@ -84,17 +96,15 @@ def register_account_routes(app) -> None:
                 "max_cadence_count": MAX_CADENCE_COUNT,
                 "scheduled_created": bool(scheduled),
                 "scheduled_error": bool(scheduled_error),
+                "scheduled_updated": bool(scheduled_updated),
             },
         )
 
-    @app.post("/settings/scheduled-runs")
-    async def create_scheduled_run(request: Request):
-        """Create a schedule for the current user. The agent must be marked schedulable in the
-        roster (a user can't schedule an agent that isn't unattended-safe); the cadence must be a
-        whole count of a known unit; a triggering message is required. max_runtime is materialized
-        from the agent's roster value so the runner watchdog and the reclaim cutoff share one source."""
-        user = require_user(request)
-        form = await request.form()
+    def _parse_schedule_form(request: Request, form):
+        """Shared validation for create and edit: resolve a schedulable agent, cadence, and prompt
+        from the submitted form. Returns ``(option, prompt, interval)`` on success or ``None`` if
+        any field is invalid — the agent isn't in the schedulable roster, the cadence isn't a whole
+        count of a known unit, or the message is empty."""
         agent_name = str(form.get("agent_name", "")).strip()
         prompt = str(form.get("prompt", "")).strip()
         option = next(
@@ -103,11 +113,39 @@ def register_account_routes(app) -> None:
         interval = parse_cadence(str(form.get("interval_count", "")).strip(),
                                  str(form.get("interval_unit", "")).strip())
         if option is None or interval is None or not prompt:
+            return None
+        return option, prompt, interval
+
+    @app.post("/settings/scheduled-runs")
+    async def create_scheduled_run(request: Request):
+        """Create a schedule for the current user. The agent must be marked schedulable in the
+        roster (a user can't schedule an agent that isn't unattended-safe); the cadence must be a
+        whole count of a known unit; a triggering message is required. max_runtime is materialized
+        from the agent's roster value so the runner watchdog and the reclaim cutoff share one source."""
+        user = require_user(request)
+        parsed = _parse_schedule_form(request, await request.form())
+        if parsed is None:
             return RedirectResponse("/settings?scheduled_error=1", status_code=303)
+        option, prompt, interval = parsed
         request.app.state.store.create_scheduled_run(
-            user["id"], agent_name, prompt, interval, option.max_runtime
+            user["id"], option.agent_name, prompt, interval, option.max_runtime
         )
         return RedirectResponse("/settings?scheduled=1", status_code=303)
+
+    @app.post("/settings/scheduled-runs/{run_id}/edit")
+    async def edit_scheduled_run(request: Request, run_id: int):
+        """Edit an existing schedule's agent, cadence, and message. Same validation as create; the
+        update is owner-scoped (a no-op if the row isn't the caller's). max_runtime is re-materialized
+        from the (possibly changed) agent's roster value, matching create."""
+        user = require_user(request)
+        parsed = _parse_schedule_form(request, await request.form())
+        if parsed is None:
+            return RedirectResponse("/settings?scheduled_error=1", status_code=303)
+        option, prompt, interval = parsed
+        request.app.state.store.update_scheduled_run(
+            run_id, user["id"], option.agent_name, prompt, interval, option.max_runtime
+        )
+        return RedirectResponse("/settings?scheduled_updated=1", status_code=303)
 
     @app.post("/settings/scheduled-runs/{run_id}/delete")
     async def delete_scheduled_run(request: Request, run_id: int):

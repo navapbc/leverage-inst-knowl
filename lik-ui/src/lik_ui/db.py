@@ -410,6 +410,36 @@ class Store:
             conn.commit()
             return row is not None
 
+    def update_scheduled_run(
+        self,
+        run_id: int,
+        user_id: int,
+        agent_name: str,
+        prompt: str,
+        run_interval: timedelta,
+        max_runtime_s: int,
+    ) -> bool:
+        """Edit an existing schedule in place (owner-scoped). Writes only the user-editable fields
+        plus the derived ``max_runtime_s`` (re-materialized from the possibly-changed agent's roster
+        value, same source as ``create_scheduled_run``). Deliberately leaves ``next_run_at``,
+        ``paused``, ``started_at``, and every ``last_*`` column untouched: editing the message or
+        agent must not change *when* the schedule next fires, and a cadence change takes full effect
+        after the next completion (``complete_run`` recomputes ``next_run_at`` from ``run_interval``).
+        Leaving ``started_at`` alone preserves the scanner's double-run invariant. Returns whether a
+        row matched (False when the row isn't the caller's or doesn't exist)."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                """
+                UPDATE scheduled_runs
+                SET agent_name = %s, prompt = %s, run_interval = %s, max_runtime_s = %s
+                WHERE id = %s AND user_id = %s
+                RETURNING id
+                """,
+                (agent_name, prompt, run_interval, max_runtime_s, run_id, user_id),
+            ).fetchone()
+            conn.commit()
+            return row is not None
+
     def set_scheduled_run_paused(self, run_id: int, user_id: int, paused: bool) -> bool:
         """Pause or resume a schedule (owner-scoped). Resuming clears any pause_reason (e.g.
         after the owner re-authenticates a lapsed connection). Returns whether a row updated."""

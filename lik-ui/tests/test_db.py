@@ -193,6 +193,44 @@ def test_set_scheduled_run_paused_is_owner_scoped(store):
     assert row["paused"] is False and row["pause_reason"] is None
 
 
+def test_update_scheduled_run_changes_editable_fields(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(days=1), max_runtime_s=600)
+    ok = store.update_scheduled_run(
+        run["id"], a["id"], "other-agent", "new prompt", timedelta(weeks=2), max_runtime_s=1200
+    )
+    assert ok is True
+    row = store.list_scheduled_runs(a["id"])[0]
+    assert row["agent_name"] == "other-agent"
+    assert row["prompt"] == "new prompt"
+    assert row["run_interval"] == timedelta(weeks=2)
+    assert row["max_runtime_s"] == 1200
+
+
+def test_update_scheduled_run_preserves_schedule_state(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(days=1))
+    before = store.list_scheduled_runs(a["id"])[0]
+    store.update_scheduled_run(run["id"], a["id"], "agent", "edited", timedelta(days=3), max_runtime_s=1800)
+    after = store.list_scheduled_runs(a["id"])[0]
+    # Editing must not touch when the schedule next fires or its run/pause state.
+    assert after["next_run_at"] == before["next_run_at"]
+    assert after["paused"] == before["paused"]
+    assert after["started_at"] == before["started_at"]
+    assert after["last_status"] == before["last_status"]
+
+
+def test_update_scheduled_run_is_owner_scoped(store):
+    a = store.upsert_user("a@navapbc.com")
+    b = store.upsert_user("b@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(hours=1))
+    # b cannot edit a's schedule; a's row is untouched.
+    assert store.update_scheduled_run(run["id"], b["id"], "hijack", "hijack", timedelta(days=1), 1800) is False
+    assert store.list_scheduled_runs(a["id"])[0]["prompt"] == "go"
+    # A non-existent row also returns False.
+    assert store.update_scheduled_run(999999, a["id"], "x", "x", timedelta(days=1), 1800) is False
+
+
 def test_delete_scheduled_runs_for_user_removes_all(store):
     a = store.upsert_user("a@navapbc.com")
     b = store.upsert_user("b@navapbc.com")
