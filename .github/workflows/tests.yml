@@ -1,0 +1,73 @@
+# Run each service's test suite on changes to main (pull requests) and after merge (push).
+# This is the deploy gate's counterpart: a red suite here is the signal to NOT run
+# deploy-images.yml. Both suites are DB-backed and SILENTLY SKIP when Postgres is unreachable
+# (see each tests/conftest.py), so every job runs a Postgres service and points the suite at it —
+# otherwise a green check could mean "all skipped", not "all passed".
+#
+# No paths: filter — the lik-mcp/lik-ui jobs are REQUIRED status checks on main (branch
+# protection), and a path-filtered required check leaves PRs that don't touch those paths stuck
+# forever in "Expected — waiting for status". Running both suites unconditionally (each well under
+# a minute) keeps the required checks always reporting.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# One in-flight run per ref; a newer push/PR update cancels the older run.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # let both suites report; one service failing shouldn't hide the other
+      matrix:
+        include:
+          # db_name is each service's default test DB (must end in "_test" — each suite refuses to
+          # run, and TRUNCATEs, otherwise). The other connection settings (localhost:5432, user
+          # "lik", password "lik") are the Settings defaults and match the postgres service below,
+          # so no per-service DB env is needed — only this DB name has to line up.
+          - name: lik-mcp
+            dir: lik-mcp
+            db_name: likdb_test
+          - name: lik-ui
+            dir: lik-ui
+            db_name: likuidb_test
+    name: ${{ matrix.name }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: lik
+          POSTGRES_PASSWORD: lik
+          POSTGRES_DB: ${{ matrix.db_name }}
+        ports:
+          - 5432:5432
+        # Gate the job on the DB actually accepting connections, so the suite connects rather
+        # than hitting its "Postgres not reachable -> skip" fallback.
+        options: >-
+          --health-cmd "pg_isready -U lik"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      # `uv run` provisions the Python pinned by the service's pyproject requires-python and
+      # installs the locked dependencies; --frozen fails if uv.lock is out of date with pyproject.
+      # pytest lives in the "dev" optional-dependency extra, which uv run does not install by
+      # default — hence --extra dev.
+      - name: Run ${{ matrix.name }} tests
+        working-directory: ${{ matrix.dir }}
+        run: uv run --frozen --extra dev pytest
