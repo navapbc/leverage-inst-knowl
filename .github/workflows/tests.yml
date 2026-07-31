@@ -3,18 +3,18 @@
 # deploy-images.yml. Both suites are DB-backed and SILENTLY SKIP when Postgres is unreachable
 # (see each tests/conftest.py), so every job runs a Postgres service and points the suite at it —
 # otherwise a green check could mean "all skipped", not "all passed".
+#
+# No paths: filter — the lik-mcp/lik-ui jobs are REQUIRED status checks on main (branch
+# protection), and a path-filtered required check leaves PRs that don't touch those paths stuck
+# forever in "Expected — waiting for status". Running both suites unconditionally (each well under
+# a minute) keeps the required checks always reporting.
 name: Tests
 
 on:
   push:
     branches: [main]
-    paths: &paths
-      - lik-mcp/**
-      - lik-ui/**
-      - .github/workflows/tests.yml
   pull_request:
     branches: [main]
-    paths: *paths
 
 # One in-flight run per ref; a newer push/PR update cancels the older run.
 concurrency:
