@@ -74,7 +74,8 @@
        skipped and recorded, and each run shows up in <a href="/sessions">your sessions</a>.</p>
 
     {% if scheduled_created %}<p class="status-connected">✓ Schedule created.</p>{% endif %}
-    {% if scheduled_error %}<p class="cred-url">Couldn't create that schedule — pick an agent, set how often it runs, and enter a message.</p>{% endif %}
+    {% if scheduled_updated %}<p class="status-connected">✓ Schedule updated.</p>{% endif %}
+    {% if scheduled_error %}<p class="cred-url">Couldn't save that schedule — pick an agent, set how often it runs, and enter a message.</p>{% endif %}
 
     {% if schedulable_agents %}
       <form method="post" action="/settings/scheduled-runs" class="schedule-form">
@@ -126,6 +127,41 @@
                 <input type="hidden" name="paused" value="{{ 'false' if r.paused else 'true' }}">
                 <button class="btn" type="submit">{{ 'Resume' if r.paused else 'Pause' }}</button>
               </form>
+              <details class="schedule-edit">
+                <summary class="btn" role="button">Edit</summary>
+                <form method="post" action="/settings/scheduled-runs/{{ r.id }}/edit" class="schedule-form">
+                  <label>Agent
+                    <select name="agent_name" required>
+                      {# Ensure the schedule's current agent is always an option, even if it's no
+                         longer in the schedulable roster, so its value round-trips on save. #}
+                      {% if r.agent_name not in schedulable_agents %}
+                        <option value="{{ r.agent_name }}" selected>{{ r.agent_name }}</option>
+                      {% endif %}
+                      {% for a in schedulable_agents %}
+                        <option value="{{ a }}"{% if a == r.agent_name %} selected{% endif %}>{{ a }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                  <label>Run every
+                    <span class="cadence-fields">
+                      <input type="number" name="interval_count" min="1" max="{{ max_cadence_count }}"
+                             value="{{ r.run_interval | cadence_count }}" required aria-label="Cadence count">
+                      <select name="interval_unit" required aria-label="Cadence unit">
+                        {% set current_unit = r.run_interval | cadence_unit %}
+                        {% for u in cadence_units %}
+                          <option value="{{ u }}"{% if u == current_unit %} selected{% endif %}>{{ u }}</option>
+                        {% endfor %}
+                      </select>
+                    </span>
+                  </label>
+                  <label>Message/Prompt to get agent started
+                    <textarea name="prompt" required rows="3">{{ r.prompt }}</textarea>
+                  </label>
+                  <div>
+                    <button class="btn" type="submit">Save changes</button>
+                  </div>
+                </form>
+              </details>
               <form method="post" action="/settings/scheduled-runs/{{ r.id }}/delete" style="display:inline"
                     onsubmit="return confirm('Delete this schedule?');">
                 <button class="btn warning" type="submit">Delete</button>

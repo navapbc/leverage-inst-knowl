@@ -115,6 +115,18 @@ form.session-row input { flex: 1; }
 /* Cadence count + unit sit on one row: a narrow number field and a unit dropdown. */
 .schedule-form .cadence-fields { display: flex; gap: .5rem; }
 .schedule-form .cadence-fields input { width: 5rem; }
+/* Per-schedule inline editor: the Edit <summary> is a button; opening it floats the pre-filled
+   form as a panel anchored to the button, so the centered schedule-list row keeps its layout. */
+.schedule-edit { position: relative; display: inline-block; }
+.schedule-edit > summary { list-style: none; }
+.schedule-edit > summary::-webkit-details-marker { display: none; }
+.schedule-edit[open] > .schedule-form {
+  position: absolute; right: 0; z-index: 10; margin-top: .35rem; width: 22rem; max-width: 80vw;
+  padding: .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .15); }
+.schedule-edit[open] > .schedule-form label { max-width: none; }
+.schedule-edit[open] > .schedule-form textarea,
+.schedule-edit[open] > .schedule-form select { width: 100%; }
 /* Collapsible per-agent details on the agent-selection page. */
 .card > details { margin-top: .6rem; }
 .card > details > summary { cursor: pointer; color: var(--accent); }

@@ -27,9 +27,12 @@ STATIC_DIR = _PKG_DIR / "static"
 # one Jinja environment rooted at the package's templates/ directory.
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # Render a schedule's run_interval as a human cadence ("every week", "every 3 days").
-from .account import format_cadence  # noqa: E402 - avoids a circular import at module load
+from .account import cadence_parts, format_cadence  # noqa: E402 - avoids a circular import at module load
 
 templates.env.filters["cadence"] = format_cadence
+# Pre-fill helpers for the schedule edit form: split a run_interval into the picker's count + unit.
+templates.env.filters["cadence_count"] = lambda i: cadence_parts(i)[0]
+templates.env.filters["cadence_unit"] = lambda i: cadence_parts(i)[1]
 
 
 # Serialize a timestamp as an unambiguous UTC ISO 8601 string for a `data-utc` attribute. The
