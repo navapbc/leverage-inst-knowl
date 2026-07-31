@@ -18,6 +18,19 @@ becoming a competing source of truth.
 
 [More: project overview](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/01-overview.md)
 
+Two things make LIK more than a plain search:
+
+- **When you ask a question, LIK draws on the Discovery Layer first.** Instead of pointing a raw tool at
+  every source and hoping it stumbles onto the right thing, the agent consults the Catalog LIK has
+  already derived — a compact, searchable map of Nava's knowledge — to find the best starting points for
+  your topic, then follows those to the real content
+  in its original source. The payoff: answers come back faster and more on-target, they can span many
+  sources at once, and nothing has to be copied into a separate system to make that work.
+- **When you confirm what's good, everyone benefits.** As you work, you can signal which page, doc, or sheet
+  is the right go-to for a topic — vouching for the best one or flagging a useful pointer. Those
+  confirmations are remembered, so the next person asking about the same topic lands on the trusted answer
+  in one lookup instead of re-doing your search, and each topic's map gets sharper the more the team uses it.
+
 ### How is this different from other AI tools?
 
 All of these let you ask an AI questions about your work, and each is a reasonable choice for
@@ -94,6 +107,8 @@ separate service (lik-mcp) supplies Nava's governed knowledge.
 **LIK key concepts**
 
 ![LIK key concepts](/static/lik-key-concepts-diagram.svg)
+
+[Concepts](https://github.com/navapbc/leverage-inst-knowl/blob/main/v0.5/02-concepts.md)
 
 ### Easily connect to Nava data sources
 
