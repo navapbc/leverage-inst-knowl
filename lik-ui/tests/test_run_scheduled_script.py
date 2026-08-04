@@ -108,6 +108,48 @@ def test_hard_backstop_records_a_run_blocked_past_its_budget(store, monkeypatch)
     assert row["last_duration_s"] is not None  # recorded even for the backstop path
 
 
+def test_terminal_write_is_retried_after_a_transient_db_failure(store, monkeypatch):
+    """The terminal write happens after a long stretch of no DB traffic, so it is the write most
+    exposed to a dropped connection. A blip must be retried, not lost."""
+    import scripts.run_scheduled as rs
+
+    monkeypatch.setattr(rs, "_RECORD_RETRY_BACKOFF_S", (0, 0, 0))
+    a = store.upsert_user("a@navapbc.com")
+    store.create_scheduled_run(a["id"], AGENT, "sync", timedelta(hours=1))
+    real_complete = store.complete_run
+    calls = {"n": 0}
+
+    def _flaky(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("couldn't get a connection after 5.00 sec")
+        return real_complete(*args, **kwargs)
+
+    monkeypatch.setattr(store, "complete_run", _flaky)
+    ran, failed = rs.run_due_schedules(store, FakeSessions([[{"type": "done"}]]), FakeVault(), _agents())
+    assert (ran, failed) == (1, 0)  # the retry recorded it, so this is not a job failure
+    row = store.list_scheduled_runs(a["id"])[0]
+    assert row["last_status"] == "success"
+    assert row["started_at"] is None  # advanced, not left in flight
+
+
+def test_unrecordable_outcome_counts_as_failure_without_aborting_the_scan(store, monkeypatch):
+    """When the outcome cannot be persisted at all, the scan still finishes the remaining rows and
+    the job exits non-zero (the row stays in flight and is reclaimed next scan)."""
+    import scripts.run_scheduled as rs
+
+    monkeypatch.setattr(rs, "_RECORD_RETRY_BACKOFF_S", (0, 0))
+    a = store.upsert_user("a@navapbc.com")
+    store.create_scheduled_run(a["id"], AGENT, "sync", timedelta(hours=1))
+
+    def _always_fails(*_args, **_kwargs):
+        raise RuntimeError("couldn't get a connection after 5.00 sec")
+
+    monkeypatch.setattr(store, "complete_run", _always_fails)
+    ran, failed = rs.run_due_schedules(store, FakeSessions([[{"type": "done"}]]), FakeVault(), _agents())
+    assert (ran, failed) == (1, 1)
+
+
 def test_run_due_schedules_auth_lapse_pauses_and_counts_failure(store):
     a = store.upsert_user("a@navapbc.com")
     store.create_scheduled_run(a["id"], AGENT, "sync", timedelta(hours=1))

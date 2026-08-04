@@ -18,20 +18,28 @@ class Database:
     """Owns the Postgres connection pool. The app holds one; call sites borrow
     connections through ``connection()`` and never open their own."""
 
-    def __init__(self, conninfo: str, *, min_size: int = 1, max_size: int = 4):
+    def __init__(self, conninfo: str, *, min_size: int = 1, max_size: int = 4, checkout_timeout: float = 5):
         # check on checkout: the scheduled-runs scanner borrows a connection for claim_due_runs,
         # then holds the pool idle for a whole multi-minute agent run (no DB traffic) before the
         # terminal complete_run. The public Postgres/network silently drops that idle connection,
         # so an unchecked pool would hand back a dead socket and the final write would fail with
         # "SSL error: unexpected eof while reading" — losing the run's recorded outcome.
         # check_connection validates (and the pool reconnects) on checkout, so a stale connection
-        # is replaced before use instead of erroring mid-write.
+        # is replaced before use instead of erroring mid-write. Keepalives in the conninfo bound
+        # how long that check can block on a dead socket (see Settings.conninfo).
+        #
+        # ``checkout_timeout`` must leave room for the check to fail AND a replacement connection to
+        # be opened (the pool backs off ~1s between check attempts, and a fresh TLS connection to
+        # the public endpoint takes a moment): too small a budget turns a merely stale connection
+        # into a PoolTimeout. The default suits serving a web request (waiting longer than that just
+        # stalls a page); the scheduled-runs scanner raises it, because there its terminal write is
+        # worth waiting out — losing it means re-running a whole completed agent run.
         self.pool = ConnectionPool(
             conninfo,
             min_size=min_size,
             max_size=max_size,
             open=True,
-            timeout=5,
+            timeout=checkout_timeout,
             check=ConnectionPool.check_connection,
         )
 
