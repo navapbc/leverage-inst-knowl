@@ -269,9 +269,16 @@ class Settings(BaseSettings):
 
     @property
     def conninfo(self) -> str:
+        # TCP keepalives are not optional here: the scheduled-runs scanner leaves its pooled
+        # connection idle for a whole multi-minute agent run before the terminal write, and the
+        # path to the public Postgres endpoint silently drops a long-idle connection (no FIN). With
+        # keepalives the connection stays alive across that idle, and if it does die the kernel
+        # reports it in ~keepalives_idle + count*interval instead of letting the next query block
+        # on TCP retransmission for minutes. connect_timeout bounds re-connecting the same way.
         return (
             f"host={self.db_host} port={self.db_port} dbname={self.db_name} "
-            f"user={self.db_user} password={self.db_password} sslmode={self.db_sslmode}"
+            f"user={self.db_user} password={self.db_password} sslmode={self.db_sslmode} "
+            "connect_timeout=10 keepalives=1 keepalives_idle=60 keepalives_interval=10 keepalives_count=3"
         )
 
     @property

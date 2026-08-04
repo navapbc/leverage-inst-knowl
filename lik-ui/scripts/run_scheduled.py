@@ -37,6 +37,13 @@ _FAILURE_STATUSES = frozenset({"failed", "timed_out", "auth_lapsed", "deny_loop"
 # the whole CI job. The job's timeout-minutes must exceed max_runtime_s + this margin.
 _HARD_TIMEOUT_MARGIN_S = 120
 
+# How long a DB connection checkout may take in this process (see ``main``).
+_DB_CHECKOUT_TIMEOUT_S = 30
+
+# Waits between attempts at a run's terminal DB write (see ``_record``). One entry per attempt; the
+# last entry's wait is never used. Short enough to stay well inside the job's timeout.
+_RECORD_RETRY_BACKOFF_S = (2, 5, 10, 0)
+
 
 class _HardRuntimeBackstop:
     """Process-level runtime guard: guarantees a claimed row terminates and is recorded even if the
@@ -69,6 +76,33 @@ def _chat_url(base_url: str, session_id: str) -> str:
     return f"{base}/chat/{session_id}" if base else session_id
 
 
+def _record(write, *args, **kwargs) -> bool:
+    """Perform a run's terminal DB write, retrying a transient connection failure. Returns whether
+    it succeeded.
+
+    This write happens after a long stretch of no DB traffic (the whole agent run), so it is the
+    one most exposed to a dropped connection to the public Postgres endpoint. A single blip here
+    used to raise out of the scan, aborting every remaining row and leaving this row's outcome
+    unrecorded (it is then reclaimed as ``abandoned`` on the next scan, and the completed run is
+    needlessly repeated). Retrying, and at worst continuing, keeps one blip from costing the scan."""
+    for attempt, backoff_s in enumerate(_RECORD_RETRY_BACKOFF_S, start=1):
+        try:
+            write(*args, **kwargs)
+            return True
+        except Exception as exc:  # noqa: BLE001 - any DB failure here is worth another try
+            last = attempt == len(_RECORD_RETRY_BACKOFF_S)
+            print(
+                f"[scheduled] recording the outcome failed (attempt {attempt}"
+                f"{'' if last else ', retrying'}): {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            if last:
+                return False
+            time.sleep(backoff_s)
+    return False
+
+
 def run_due_schedules(store, sessions_client, vault_client, agents, base_url="") -> tuple[int, int]:
     """Claim and run every due schedule. Returns ``(ran, failed)``. One row's failure never
     aborts the scan — each is isolated and its outcome recorded on its own row. ``base_url`` is
@@ -91,7 +125,7 @@ def run_due_schedules(store, sessions_client, vault_client, agents, base_url="")
                 )
         except Exception as exc:  # noqa: BLE001 - never let one row (incl. a backstop trip) abort the scan
             duration_s = round(time.monotonic() - started)
-            store.complete_run(run_id, "failed", str(exc), None, duration_s=duration_s)
+            _record(store.complete_run, run_id, "failed", str(exc), None, duration_s=duration_s)
             failed += 1
             print(f"[scheduled] run {run_id} raised after {duration_s}s, recorded failed: {exc}", file=sys.stderr)
             continue
@@ -100,14 +134,23 @@ def run_due_schedules(store, sessions_client, vault_client, agents, base_url="")
         if outcome.status == AUTH_LAPSED:
             # Pause instead of advancing — re-running every cadence would just re-fail until the
             # owner re-authenticates interactively. The Settings badge shows "needs re-auth".
-            store.pause_and_flag(run_id, "needs_reauth", error=outcome.error, duration_s=duration_s)
+            recorded = _record(
+                store.pause_and_flag, run_id, "needs_reauth", error=outcome.error, duration_s=duration_s
+            )
         else:
-            store.complete_run(run_id, outcome.status, outcome.error, outcome.skipped or None, duration_s=duration_s)
+            recorded = _record(
+                store.complete_run, run_id, outcome.status, outcome.error, outcome.skipped or None,
+                duration_s=duration_s,
+            )
 
         ran += 1
-        if outcome.status in _FAILURE_STATUSES:
+        # An unrecorded outcome is a job-level failure even when the run itself succeeded: the row
+        # stays in flight and the next scan will re-run work that already completed.
+        if outcome.status in _FAILURE_STATUSES or not recorded:
             failed += 1
         note = f" skipped={len(outcome.skipped)}" if outcome.skipped else ""
+        if not recorded:
+            note += " (outcome NOT recorded — the row will be reclaimed next scan)"
         where = f" {_chat_url(base_url, outcome.session_id)}" if outcome.session_id else ""
         # Duration is logged and persisted (last_duration_s) so max_runtime can be tuned per agent
         # from real run times instead of guessed.
@@ -128,7 +171,10 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    store = Store(Database(settings.conninfo))
+    # A generous checkout timeout (vs. the web app's default): this process leaves its connection
+    # idle for a whole agent run, so re-establishing one before the terminal write is worth the
+    # wait — no user is waiting on a page here, and losing the write costs a repeated run.
+    store = Store(Database(settings.conninfo, checkout_timeout=_DB_CHECKOUT_TIMEOUT_S))
     agents_client = build_agents_client(settings)
     agents = resolve_agent_options(settings, agents_client)
     sessions_client = build_sessions_client(settings)
