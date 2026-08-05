@@ -16,6 +16,7 @@ Usage:
   uv run python scripts/run_scheduled.py     # connects via Settings() (LIK_UI_* env vars)
 """
 
+import os
 import signal
 import sys
 import time
@@ -76,6 +77,22 @@ def _chat_url(base_url: str, session_id: str) -> str:
     return f"{base}/chat/{session_id}" if base else session_id
 
 
+def _announce(line: str) -> None:
+    """Print a line to the job log AND, under GitHub Actions, to the run's Summary page. The log
+    lives inside a step's collapsed output; the summary is the first thing a maintainer sees, so
+    each run's chat link is one click away instead of buried. Written as a markdown list item so
+    consecutive lines stay separate; a failure to write it never affects the run."""
+    print(line, flush=True)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary:
+        return
+    try:
+        with open(summary, "a", encoding="utf-8") as fh:
+            fh.write(f"- {line}\n")
+    except OSError as exc:  # cosmetic output must never break a run
+        print(f"[scheduled] could not write the job summary: {exc}", file=sys.stderr, flush=True)
+
+
 def _record(write, *args, **kwargs) -> bool:
     """Perform a run's terminal DB write, retrying a transient connection failure. Returns whether
     it succeeded.
@@ -111,10 +128,10 @@ def run_due_schedules(store, sessions_client, vault_client, agents, base_url="")
     failed = 0
     for row in store.claim_due_runs():
         run_id = row["id"]
-        # Log the session the moment it is created — flushed so a slow or hanging run is still
-        # attributable to a session in the job log, instead of only surfacing once the run ends.
+        # Announce the session the moment it is created (log + job summary) — flushed so a slow or
+        # hanging run is still attributable to a session, instead of only surfacing once it ends.
         def _log_session(session_id, run_id=run_id, agent=row["agent_name"]):
-            print(f"[scheduled] run {run_id} agent={agent!r} started -> {_chat_url(base_url, session_id)}", flush=True)
+            _announce(f"[scheduled] run {run_id} agent={agent!r} started -> {_chat_url(base_url, session_id)}")
 
         hard_budget = int(row["max_runtime_s"]) + _HARD_TIMEOUT_MARGIN_S
         started = time.monotonic()

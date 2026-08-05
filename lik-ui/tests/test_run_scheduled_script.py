@@ -74,6 +74,20 @@ def test_run_due_schedules_logs_chat_url(store, capsys):
     assert "-> success in " in out and "https://ui.lik.navapbc.com/chat/sess_1" in out
 
 
+def test_run_due_schedules_writes_chat_url_to_job_summary(store, tmp_path, monkeypatch):
+    """Under GitHub Actions the start line also lands on the run's Summary page, where the chat
+    link is visible without expanding the step's log."""
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    a = store.upsert_user("a@navapbc.com")
+    store.create_scheduled_run(a["id"], AGENT, "sync the indexes", timedelta(hours=1))
+    run_due_schedules(store, FakeSessions([[{"type": "done"}]]), FakeVault(), _agents(),
+                      "https://ui.lik.navapbc.com")
+    written = summary.read_text()
+    assert written.startswith("- [scheduled] run ")
+    assert f"agent={AGENT!r} started -> https://ui.lik.navapbc.com/chat/sess_1\n" in written
+
+
 def test_run_due_schedules_records_duration(store):
     """A completed run persists its measured wall-clock in last_duration_s, so max_runtime can be
     tuned per agent from real run times."""
