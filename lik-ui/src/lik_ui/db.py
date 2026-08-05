@@ -429,21 +429,40 @@ class Store:
     ) -> bool:
         """Edit an existing schedule in place (owner-scoped). Writes only the user-editable fields
         plus the derived ``max_runtime_s`` (re-materialized from the possibly-changed agent's roster
-        value, same source as ``create_scheduled_run``). Deliberately leaves ``next_run_at``,
-        ``paused``, ``started_at``, and every ``last_*`` column untouched: editing the message or
-        agent must not change *when* the schedule next fires, and a cadence change takes full effect
-        after the next completion (``complete_run`` recomputes ``next_run_at`` from ``run_interval``).
-        Leaving ``started_at`` alone preserves the scanner's double-run invariant. Returns whether a
-        row matched (False when the row isn't the caller's or doesn't exist)."""
+        value, same source as ``create_scheduled_run``).
+
+        Changing the cadence re-bases the next due time on the last completed run
+        (``completed_at + <new interval>``), so a shortened cadence takes effect right away instead
+        of waiting out the old one; if that lands in the past the row simply becomes due now. The
+        next due time is left alone when the cadence is unchanged (editing the message or agent must
+        not change *when* the schedule next fires), when the row has never completed a run (it is
+        already due immediately), and while a run is in flight (``completed_at`` is NULL then, and
+        ``complete_run`` will recompute from the new cadence).
+
+        ``paused``, ``started_at``, and every ``last_*`` column are untouched; leaving ``started_at``
+        alone preserves the scanner's double-run invariant. Returns whether a row matched (False when
+        the row isn't the caller's or doesn't exist)."""
         with self.db.connection() as conn:
             row = conn.execute(
                 """
                 UPDATE scheduled_runs
-                SET agent_name = %s, prompt = %s, run_interval = %s, max_runtime_s = %s
-                WHERE id = %s AND user_id = %s
+                SET agent_name = %(agent_name)s, prompt = %(prompt)s,
+                    run_interval = %(run_interval)s, max_runtime_s = %(max_runtime_s)s,
+                    next_run_at = CASE
+                        WHEN %(run_interval)s IS DISTINCT FROM run_interval AND completed_at IS NOT NULL
+                        THEN completed_at + %(run_interval)s
+                        ELSE next_run_at END
+                WHERE id = %(run_id)s AND user_id = %(user_id)s
                 RETURNING id
                 """,
-                (agent_name, prompt, run_interval, max_runtime_s, run_id, user_id),
+                {
+                    "agent_name": agent_name,
+                    "prompt": prompt,
+                    "run_interval": run_interval,
+                    "max_runtime_s": max_runtime_s,
+                    "run_id": run_id,
+                    "user_id": user_id,
+                },
             ).fetchone()
             conn.commit()
             return row is not None

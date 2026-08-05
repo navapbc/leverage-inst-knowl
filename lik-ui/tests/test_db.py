@@ -213,11 +213,45 @@ def test_update_scheduled_run_preserves_schedule_state(store):
     before = store.list_scheduled_runs(a["id"])[0]
     store.update_scheduled_run(run["id"], a["id"], "agent", "edited", timedelta(days=3), max_runtime_s=1800)
     after = store.list_scheduled_runs(a["id"])[0]
-    # Editing must not touch when the schedule next fires or its run/pause state.
+    # A schedule that has never completed a run is already due now, so even a cadence change
+    # leaves the due time alone — as does the run/pause state.
     assert after["next_run_at"] == before["next_run_at"]
     assert after["paused"] == before["paused"]
     assert after["started_at"] == before["started_at"]
     assert after["last_status"] == before["last_status"]
+
+
+def test_update_scheduled_run_rebases_next_run_on_cadence_change(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(days=7))
+    completed = datetime.now(timezone.utc) - timedelta(days=1)
+    _set_run(store.db, run["id"], completed_at=completed, next_run_at=completed + timedelta(days=7))
+    # Shortening the cadence must take effect from the last run, not wait out the old one.
+    store.update_scheduled_run(run["id"], a["id"], "agent", "go", timedelta(days=2), max_runtime_s=1800)
+    assert store.list_scheduled_runs(a["id"])[0]["next_run_at"] == completed + timedelta(days=2)
+
+
+def test_update_scheduled_run_keeps_next_run_when_cadence_unchanged(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(days=7))
+    completed = datetime.now(timezone.utc) - timedelta(days=1)
+    due = completed + timedelta(days=3)  # deliberately not completed_at + run_interval
+    _set_run(store.db, run["id"], completed_at=completed, next_run_at=due)
+    # Editing only the message/agent must not move the due time.
+    store.update_scheduled_run(run["id"], a["id"], "other", "edited", timedelta(days=7), max_runtime_s=1800)
+    assert store.list_scheduled_runs(a["id"])[0]["next_run_at"] == due
+
+
+def test_update_scheduled_run_leaves_in_flight_row_due_time(store):
+    a = store.upsert_user("a@navapbc.com")
+    run = store.create_scheduled_run(a["id"], "agent", "go", timedelta(days=7))
+    store.claim_due_runs()  # in flight: started_at set, completed_at cleared
+    before = store.list_scheduled_runs(a["id"])[0]
+    store.update_scheduled_run(run["id"], a["id"], "agent", "go", timedelta(days=2), max_runtime_s=1800)
+    after = store.list_scheduled_runs(a["id"])[0]
+    # complete_run recomputes from the new cadence, so the edit leaves the due time alone.
+    assert after["next_run_at"] == before["next_run_at"]
+    assert after["started_at"] == before["started_at"]
 
 
 def test_update_scheduled_run_is_owner_scoped(store):
