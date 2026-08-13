@@ -10,6 +10,8 @@ fast to find and reuse, without copying everything into one place and without be
 authority. Almost everything it stores is disposable, recomputed from the sources on demand; only what a
 person touched by hand is kept.
 
+Deployed at https://ui.lik.navapbc.com/
+
 Start with the design docs in [`v0.5/`](v0.5/) — [`01-overview.md`](v0.5/01-overview.md) is the
 plain-language introduction.
 
