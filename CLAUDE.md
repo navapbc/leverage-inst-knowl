@@ -34,7 +34,10 @@
 * **AWS is `AWS_PROFILE=lik`** (account 293033346213, us-east-1). If a call fails with "session has
   expired", run `AWS_PROFILE=lik mise exec -- aws login` (opens a browser) and retry. Secrets live in SSM
   under `/ik-arch/prod/` (e.g. the Anthropic API key at `/ik-arch/prod/shared/ANTHROPIC_API_KEY`; the agent roster in `lik-ui/src/lik_ui/agents.toml`
-  lists agents by name, resolved to ids at startup).
+  lists agents by name, resolved to ids at startup). When the Anthropic key fails with `authentication_error`,
+  follow `docs/deploy-runbook.md` → "Rotating the Anthropic API key". Claude runs only the steps marked
+  **(either)**: the diagnosis and the step 6 checks. Ask the human whether the key leaked, and hand them the
+  **(human)** steps. Never ask for the key, echo it, or write it to a file.
 * **Deploying the app services (`lik-ui`, `lik-mcp`).** Deploy via the **`deploy-images.yml`** GitHub Actions
   workflow (manual dispatch) — choose the `service` input `lik-ui`, `lik-mcp`, or `both`. It builds the image,
   smoke-boots it, pushes to the Lightsail registry, and auto-applies **only** a clean image swap (any other

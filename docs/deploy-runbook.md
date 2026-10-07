@@ -11,18 +11,30 @@ pushing images, and initializing the database schema.
 > in [`oauth.md`](oauth.md). Step 2 below is a pointer into it.
 
 **Conventions**
-- All AWS CLI commands run with `AWS_PROFILE=lik` and via `mise exec --`, e.g.
-  `AWS_PROFILE=lik mise exec -- aws ...`.
+- Every AWS command uses the AWS CLI profile you keep for account `293033346213`. Export the
+  profile's name once per shell, and authenticate it the way your setup requires:
+
+  ```bash
+  export AWS_PROFILE=<your-profile>                  # your profile for account 293033346213
+  mise exec -- aws login --profile "$AWS_PROFILE"    # or: aws sso login, if the profile uses IAM Identity Center
+  mise exec -- aws sts get-caller-identity --query Account --output text   # 293033346213
+  ```
+
+  A profile with long-term access keys needs no login step. A login session expires after a
+  while. When a command fails with "Your session has expired", authenticate again and retry it.
+- All AWS CLI commands run via `mise exec --`, e.g. `mise exec -- aws ...`. `infra/tf.sh` and
+  `infra/set-ssm-secrets.sh` read the exported `AWS_PROFILE`. They fall back to `lik` when it is
+  unset.
 - Region is **us-east-1** for everything. The old `us-east-2` Lightsail DB is **not**
   touched by any step here.
 
-> ⚠️ **Terraform cannot use the `lik` profile directly.** The profile authenticates via a
-> `login_session` credential provider that the AWS CLI understands but Terraform's Go SDK
-> does not (it falls back to IMDS and fails with "No valid credential sources found").
-> Export short-lived credentials into the environment before every `terraform` command:
+> ⚠️ **Terraform cannot use a `login_session` profile directly.** A profile that `aws login`
+> authenticates uses a `login_session` credential provider that the AWS CLI understands but
+> Terraform's Go SDK does not (it falls back to IMDS and fails with "No valid credential sources
+> found"). Export short-lived credentials into the environment before every `terraform` command:
 >
 > ```bash
-> J=$(AWS_PROFILE=lik mise exec -- aws configure export-credentials --format process)
+> J=$(mise exec -- aws configure export-credentials --format process)
 > export AWS_ACCESS_KEY_ID=$(printf '%s' "$J" | python3 -c 'import sys,json;print(json.load(sys.stdin)["AccessKeyId"])')
 > export AWS_SECRET_ACCESS_KEY=$(printf '%s' "$J" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SecretAccessKey"])')
 > export AWS_SESSION_TOKEN=$(printf '%s' "$J" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SessionToken"])')
@@ -41,9 +53,9 @@ pushing images, and initializing the database schema.
 > at invocation and are short-lived; an apply that **creates or replaces a Lightsail deployment**
 > waits ~3 min per deployment, which can exceed the session's remaining lifetime and expire the
 > token mid-apply. When that happens Terraform fails to save state to S3 and to release the lock
-> (the AWS changes may have already landed). So: run `AWS_PROFILE=lik mise exec -- aws login`
+> (the AWS changes may have already landed). So: authenticate again (see **Conventions**)
 > **immediately before** any deployment-replacing apply, to maximize the remaining lifetime.
-> Recovery if it does expire: `aws login`, then `./tf.sh force-unlock <id>`, then
+> Recovery if it does expire: authenticate again, then `./tf.sh force-unlock <id>`, then
 > `terraform state push errored.tfstate` (Terraform writes the local `errored.tfstate` and
 > prints this exact command), then re-run the apply — the tainted deployment recreates cleanly
 > (rolling, no downtime) and state re-converges.
@@ -100,12 +112,12 @@ The S3 backend bucket must exist (with versioning) before `terraform init`. Crea
 with the commands below; `terraform init` then succeeded against it.
 
 ```
-AWS_PROFILE=lik mise exec -- aws s3api create-bucket \
+mise exec -- aws s3api create-bucket \
   --bucket ik-arch-tfstate-293033346213 --region us-east-1
-AWS_PROFILE=lik mise exec -- aws s3api put-bucket-versioning \
+mise exec -- aws s3api put-bucket-versioning \
   --bucket ik-arch-tfstate-293033346213 \
   --versioning-configuration Status=Enabled
-AWS_PROFILE=lik mise exec -- aws s3api put-public-access-block \
+mise exec -- aws s3api put-public-access-block \
   --bucket ik-arch-tfstate-293033346213 \
   --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
@@ -153,7 +165,7 @@ cd infra
 >      lik-ui/LIK_UI_GDRIVEMCP_CLIENT_SECRET lik-ui/LIK_UI_GDRIVEMCP_RESOURCE_URL lik-ui/LIK_UI_GITHUB_CLIENT_ID \
 >      lik-ui/LIK_UI_GITHUB_CLIENT_SECRET lik-ui/LIK_UI_GITHUB_RESOURCE_URL lik-ui/LIK_UI_SLACK_CLIENT_ID \
 >      lik-ui/LIK_UI_SLACK_CLIENT_SECRET lik-ui/LIK_UI_SLACK_RESOURCE_URL shared/ANTHROPIC_API_KEY; do
->      AWS_PROFILE=lik mise exec -- aws ssm put-parameter --region us-east-1 --type SecureString \
+>      mise exec -- aws ssm put-parameter --region us-east-1 --type SecureString \
 >        --name "/ik-arch/prod/$n" --value PLACEHOLDER_REPLACE_ME; done
 >    ```
 > 2. **Run this apply in the background / with a long timeout.** DB creation takes 5–10 min.
@@ -201,7 +213,7 @@ resolves those names to ids at startup via the SDK. Add/remove agents by editing
 and environment definitions themselves live under `claude_platform/` and deploy via
 `.github/workflows/deploy-agents.yml`), then rebuild the image and redeploy. The old
 `/ik-arch/prod/lik-ui/LIK_UI_AGENTS_CONFIG` SSM parameter is now orphaned and can be deleted
-out-of-band: `AWS_PROFILE=lik mise exec -- aws ssm delete-parameter --region us-east-1 --name /ik-arch/prod/lik-ui/LIK_UI_AGENTS_CONFIG`.
+out-of-band: `mise exec -- aws ssm delete-parameter --region us-east-1 --name /ik-arch/prod/lik-ui/LIK_UI_AGENTS_CONFIG`.
 
 **Which params must be real vs. can stay placeholder:** the app's prod fail-closed guard only
 requires `LIK_UI_SESSION_SECRET`, `LIK_UI_APP_OAUTH_CLIENT_ID`, `LIK_UI_APP_OAUTH_CLIENT_SECRET`,
@@ -252,7 +264,7 @@ infra/set-ssm-secrets.sh /tmp/one.env && rm -f /tmp/one.env
 Verify nothing required is still a placeholder before deploying:
 
 ```bash
-AWS_PROFILE=lik mise exec -- aws ssm get-parameters-by-path --path /ik-arch/prod \
+mise exec -- aws ssm get-parameters-by-path --path /ik-arch/prod \
   --recursive --with-decryption --region us-east-1 --output json \
   | grep -B1 PLACEHOLDER_REPLACE_ME | grep '"Name"'
 ```
@@ -339,7 +351,7 @@ AWS creds, which you already have if you run terraform); it exports `LIK_DB_*` +
 
 ```bash
 cd lik-mcp
-eval "$(AWS_PROFILE=lik mise exec -- scripts/db_env_from_terraform.sh)"   # LIK_DB_* for the master db (likdb)
+eval "$(mise exec -- scripts/db_env_from_terraform.sh)"   # LIK_DB_* for the master db (likdb)
 
 # 1. Create lik-ui's database on the shared instance (connect to the master DB 'likdb' first)
 psql "host=$LIK_DB_HOST port=$LIK_DB_PORT dbname=$LIK_DB_NAME user=$LIK_DB_USER password=$LIK_DB_PASSWORD sslmode=require" \
@@ -355,7 +367,7 @@ cd ..
 #    --ssm-prefix reads the DB password from SSM and discovers host/port/user from Lightsail,
 #    so no LIK_UI_DB_* vars are needed (db name defaults to likuidb).
 cd lik-ui
-AWS_PROFILE=lik mise exec -- uv run python scripts/init_db.py --ssm-prefix "$SSM_PREFIX"
+mise exec -- uv run python scripts/init_db.py --ssm-prefix "$SSM_PREFIX"
 cd ..
 ```
 
@@ -471,10 +483,199 @@ conservative — it only ever fails *toward* manual review, never toward an unat
 If an AWS-provider upgrade ever changes how a deployment replacement is summarized, the gate
 stops matching and every run routes to the manual path until the summary strings are updated.
 
+## Rotating the Anthropic API key
+
+One key at `/ik-arch/prod/shared/ANTHROPIC_API_KEY` serves every consumer:
+
+- The lik-ui container reads it from its environment once, at startup. Terraform copies the SSM
+  value into that environment, so a new value reaches the container only through a Terraform apply.
+- `deploy-skills.yml`, `deploy-agents.yml`, `prune-sessions.yml`, and `scheduled-runs.yml` fetch it
+  from SSM on every run. They pick up a new value with no change.
+
+**Keep the key out of Claude sessions.** You enter the new key yourself, at a hidden prompt in
+your own terminal. Do not paste the key into a chat.
+
+**Who runs each step.** A human runs steps 0, 2 to 5, 7, and 8, because they use the Console, read
+the key at a prompt, or wait for `yes` from a terminal. A Claude session may run the commands in
+step 1 (the diagnosis) and step 6 (the checks). A human sends step 6's test chat message. The step
+headings below mark each step **(human)** or **(either)**.
+
+### 0. Log in to AWS (human)
+
+Steps 1, 4, 5, and 6 call AWS. In the shell you will use for the whole rotation, export your
+profile and authenticate it as described in **Conventions** at the top of this file. The
+`get-caller-identity` check must print `293033346213`.
+
+### 1. Recognize the symptoms and pick a branch (either)
+
+An invalid key fails every Anthropic call with `authentication_error`:
+
+- Starting a chat shows `Could not start a session: Error code: 401 - {... 'type':
+  'authentication_error', 'message': 'API key is invalid.'}`.
+- The Settings page shows `Could not load your credentials: Error code: 401 ...`.
+- The SSM-reading workflows fail with `anthropic.AuthenticationError: Error code: 401`.
+- A restarted lik-ui container fails at boot, because it resolves the agent roster at startup.
+
+To confirm the cause without opening the app, search the container log for the error:
+
+```bash
+mise exec -- aws lightsail get-container-log --region us-east-1 \
+  --service-name lik-ui-prod --container-name lik-ui --filter-pattern authentication_error \
+  --query 'logEvents[-5:].message' --output text
+```
+
+Pick one branch. Only a human can tell whether the key leaked, so a Claude session asks. The steps
+below mark where the branches differ.
+
+- **Expired or revoked**: the old key already fails. Verify the new key first, and revoke nothing
+  until the end.
+- **Leaked**: the old key still works for whoever holds it. Revoke it as soon as the new key
+  exists. The workflows stay down until step 4 finishes, and chat stays down until step 5
+  finishes.
+
+### 2. Create the new key (human)
+
+In the Anthropic Console, create a key **in the same workspace as the current key**. Sessions,
+vaults, and agents belong to one workspace. A key from another workspace orphans every user's
+sessions and connected credentials. If you are moving to a new workspace on purpose, follow
+`lik-ui/scripts/init_workspace.py` instead of this section.
+
+**Leaked branch**: revoke the old key in the Console now. Note the time for step 8.
+
+### 3. Check the new key (human)
+
+From the repo root, read the key at a hidden prompt, then resolve the agent roster with it:
+
+```bash
+read -rs KEY        # paste the new key, press Enter; nothing echoes
+(cd lik-ui && LIK_UI_ENV=prod LIK_UI_ANTHROPIC_API_KEY="$KEY" mise exec -- uv run python -c \
+  "from lik_ui.settings import Settings; from lik_ui.agents import build_agents_client, resolve_agent_options; s=Settings(); print(len(resolve_agent_options(s, build_agents_client(s))), 'agents resolved')")
+```
+
+The check prints `N agents resolved`. An invalid key fails with `authentication_error`. A key
+from the wrong workspace fails on the first roster name it cannot find. Fix the key before you go
+on, because SSM has not changed yet.
+
+`LIK_UI_ANTHROPIC_API_KEY` must be set on the command, as above. Without it, `Settings` falls back
+to the key in `lik-ui/.env`, and the check tests the wrong key.
+
+### 4. Write the key to SSM (human)
+
+Note the parameter's current version, write the new value from a private temp file, then confirm
+that the version went up:
+
+```bash
+P=/ik-arch/prod
+mise exec -- aws ssm get-parameter --region us-east-1 \
+  --name "$P/shared/ANTHROPIC_API_KEY" --query Parameter.Version --output text   # e.g. 3
+
+SF=$(mktemp) && chmod 600 "$SF"
+printf '%s=%s\n' "$P/shared/ANTHROPIC_API_KEY" "$KEY" > "$SF"
+infra/set-ssm-secrets.sh "$SF"
+rm -f "$SF"; unset KEY
+
+mise exec -- aws ssm get-parameter --region us-east-1 \
+  --name "$P/shared/ANTHROPIC_API_KEY" --query Parameter.Version --output text   # must be 4
+```
+
+`set-ssm-secrets.sh` prints `FAILED: <name>` but still exits 0 when a write fails. The version
+check is the only proof that the write landed.
+
+### 5. Redeploy lik-ui with the deployed images pinned (human)
+
+This apply replaces a Lightsail deployment, which takes about 3 minutes. Authenticate again (step
+0) immediately before it, so the credentials outlive the apply. See the long-apply warning under
+**Conventions**.
+
+A bare `./tf.sh apply` deploys the latest *pushed* images, which can be newer than the deployed
+ones. Pin both images to the refs that are running now:
+
+```bash
+img() {
+  mise exec -- aws lightsail get-container-services --region us-east-1 \
+    --service-name "$1-prod" \
+    --query "containerServices[0].currentDeployment.containers.\"$1\".image" --output text
+}
+MCP=$(img lik-mcp); UI=$(img lik-ui); echo "lik-mcp=$MCP lik-ui=$UI"
+LIK_MCP_IMAGE=$MCP LIK_UI_IMAGE=$UI infra/tf.sh apply
+```
+
+Both refs must look like `:lik-ui-prod.app.67`. An empty ref (for example, after the AWS session
+expired) makes `tf.sh` fall back to the latest pushed image. In that case, answer `no`, log in
+again (step 0), and rerun the block. The `Using LIK_MCP_IMAGE=` and `Using LIK_UI_IMAGE=` lines that
+`tf.sh` prints must match the refs echoed above.
+
+Do not pass `-auto-approve`. Terraform prints the plan and waits. Answer `yes` only when the plan
+reads `Plan: 1 to add, 0 to change, 1 to destroy.` and the replaced resource is
+`aws_lightsail_container_service_deployment_version.lik_ui`. Answer `no` to anything else, and
+review the extra changes first.
+
+Use `infra/tf.sh apply`, not `infra/tf.sh plan`. Only `apply` injects the pinned images and the
+custom-domain URLs. A bare `plan` gets empty defaults and shows both deployments being destroyed.
+
+The plan prints the key as `(sensitive value)`, because the SSM data source marks the value
+sensitive. Do not pass `-out` anyway, because a saved plan file holds the key in plain text. Do not
+paste the plan or apply output into a PR, an issue, or a Claude session.
+
+Terraform state also holds the key, so access to the state bucket equals access to the key.
+
+### 6. Verify (either)
+
+```bash
+curl -fsS https://ui.lik.navapbc.com/healthz            # {"status":"ok"}
+mise exec -- aws lightsail get-container-services --region us-east-1 \
+  --service-name lik-ui-prod \
+  --query 'containerServices[0].{current:currentDeployment.version,state:currentDeployment.state,next:nextDeployment.state}'
+```
+
+`current` must be the new deployment version, and `next` must be `null`. When the new deployment
+fails its health check, Lightsail keeps the old deployment (with the old key) serving, and `next`
+reads `FAILED`. Then open the app and send one chat message.
+
+Finally, dispatch the scheduled-runs workflow. It resolves the agent roster before it scans, so a
+successful run proves the workflows read a working key:
+
+```bash
+gh workflow run scheduled-runs.yml
+sleep 5             # the new run takes a few seconds to appear in the list
+gh run watch --exit-status "$(gh run list --workflow scheduled-runs.yml --event workflow_dispatch \
+  --limit 1 --json databaseId -q '.[0].databaseId')"
+```
+
+The dispatch also runs any schedules that are due at that moment. It can wait behind another
+workflow in the `lik-prod-mutations` concurrency group. A failed run opens a "scheduled-runs cron
+failed" issue, so close that issue once the rotation succeeds.
+
+### 7. Update local copies (human)
+
+Replace the old key wherever a maintainer keeps it, for example `LIK_UI_ANTHROPIC_API_KEY` in
+`lik-ui/.env`, or an `ANTHROPIC_API_KEY` export in a shell profile. Step 8 breaks every copy that
+still holds the old key.
+
+### 8. Revoke and review (human)
+
+- **Expired or revoked branch**: once step 6 passes, revoke the old key in the Console if it is not
+  already revoked.
+- **Leaked branch**: the old key was revoked in step 2. Until then, whoever held the key could act
+  as the app in the Claude workspace. Check what they could have changed or read during the
+  exposure window (from the suspected leak to the revocation time noted in step 2):
+  1. Review the old key's usage in the Console for that window.
+  2. Dispatch the **Deploy agents to Claude platform** workflow (`deploy-agents.yml`) with agent
+     `all`. The workflow resets every agent, its environment, and its skills to the definitions in
+     `claude_platform/`.
+  3. In the Console, compare the workspace's agents, environments, and skills with
+     `claude_platform/`. Delete any that the repo does not define.
+  4. In the Console, list the sessions created during the window. A session that the app did not
+     create (its id is missing from the lik-ui `sessions` table) may have used a user's vault. Ask
+     each affected user to delete their credentials on the Settings page and reconnect, so the
+     data-source providers issue new tokens.
+  5. Find where the key leaked from, and close that source, so the new key does not leak the same
+     way.
+
 ## Viewing logs
 
 ```
-AWS_PROFILE=lik mise exec -- aws lightsail get-container-log \
+mise exec -- aws lightsail get-container-log \
   --region us-east-1 --service-name lik-ui-prod --container-name lik-ui
 ```
 
@@ -572,9 +773,9 @@ server-side and clients connect with `sslmode=require`. If a `< 15` engine is ev
 additionally run:
 
 ```
-AWS_PROFILE=lik mise exec -- aws lightsail update-relational-database-parameters \
+mise exec -- aws lightsail update-relational-database-parameters \
   --region us-east-1 --relational-database-name lik-prod-db \
   --parameters "parameterName=rds.force_ssl,parameterValue=1,applyMethod=pending-reboot"
-AWS_PROFILE=lik mise exec -- aws lightsail reboot-relational-database \
+mise exec -- aws lightsail reboot-relational-database \
   --region us-east-1 --relational-database-name lik-prod-db
 ```
