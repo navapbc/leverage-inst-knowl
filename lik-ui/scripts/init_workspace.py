@@ -1,7 +1,7 @@
 """One-shot bootstrap for a lik-ui Claude Workspace.
 
 Deploys the repo's skill, environment, and agent specs to whatever workspace a target API key
-belongs to, then prints the ``LIK_UI_ANTHROPIC_API_KEY`` line to paste into a copy of
+belongs to, then prints the shared ``ANTHROPIC_API_KEY`` SSM line to paste into a copy of
 ``infra/ssm-secrets.example`` (consumed by ``infra/set-ssm-secrets.sh``) plus the deploy steps.
 
 GitHub is the single source of truth for the definitions (see
@@ -9,7 +9,7 @@ docs/plans/2026-07-24-001-feat-agent-spec-deploy-pipeline-plan.md): skills live 
 ``claude_platform/skills/`` and agents/environments under ``claude_platform/agents`` and
 ``claude_platform/environments`` as the platform's raw export YAML. This script does not define any
 agent inline — it runs the same deploy code the CI workflow uses (``scripts/deploy_skills.py`` then
-``scripts/deploy_agents.py``), just pointed at a target-workspace key instead of the CI secret.
+``scripts/deploy_agents.py``), just pointed at a target-workspace key instead of the key CI fetches from SSM.
 Skills are deployed first so an agent's by-name skill references resolve.
 
 The roster (``src/lik_ui/agents.toml``) references agents by *name*, so it is stable across
@@ -36,23 +36,22 @@ from pathlib import Path
 # file (lik-ui/scripts/init_workspace.py -> parents[2] is the repo root).
 REPO_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 
-SSM_PREFIX = "$P/lik-ui"
+# The key lives under /shared/ because the lik-ui container and the deploy/cleanup workflows all read
+# the same one value (see infra/ssm.tf).
+SSM_PREFIX = "$P/shared"
 
 # Deploy steps that pick up the new values, printed after the SSM block. The agent roster is committed
 # by name in agents.toml and is workspace-stable, so there is no per-run id edit. Steps 2-3 run from
-# infra/ (see infra/ssm-secrets.example's header for the $P path-prefix substitution). Step 4 repoints
-# the CI secret used by BOTH deploy-skills.yml and deploy-agents.yml at this workspace, or they would
-# publish to the old one. Step 5 rebuilds+redeploys the app image via CI.
+# infra/ (see infra/ssm-secrets.example's header for the $P path-prefix substitution). Step 3 also
+# repoints deploy-skills.yml and deploy-agents.yml at this workspace, because both fetch the key from
+# SSM. Step 4 rebuilds+redeploys the app image via CI.
 NEXT_STEPS = (
     "1. Ensure the agent is listed by name in src/lik_ui/agents.toml (add a [[agents]] block if new),\n"
     "   then commit + merge it.\n"
-    "2. Copy infra/ssm-secrets.example to a temp file and set its LIK_UI_ANTHROPIC_API_KEY\n"
+    "2. Copy infra/ssm-secrets.example to a temp file and set its $P/shared/ANTHROPIC_API_KEY\n"
     "   line to the one above.\n"
     "3. From infra/:  ./set-ssm-secrets.sh COPY_OF_ssm-secrets.example\n"
-    "4. Update the GitHub prod-environment secret so skill/agent deploys (deploy-skills.yml,\n"
-    "   deploy-agents.yml) target this workspace:  gh secret set ANTHROPIC_API_KEY --env prod\n"
-    "   (paste the same key).\n"
-    "5. Run the \"Build and deploy images\" GitHub Action for lik-ui\n"
+    "4. Run the \"Build and deploy images\" GitHub Action for lik-ui\n"
     "   (gh workflow run deploy-images.yml -f service=lik-ui). It rebuilds the image and redeploys."
 )
 
@@ -83,7 +82,7 @@ def format_ssm_block(api_key: str | None, prefix: str = SSM_PREFIX) -> str:
     space — set-ssm-secrets.sh takes the value as everything after the first '='. The agent roster is
     not an SSM value; it lives (by name) in agents.toml."""
     key_value = api_key or "sk-ant-…  # create in the Console for the target workspace"
-    return f"{prefix}/LIK_UI_ANTHROPIC_API_KEY={key_value}"
+    return f"{prefix}/ANTHROPIC_API_KEY={key_value}"
 
 
 def run_deploy(script: str, args: list[str], api_key: str) -> None:

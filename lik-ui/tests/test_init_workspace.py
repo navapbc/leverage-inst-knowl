@@ -26,7 +26,7 @@ def clean():
 def test_ssm_block_is_api_key_only_no_trailing_space():
     block = iw.format_ssm_block("sk-ant-realkey")
     lines = block.split("\n")
-    assert lines == ["$P/lik-ui/LIK_UI_ANTHROPIC_API_KEY=sk-ant-realkey"]
+    assert lines == ["$P/shared/ANTHROPIC_API_KEY=sk-ant-realkey"]
     assert "LIK_UI_AGENTS_CONFIG" not in block  # the roster is no longer an SSM value
     for line in lines:
         assert line == line.rstrip()  # set-ssm-secrets.sh takes value verbatim; no trailing space
@@ -34,7 +34,7 @@ def test_ssm_block_is_api_key_only_no_trailing_space():
 
 def test_ssm_block_placeholder_when_no_key():
     block = iw.format_ssm_block(None)
-    assert "LIK_UI_ANTHROPIC_API_KEY=sk-ant-…" in block
+    assert "$P/shared/ANTHROPIC_API_KEY=sk-ant-…" in block
     assert "LIK_UI_AGENTS_CONFIG" not in block
 
 
@@ -73,7 +73,7 @@ def test_main_dry_run_prints_block_and_deploys_nothing(capsys, monkeypatch):
     rc = iw.main(["--dry-run"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "LIK_UI_ANTHROPIC_API_KEY" in out
+    assert "$P/shared/ANTHROPIC_API_KEY" in out
     assert "LIK_UI_AGENTS_CONFIG" not in out  # roster is no longer an SSM value
     assert calls == []  # dry run deploys nothing
 
@@ -84,7 +84,7 @@ def test_main_dry_run_appends_deploy_instructions(capsys, monkeypatch):
     iw.main(["--dry-run"])
     out = capsys.readouterr().out
     assert "./set-ssm-secrets.sh COPY_OF_ssm-secrets.example" in out
-    assert "gh secret set ANTHROPIC_API_KEY --env prod" in out  # repoint the shared CI deploy key
+    assert "gh secret set" not in out  # CI fetches the key from SSM, so step 3 repoints it too
     assert "deploy-images.yml" in out  # rebuild+redeploy via the GitHub Action
 
 

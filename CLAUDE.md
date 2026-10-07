@@ -33,7 +33,7 @@
   `mise:2: command not found: _bootstrap_mise` line may print to stderr; ignore it.
 * **AWS is `AWS_PROFILE=lik`** (account 293033346213, us-east-1). If a call fails with "session has
   expired", run `AWS_PROFILE=lik mise exec -- aws login` (opens a browser) and retry. Secrets live in SSM
-  under `/ik-arch/prod/` (e.g. `LIK_UI_ANTHROPIC_API_KEY`; the agent roster in `lik-ui/src/lik_ui/agents.toml`
+  under `/ik-arch/prod/` (e.g. the Anthropic API key at `/ik-arch/prod/shared/ANTHROPIC_API_KEY`; the agent roster in `lik-ui/src/lik_ui/agents.toml`
   lists agents by name, resolved to ids at startup).
 * **Deploying the app services (`lik-ui`, `lik-mcp`).** Deploy via the **`deploy-images.yml`** GitHub Actions
   workflow (manual dispatch) — choose the `service` input `lik-ui`, `lik-mcp`, or `both`. It builds the image,
