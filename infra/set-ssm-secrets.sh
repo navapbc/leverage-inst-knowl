@@ -30,7 +30,7 @@ fi
 : "${AWS_REGION:=us-east-1}"
 export AWS_PROFILE
 
-set_count=0 skip_count=0
+set_count=0 skip_count=0 fail_count=0
 while IFS='=' read -r name value; do
   case "$name" in ''|\#*) continue ;; esac                  # skip blank / comment lines
   if printf %s "$value" | grep -q '…'; then                 # skip un-filled placeholders
@@ -42,9 +42,11 @@ while IFS='=' read -r name value; do
        --type SecureString --overwrite --name "$name" --value "file://$f" >/dev/null; then
     echo "set: $name"; set_count=$((set_count+1))
   else
-    echo "FAILED: $name" >&2
+    echo "FAILED: $name" >&2; fail_count=$((fail_count+1))
   fi
   rm -f "$f"
 done < "$SF"
 
-echo "done — $set_count set, $skip_count skipped. Redeploy to pick up changes: ./tf.sh apply"
+echo "done — $set_count set, $skip_count skipped, $fail_count failed. Redeploy to pick up changes: ./tf.sh apply"
+# Exit non-zero when any write failed, so a caller (or `&&` chain) cannot mistake a partial run for success.
+[ "$fail_count" -eq 0 ] || exit 1

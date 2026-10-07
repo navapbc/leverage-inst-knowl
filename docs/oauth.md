@@ -9,7 +9,7 @@ Deploy mechanics — seeding SSM, `terraform apply`, DB init, image builds — l
 [`deploy-runbook.md`](deploy-runbook.md). This doc owns the OAuth-specific setup and troubleshooting the
 runbook points at.
 
-**Conventions** (same as the runbook): AWS CLI runs with `AWS_PROFILE=lik` via `mise exec --`
+**Conventions** (same as the runbook): AWS CLI runs with your exported `AWS_PROFILE` via `mise exec --`
 (`aws`/`gcloud`/`terraform`/`python`/`uv` are not on PATH otherwise); region is **us-east-1**.
 
 ---
@@ -76,7 +76,7 @@ and vanish/leak when that person leaves — the failure mode this step exists to
    **not** fall back to a personal project.
 2. **Create a dedicated project** under the org, e.g. `lik-prod`. Verify ownership afterward:
    ```
-   AWS_PROFILE=lik mise exec -- gcloud projects describe lik-prod \
+   mise exec -- gcloud projects describe lik-prod \
      --format='value(parent.type,parent.id)'
    # must print:  organization  <nava-org-id>     (NOT "no-org" / a folder you don't recognize)
    ```
@@ -99,7 +99,7 @@ and vanish/leak when that person leaves — the failure mode this step exists to
      and its absence is what makes `list_recent_files` fail with a bare "access forbidden" once the
      connection is otherwise fully working.
      ```
-     AWS_PROFILE=lik mise exec -- gcloud services enable drivemcp.googleapis.com --project lik-prod
+     mise exec -- gcloud services enable drivemcp.googleapis.com --project lik-prod
      ```
    - **Google Drive API** (`drive.googleapis.com`) — the underlying files API the MCP server calls
      downstream on the user's behalf.
@@ -374,9 +374,9 @@ registration and no configured client."*
 Chat transcripts and credentials are **not** stored in this repo — they live on the Anthropic Managed
 Agents platform and are read back via the Python `anthropic` SDK. To investigate an MCP auth failure:
 
-1. **Get the API key** from SSM (needs `AWS_PROFILE=lik`; run `aws login` first if the session expired):
+1. **Get the API key** from SSM (needs your AWS profile exported; authenticate it first if the session expired):
    ```
-   AWS_PROFILE=lik mise exec -- aws ssm get-parameter --name /ik-arch/prod/shared/ANTHROPIC_API_KEY \
+   mise exec -- aws ssm get-parameter --name /ik-arch/prod/shared/ANTHROPIC_API_KEY \
      --with-decryption --region us-east-1 --query Parameter.Value --output text
    ```
 2. **Query the session** (`sesn_...`) from `lik-ui/` with `uv run python`:

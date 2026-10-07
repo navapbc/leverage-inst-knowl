@@ -2,7 +2,7 @@
 # (repo + `prod` environment): `github-actions-lik-image-push` is scoped to pushing
 # container images; `github-actions-lik-apply` can run `terraform plan`/`apply` for the
 # routine image-swap redeploy. `terraform apply` can still be run locally under
-# AWS_PROFILE=lik for anything non-routine.
+# a maintainer's own AWS profile for anything non-routine.
 
 data "tls_certificate" "github" {
   url = "https://token.actions.githubusercontent.com/.well-known/openid-configuration"
