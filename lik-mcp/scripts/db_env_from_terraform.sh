@@ -3,8 +3,8 @@
 # `export LIK_DB_*` lines for `eval`, so you can run init_db.py (or psql) against the deployed
 # database WITHOUT hand-assembling LIK_DB_* variables.
 #
-#   eval "$(AWS_PROFILE=lik mise exec -- lik-mcp/scripts/db_env_from_terraform.sh)"      # lik-mcp DB (likdb)
-#   eval "$(AWS_PROFILE=lik mise exec -- lik-mcp/scripts/db_env_from_terraform.sh ui)"   # lik-ui DB  (likuidb)
+#   eval "$(mise exec -- lik-mcp/scripts/db_env_from_terraform.sh)"      # lik-mcp DB (likdb)
+#   eval "$(mise exec -- lik-mcp/scripts/db_env_from_terraform.sh ui)"   # lik-ui DB  (likuidb)
 #
 # Non-secret config comes from `terraform output env_config`; the password comes from SSM
 # (${ssm_prefix}/shared/DB_MASTER_PASSWORD). Requires terraform state access + AWS creds — the

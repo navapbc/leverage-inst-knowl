@@ -47,7 +47,7 @@ reasoning.
 
 ## Conventions
 
-- Run everything with `AWS_PROFILE=lik` via `mise exec --`.
+- Export your AWS CLI profile for account 293033346213 (`export AWS_PROFILE=<your-profile>`; see `docs/deploy-runbook.md` → Conventions), then run everything via `mise exec --`.
 - The deployment versions only materialize when `lik_mcp_image` / `lik_ui_image` are set
   (Lightsail-registered refs from the CI push). A bootstrap apply omits them.
 - Secrets live only in SSM (source of truth) and in encrypted state — never in `*.tf` or

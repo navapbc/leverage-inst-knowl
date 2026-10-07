@@ -48,7 +48,7 @@ password comes from SSM and host/port/user are discovered from the Lightsail dat
 set no `LIK_UI_DB_*` vars (needs AWS creds + the aws CLI on PATH):
 
 ```
-AWS_PROFILE=lik mise exec -- uv run python scripts/init_db.py --ssm-prefix /ik-arch/prod
+mise exec -- uv run python scripts/init_db.py --ssm-prefix /ik-arch/prod
 ```
 
 Defaults target the `lik-prod-db` instance and the `likuidb` database; override with

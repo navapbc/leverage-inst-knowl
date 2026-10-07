@@ -31,8 +31,11 @@
 * **Tooling runs via mise** (`aws`, `terraform`, `node`, `python`, `uv` are not on PATH otherwise — bare
   `which aws` returns "not found"). Prefix with `mise exec --`, e.g. `mise exec -- aws ...`. A harmless
   `mise:2: command not found: _bootstrap_mise` line may print to stderr; ignore it.
-* **AWS is `AWS_PROFILE=lik`** (account 293033346213, us-east-1). If a call fails with "session has
-  expired", run `AWS_PROFILE=lik mise exec -- aws login` (opens a browser) and retry. Secrets live in SSM
+* **AWS is account 293033346213, us-east-1.** Each user keeps their own AWS CLI profile for that account,
+  so the profile name differs per user (see `docs/deploy-runbook.md` → Conventions). Use the user's profile
+  name from memory or the environment; if neither has it, ask. Shell state does not persist between Bash calls,
+  so prefix each AWS command with `AWS_PROFILE=<profile>`. If a call fails with "session has expired", ask the
+  user to re-authenticate (`aws login` opens a browser) and retry. Secrets live in SSM
   under `/ik-arch/prod/` (e.g. the Anthropic API key at `/ik-arch/prod/shared/ANTHROPIC_API_KEY`; the agent roster in `lik-ui/src/lik_ui/agents.toml`
   lists agents by name, resolved to ids at startup). When the Anthropic key fails with `authentication_error`,
   follow `docs/deploy-runbook.md` → "Rotating the Anthropic API key". Claude runs only the steps marked

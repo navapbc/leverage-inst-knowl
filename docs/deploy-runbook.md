@@ -578,8 +578,8 @@ mise exec -- aws ssm get-parameter --region us-east-1 \
   --name "$P/shared/ANTHROPIC_API_KEY" --query Parameter.Version --output text   # must be 4
 ```
 
-`set-ssm-secrets.sh` prints `FAILED: <name>` but still exits 0 when a write fails. The version
-check is the only proof that the write landed.
+`set-ssm-secrets.sh` prints `FAILED: <name>` and exits 1 when a write fails. The version check
+confirms that the new value is the one SSM now serves.
 
 ### 5. Redeploy lik-ui with the deployed images pinned (human)
 

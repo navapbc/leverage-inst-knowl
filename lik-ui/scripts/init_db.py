@@ -13,9 +13,9 @@ truncates. Two ways to point it at a database:
 2. --ssm-prefix: resolve the prod connection with (almost) no env vars. The DB master password
    is read from SSM (<prefix>/shared/DB_MASTER_PASSWORD) and host/port/user are discovered from
    the Lightsail database; only the two resource names have defaults you can override. Needs AWS
-   credentials + the aws CLI on PATH (run under `AWS_PROFILE=lik mise exec -- ...`):
+   credentials + the aws CLI on PATH (export your AWS profile, then run under `mise exec -- ...`):
 
-       AWS_PROFILE=lik mise exec -- uv run python scripts/init_db.py --ssm-prefix /ik-arch/prod
+       mise exec -- uv run python scripts/init_db.py --ssm-prefix /ik-arch/prod
 """
 
 import argparse
