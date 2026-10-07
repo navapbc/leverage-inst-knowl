@@ -10,7 +10,8 @@ Stages (each independent; later stages need more setup):
   2. surface     — introspect the installed anthropic SDK's beta.{sessions,vaults,agents}
                    methods and signatures. No credentials needed. Confirms the names/args
                    chat.py, vault.py, and agents.py call actually exist.
-  3. agent       — retrieve AGENT_ID and print its declared mcp_servers. Needs API key.
+  3. agent       — resolve one roster agent (and its environment) by name, as the app does at
+                   startup, then print its declared mcp_servers. Needs API key.
   4. session     — create a throwaway vault, create a session for the agent, send one
                    message, and DUMP every raw stream event (type + attributes) so the
                    real event shape can be reconciled against chat.py. Needs API key.
@@ -18,8 +19,8 @@ Stages (each independent; later stages need more setup):
 
 Usage:
   uv run python scripts/smoke.py surface          # credential-free
-  LIK_UI_ANTHROPIC_API_KEY=... LIK_UI_DEFAULT_AGENT_ID=... LIK_UI_DEFAULT_ENVIRONMENT_ID=... \
-    uv run python scripts/smoke.py all
+  LIK_UI_ANTHROPIC_API_KEY=... uv run python scripts/smoke.py all               # first roster agent
+  LIK_UI_ANTHROPIC_API_KEY=... uv run python scripts/smoke.py session <agent-name>
 
 Nothing here logs tokens. It prints structural info (method names, event types/attrs).
 """
@@ -43,7 +44,7 @@ def stage_config() -> Settings:
         print("require_production_config: OK")
     except RuntimeError as exc:
         print(f"require_production_config: {exc}")
-    print(f"agents configured: {[a.label for a in settings.agents]}")
+    print(f"agents configured: {[e.agent_name for e in settings.agent_roster]}")
     print(f"likmcp_resource_url={settings.likmcp_resource_url!r}")
     return settings
 
@@ -87,27 +88,41 @@ def stage_surface() -> None:
     print("vault.py (vaults.create, vaults.credentials.create/list), agents.py (agents.retrieve).")
 
 
-def stage_agent(settings: Settings):
-    _hr("3. agent retrieve")
+def stage_agent(settings: Settings, agent_name: str | None):
+    """Resolve one roster entry to platform ids by name (the first entry unless ``agent_name`` is
+    given), using the same by-name lookup the app runs at startup. Returns the raw SDK client and
+    the resolved ``(agent_id, environment_id)``."""
+    _hr("3. agent resolve + retrieve")
+    from lik_ui.agents import AnthropicAgentsClient
+
+    roster = settings.agent_roster
+    entry = next((e for e in roster if e.agent_name == agent_name), None) if agent_name else roster[0]
+    if entry is None:
+        raise SystemExit(f"no roster agent named {agent_name!r}; roster: {[e.agent_name for e in roster]}")
+    agents_client = AnthropicAgentsClient(settings.anthropic_api_key)
+    agent_id = agents_client.resolve_agent_id(entry.agent_name)
+    environment_id = agents_client.resolve_environment_id(entry.environment_name)
+    print(f"agent {entry.agent_name!r} -> {agent_id}; environment {entry.environment_name!r} -> {environment_id}")
+
     import anthropic
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    agent = client.beta.agents.retrieve(settings.default_agent_id)
+    agent = client.beta.agents.retrieve(agent_id)
     servers = getattr(agent, "mcp_servers", None) or []
-    print(f"agent {settings.default_agent_id}: {len(servers)} declared MCP server(s)")
+    print(f"agent {agent_id}: {len(servers)} declared MCP server(s)")
     for s in servers:
         print(f"   name={getattr(s, 'name', '?')!r} url={getattr(s, 'url', '?')!r}")
-    return client
+    return client, agent_id, environment_id
 
 
-def stage_session(settings: Settings, client) -> None:
+def stage_session(client, agent_id: str, environment_id: str) -> None:
     _hr("4. session create + one message (raw event dump)")
     vault = client.beta.vaults.create(display_name="lik-ui-smoke", metadata={"external_user_id": "smoke"})
     print(f"created throwaway vault {vault.id}")
     try:
         session = client.beta.sessions.create(
-            agent=settings.default_agent_id,
-            environment_id=settings.default_environment_id,
+            agent=agent_id,
+            environment_id=environment_id,
             vault_ids=[vault.id],
         )
         print(f"created session {session.id}")
@@ -136,17 +151,18 @@ def stage_session(settings: Settings, client) -> None:
 
 def main() -> None:
     stage = sys.argv[1] if len(sys.argv) > 1 else "surface"
+    agent_name = sys.argv[2] if len(sys.argv) > 2 else None
     settings = stage_config()
 
     if stage in ("surface", "all"):
         stage_surface()
     if stage in ("agent", "session", "all"):
-        if not settings.anthropic_api_key or not settings.default_agent_id:
-            print("\n[skip] stages 3-4 need LIK_UI_ANTHROPIC_API_KEY and LIK_UI_DEFAULT_AGENT_ID.")
+        if not settings.anthropic_api_key:
+            print("\n[skip] stages 3-4 need LIK_UI_ANTHROPIC_API_KEY.")
             return
-        client = stage_agent(settings)
+        client, agent_id, environment_id = stage_agent(settings, agent_name)
         if stage in ("session", "all"):
-            stage_session(settings, client)
+            stage_session(client, agent_id, environment_id)
 
 
 if __name__ == "__main__":
