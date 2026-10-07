@@ -153,8 +153,8 @@ is a PR plus two manual deploy Actions — no ids are hand-copied anywhere; ever
      `deploy-images.yml`), choosing your agent or `all`. It syncs all environments, then creates the
      agent (or updates it in place, matched by name) and publishes+attaches the skills it references
      at `latest`. `deploy_agents.py --dry-run` prints the plan without publishing. Running against the
-     real API needs `ANTHROPIC_API_KEY` (a standard org key scoped to the LIK workspace) — CI reads it
-     from the `prod` environment secret.
+     real API needs `ANTHROPIC_API_KEY` (a standard org key scoped to the LIK workspace) — CI fetches it
+     from SSM (`/ik-arch/prod/shared/ANTHROPIC_API_KEY`) through the GitHub OIDC role.
    - Run the **Build and deploy images** Action for `lik-ui` so the app restarts and re-reads
      `agents.toml`; the new agent then shows in the picker.
 

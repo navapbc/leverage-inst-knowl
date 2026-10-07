@@ -376,7 +376,7 @@ Agents platform and are read back via the Python `anthropic` SDK. To investigate
 
 1. **Get the API key** from SSM (needs `AWS_PROFILE=lik`; run `aws login` first if the session expired):
    ```
-   AWS_PROFILE=lik mise exec -- aws ssm get-parameter --name /ik-arch/prod/lik-ui/LIK_UI_ANTHROPIC_API_KEY \
+   AWS_PROFILE=lik mise exec -- aws ssm get-parameter --name /ik-arch/prod/shared/ANTHROPIC_API_KEY \
      --with-decryption --region us-east-1 --query Parameter.Value --output text
    ```
 2. **Query the session** (`sesn_...`) from `lik-ui/` with `uv run python`:
