@@ -63,8 +63,10 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
 
-      # `uv run` provisions the Python pinned by the service's pyproject requires-python and
+      # `uv run` uses the Python 3.14 that setup-uv pins above and
       # installs the locked dependencies; --frozen fails if uv.lock is out of date with pyproject.
       # pytest lives in the "dev" optional-dependency extra, which uv run does not install by
       # default — hence --extra dev.
